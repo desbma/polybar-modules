@@ -2,18 +2,22 @@ use config::PolybarModuleName;
 use structopt::StructOpt;
 
 mod config;
+mod markup;
 mod polybar_module;
+mod theme;
 
 fn main() {
     // Init logger
-    simple_logger::SimpleLogger::new().init().unwrap();
+    if atty::is(atty::Stream::Stdout) {
+        simple_logger::SimpleLogger::new().init().unwrap();
+    }
 
     // Parse command line args
     let opts = config::CommandLineOpts::from_args();
     log::trace!("{:?}", opts);
 
     // Init stuff
-    let mut module: polybar_module::PolybarModule = match opts.module {
+    let module: polybar_module::PolybarModule = match opts.module {
         PolybarModuleName::battery_mouse => polybar_module::PolybarModule::BatteryMouse(
             polybar_module::battery_mouse::BatteryMouseModule::new(),
         ),
@@ -36,7 +40,9 @@ where
     let mut prev_state: Option<T::State> = None;
     loop {
         // Update
-        module.wait_update();
+        if prev_state.is_some() {
+            module.wait_update();
+        }
         let state = module.update();
         log::debug!("{:?}", state);
 

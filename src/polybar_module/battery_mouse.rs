@@ -11,6 +11,7 @@ impl BatteryMouseModule {
     }
 }
 
+// TODO implement a way to pass low bandwidth flag
 impl StatefulPolybarModule for BatteryMouseModule {
     type State = BatteryMouseModuleState;
 

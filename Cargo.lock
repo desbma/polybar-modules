@@ -109,6 +109,8 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "arg_enum_proc_macro",
+ "atty",
+ "lazy_static",
  "log",
  "simple_logger",
  "structopt",
