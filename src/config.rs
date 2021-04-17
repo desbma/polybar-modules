@@ -1,19 +1,17 @@
-use arg_enum_proc_macro::ArgEnum;
 use structopt::StructOpt;
 
-#[derive(ArgEnum, Clone, Debug)]
+#[derive(Clone, Debug, StructOpt)]
 #[allow(non_camel_case_types)]
 pub enum PolybarModuleName {
+    #[structopt(about = "Start mouse battery module")]
     battery_mouse,
-    wttr,
+    #[structopt(about = "Start weather module")]
+    wttr { location: Option<String> },
 }
 
-#[derive(StructOpt, Debug)]
+#[derive(Debug, StructOpt)]
 #[structopt(version=env!("CARGO_PKG_VERSION"), about="Polybar modules.")]
 pub struct CommandLineOpts {
-    #[structopt(
-        possible_values = &PolybarModuleName::variants(),
-        case_insensitive = true
-    )]
+    #[structopt(subcommand, about = "Polybar module to start")]
     pub module: PolybarModuleName,
 }

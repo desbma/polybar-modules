@@ -1,7 +1,6 @@
 use lazy_static::lazy_static;
 use std::collections::HashMap;
 
-use crate::config;
 use crate::markup;
 use crate::polybar_module::StatefulPolybarModule;
 use crate::theme;
@@ -43,9 +42,9 @@ lazy_static! {
 }
 
 impl WttrModule {
-    pub fn new(opts: config::CommandLineOpts) -> WttrModule {
+    pub fn new(location: Option<String>) -> WttrModule {
         // TODO grab location
-        WttrModule { location: None }
+        WttrModule { location }
     }
 
     fn try_update(&mut self) -> anyhow::Result<WttrModuleState> {
@@ -104,10 +103,7 @@ impl StatefulPolybarModule for WttrModule {
                     state.temp
                 )
             }
-            None => format!(
-                "{}",
-                markup::style("", Some(theme::Color::Attention), None, None, None)
-            ),
+            None => markup::style("", Some(theme::Color::Attention), None, None, None),
         }
     }
 }

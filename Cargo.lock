@@ -22,17 +22,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "28b2cd92db5cbd74e8e5028f7e27dd7aa3090e89e4f2a197cc7c8dfb69c7063b"
 
 [[package]]
-name = "arg_enum_proc_macro"
-version = "0.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7c8e0146624e9b300cfeb394a758bd23e2fe494579c6363413354f04e8b49261"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
-]
-
-[[package]]
 name = "async-compression"
 version = "0.3.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -601,7 +590,6 @@ name = "polybar-modules"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "arg_enum_proc_macro",
  "atty",
  "lazy_static",
  "log",

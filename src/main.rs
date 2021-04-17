@@ -21,8 +21,8 @@ fn main() {
         PolybarModuleName::battery_mouse => polybar_module::PolybarModule::BatteryMouse(
             polybar_module::battery_mouse::BatteryMouseModule::new(),
         ),
-        PolybarModuleName::wttr => {
-            polybar_module::PolybarModule::Wttr(polybar_module::wttr::WttrModule::new(opts))
+        PolybarModuleName::wttr { location } => {
+            polybar_module::PolybarModule::Wttr(polybar_module::wttr::WttrModule::new(location))
         }
     };
 
