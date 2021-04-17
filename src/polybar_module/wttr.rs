@@ -1,11 +1,14 @@
 use lazy_static::lazy_static;
 use std::collections::HashMap;
 
+use crate::config;
 use crate::markup;
 use crate::polybar_module::StatefulPolybarModule;
 use crate::theme;
 
-pub struct WttrModule {}
+pub struct WttrModule {
+    location: Option<String>,
+}
 
 #[derive(Debug, PartialEq)]
 pub struct WttrModuleState {
@@ -14,7 +17,6 @@ pub struct WttrModuleState {
 }
 
 lazy_static! {
-    /// This is an example for using doc comment attributes
     static ref ICONS: HashMap<&'static str, &'static str> = {
         let mut m = HashMap::new();
         m.insert("✨", "?");  // unknown
@@ -41,29 +43,71 @@ lazy_static! {
 }
 
 impl WttrModule {
-    pub fn new() -> WttrModule {
-        WttrModule {}
+    pub fn new(opts: config::CommandLineOpts) -> WttrModule {
+        // TODO grab location
+        WttrModule { location: None }
+    }
+
+    fn try_update(&mut self) -> anyhow::Result<WttrModuleState> {
+        let url = &format!(
+            "https://wttr.in/{}?format=%c/%t",
+            self.location.as_ref().unwrap_or(&"".to_string())
+        );
+        log::debug!("{}", url);
+        let text = reqwest::blocking::get(url)?.error_for_status()?.text()?;
+        log::debug!("{:?}", text);
+
+        let mut tokens = text.split('/').map(|s| s.trim());
+
+        let sky_str = tokens
+            .next()
+            .ok_or_else(|| anyhow::anyhow!("Error parsing string {:?}", text))?;
+        let sky = ICONS
+            .get(sky_str)
+            .ok_or_else(|| anyhow::anyhow!("Error parsing string {:?}", text))?;
+
+        let temp_str = tokens
+            .next()
+            .ok_or_else(|| anyhow::anyhow!("Error parsing string {:?}", text))?
+            .split('°')
+            .next()
+            .ok_or_else(|| anyhow::anyhow!("Error parsing string {:?}", text))?;
+        let temp = temp_str.parse::<_>()?;
+
+        Ok(WttrModuleState { sky, temp })
     }
 }
 
 impl StatefulPolybarModule for WttrModule {
-    type State = WttrModuleState;
+    type State = Option<WttrModuleState>;
 
     fn wait_update(&mut self) {
         std::thread::sleep(std::time::Duration::from_secs(60));
     }
 
     fn update(&mut self) -> Self::State {
-        Self::State {
-            sky: "☀️", temp: 25
+        match self.try_update() {
+            Ok(s) => Some(s),
+            Err(e) => {
+                log::error!("{}", e);
+                None
+            }
         }
     }
 
     fn render(&self, state: &Self::State) -> String {
-        format!(
-            "{} {}°C",
-            markup::style(state.sky, Some(theme::Color::MainIcon), None, None, None),
-            state.temp
-        )
+        match state {
+            Some(state) => {
+                format!(
+                    "{} {}°C",
+                    markup::style(state.sky, Some(theme::Color::MainIcon), None, None, None),
+                    state.temp
+                )
+            }
+            None => format!(
+                "{}",
+                markup::style("", Some(theme::Color::Attention), None, None, None)
+            ),
+        }
     }
 }
