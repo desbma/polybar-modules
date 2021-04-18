@@ -1,3 +1,4 @@
+#[allow(dead_code)]
 pub enum Color {
     Foreground = 0x93a1a1,
     MainIcon = 0xeee8d5,

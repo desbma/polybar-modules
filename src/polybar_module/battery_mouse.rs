@@ -14,13 +14,13 @@ impl BatteryMouseModule {
 impl StatefulPolybarModule for BatteryMouseModule {
     type State = BatteryMouseModuleState;
 
-    fn wait_update(&mut self, first_update: bool) {}
+    fn wait_update(&mut self, _first_update: bool) {}
 
     fn update(&mut self) -> Self::State {
         Self::State {}
     }
 
-    fn render(&self, state: &Self::State) -> String {
+    fn render(&self, _state: &Self::State) -> String {
         "".to_string()
     }
 }
