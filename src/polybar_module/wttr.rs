@@ -2,11 +2,12 @@ use lazy_static::lazy_static;
 use std::collections::HashMap;
 
 use crate::markup;
-use crate::polybar_module::StatefulPolybarModule;
+use crate::polybar_module::{PolybarModuleEnv, RuntimeMode, StatefulPolybarModule};
 use crate::theme;
 
 pub struct WttrModule {
     location: Option<String>,
+    env: PolybarModuleEnv,
 }
 
 #[derive(Debug, PartialEq)]
@@ -43,8 +44,8 @@ lazy_static! {
 
 impl WttrModule {
     pub fn new(location: Option<String>) -> WttrModule {
-        // TODO grab location
-        WttrModule { location }
+        let env = PolybarModuleEnv::new();
+        WttrModule { location, env }
     }
 
     fn try_update(&mut self) -> anyhow::Result<WttrModuleState> {
@@ -80,8 +81,11 @@ impl WttrModule {
 impl StatefulPolybarModule for WttrModule {
     type State = Option<WttrModuleState>;
 
-    fn wait_update(&mut self) {
-        std::thread::sleep(std::time::Duration::from_secs(60));
+    fn wait_update(&mut self, first_update: bool) {
+        if !first_update {
+            std::thread::sleep(std::time::Duration::from_secs(60));
+        }
+        self.env.wait_runtime_mode(RuntimeMode::Unrestricted);
     }
 
     fn update(&mut self) -> Self::State {

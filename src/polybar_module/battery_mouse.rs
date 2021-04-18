@@ -11,11 +11,10 @@ impl BatteryMouseModule {
     }
 }
 
-// TODO implement a way to pass low bandwidth flag
 impl StatefulPolybarModule for BatteryMouseModule {
     type State = BatteryMouseModuleState;
 
-    fn wait_update(&mut self) {}
+    fn wait_update(&mut self, first_update: bool) {}
 
     fn update(&mut self) -> Self::State {
         Self::State {}

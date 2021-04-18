@@ -40,9 +40,7 @@ where
     let mut prev_state: Option<T::State> = None;
     loop {
         // Update
-        if prev_state.is_some() {
-            module.wait_update();
-        }
+        module.wait_update(prev_state.is_none());
         let state = module.update();
         log::debug!("{:?}", state);
 

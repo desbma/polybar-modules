@@ -19,6 +19,6 @@ Rewrite of my personal Python Polybar modules as a proper Rust binary.
 - [ ] Work network status
 - [ ] Taskwarrior next task
 - [ ] Market trend
-- [ ] Weather
+- [x] Weather
 - ~~[ ] i3 layout status & control~~ I'm using Xmonad instead now
 - ~~[ ] Mount device control~~ I'm using Udiskie instead now
