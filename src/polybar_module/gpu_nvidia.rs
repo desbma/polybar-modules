@@ -12,7 +12,7 @@ pub struct GpuNvidiaModuleState {
     freq_mem: u16,
     throttle: bool,
     temp: u8,
-    power_draw: f32,
+    power_draw: u16,
 }
 
 const OVERHEAT_TEMP_THRESHOLD: u8 = 70;
@@ -66,7 +66,7 @@ impl GpuNvidiaModule {
         let power_draw = tokens
             .next()
             .ok_or_else(|| anyhow::anyhow!(parse_err_str))?
-            .parse()?;
+            .parse::<f32>()? as u16;
 
         Ok(GpuNvidiaModuleState {
             mem_used,
@@ -134,7 +134,7 @@ impl StatefulPolybarModule for GpuNvidiaModule {
                 };
                 let mem_prct = 100.0 * state.mem_used as f32 / state.mem_total as f32;
                 format!(
-                    "{} {:2.0}% {} {:4}+{:4}MHz {} {:3.0}W",
+                    "{} {:2.0}% {} {:4}+{:4}MHz {} {:3}W",
                     markup::style("", Some(theme::Color::MainIcon), None, None, None),
                     mem_prct,
                     Self::ramp_prct(mem_prct as u8),
@@ -163,11 +163,11 @@ mod tests {
             freq_mem: 800,
             throttle: false,
             temp: 40,
-            power_draw: 20.6,
+            power_draw: 20,
         });
         assert_eq!(
             module.render(&state),
-            "%{F#eee8d5}%{F-}  5% %{F#859900}▁%{F-}  600+ 800MHz 40°C  21W"
+            "%{F#eee8d5}%{F-}  5% %{F#859900}▁%{F-}  600+ 800MHz 40°C  20W"
         );
         let state = Some(GpuNvidiaModuleState {
             mem_used: 3500,
@@ -176,7 +176,7 @@ mod tests {
             freq_mem: 2000,
             throttle: false,
             temp: 69,
-            power_draw: 200.5,
+            power_draw: 200,
         });
         assert_eq!(
             module.render(&state),
@@ -189,7 +189,7 @@ mod tests {
             freq_mem: 2000,
             throttle: true,
             temp: 69,
-            power_draw: 200.5,
+            power_draw: 200,
         });
         assert_eq!(
             module.render(&state),
@@ -202,7 +202,7 @@ mod tests {
             freq_mem: 2000,
             throttle: false,
             temp: 70,
-            power_draw: 200.5,
+            power_draw: 200,
         });
         assert_eq!(
             module.render(&state),
