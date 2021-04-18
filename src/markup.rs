@@ -39,7 +39,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_output_failed_units() {
+    fn test_style() {
         assert_eq!(
             style("", Some(theme::Color::MainIcon), None, None, None),
             "%{F#eee8d5}%{F-}"
