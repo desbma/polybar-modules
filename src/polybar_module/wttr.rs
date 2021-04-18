@@ -72,7 +72,7 @@ impl WttrModule {
             .split('°')
             .next()
             .ok_or_else(|| anyhow::anyhow!("Error parsing string {:?}", text))?;
-        let temp = temp_str.parse::<_>()?;
+        let temp = temp_str.parse()?;
 
         Ok(WttrModuleState { sky, temp })
     }

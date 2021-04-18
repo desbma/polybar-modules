@@ -21,6 +21,9 @@ fn main() {
         PolybarModuleName::battery_mouse => polybar_module::PolybarModule::BatteryMouse(
             polybar_module::battery_mouse::BatteryMouseModule::new(),
         ),
+        PolybarModuleName::gpu_nvidia => polybar_module::PolybarModule::GpuNvidia(
+            polybar_module::gpu_nvidia::GpuNvidiaModule::new(),
+        ),
         PolybarModuleName::wttr { location } => {
             polybar_module::PolybarModule::Wttr(polybar_module::wttr::WttrModule::new(location))
         }
@@ -29,6 +32,7 @@ fn main() {
     // Update/render loop, dynamic dispatch sadness, sadly https://crates.io/crates/enum_dispatch does not work here
     match module {
         polybar_module::PolybarModule::BatteryMouse(module) => render_loop(module),
+        polybar_module::PolybarModule::GpuNvidia(module) => render_loop(module),
         polybar_module::PolybarModule::Wttr(module) => render_loop(module),
     };
 }
@@ -46,7 +50,7 @@ where
 
         // Render or skip?
         let do_render = match prev_state {
-            Some(ref prev_state) => prev_state == &state,
+            Some(ref prev_state) => prev_state != &state,
             None => true,
         };
         if !do_render {

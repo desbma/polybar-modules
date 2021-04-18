@@ -5,6 +5,8 @@ use structopt::StructOpt;
 pub enum PolybarModuleName {
     #[structopt(about = "Start mouse battery module")]
     battery_mouse,
+    #[structopt(about = "Start Nvidia GPU module")]
+    gpu_nvidia,
     #[structopt(about = "Start weather module")]
     wttr { location: Option<String> },
 }

@@ -1,4 +1,5 @@
 #[allow(dead_code)]
+#[derive(Clone)]
 pub enum Color {
     Foreground = 0x93a1a1,
     MainIcon = 0xeee8d5,

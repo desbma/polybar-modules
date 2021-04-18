@@ -1,10 +1,12 @@
 use notify::Watcher;
 
 pub mod battery_mouse;
+pub mod gpu_nvidia;
 pub mod wttr;
 
 pub enum PolybarModule {
     BatteryMouse(battery_mouse::BatteryMouseModule),
+    GpuNvidia(gpu_nvidia::GpuNvidiaModule),
     Wttr(wttr::WttrModule),
 }
 

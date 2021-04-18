@@ -1,4 +1,6 @@
+//use crate::markup;
 use crate::polybar_module::StatefulPolybarModule;
+//use crate::theme;
 
 pub struct BatteryMouseModule {}
 
@@ -22,5 +24,15 @@ impl StatefulPolybarModule for BatteryMouseModule {
 
     fn render(&self, _state: &Self::State) -> String {
         "".to_string()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    //use super::*;
+
+    #[test]
+    fn test_render() {
+        // TODO
     }
 }
