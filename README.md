@@ -5,7 +5,7 @@
 
 Rewrite of my personal Python Polybar modules as a proper Rust binary.
 
-# Status
+## Module status
 
 - [ ] Arch Linux updates
 - [ ] Debian updates
@@ -22,3 +22,7 @@ Rewrite of my personal Python Polybar modules as a proper Rust binary.
 - [x] Weather
 - ~~[ ] i3 layout status & control~~ I'm using Xmonad instead now
 - ~~[ ] Mount device control~~ I'm using Udiskie instead now
+
+## License
+
+[GPLv3](https://www.gnu.org/licenses/gpl-3.0-standalone.html)
