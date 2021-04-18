@@ -7,6 +7,8 @@ pub enum PolybarModuleName {
     battery_mouse,
     #[structopt(about = "Start Nvidia GPU module")]
     gpu_nvidia,
+    #[structopt(about = "Start low bandwidth button module")]
+    internet_bandwidth,
     #[structopt(about = "Start weather module")]
     wttr { location: Option<String> },
 }

@@ -2,15 +2,17 @@ use notify::Watcher;
 
 pub mod battery_mouse;
 pub mod gpu_nvidia;
+pub mod internet_bandwidth;
 pub mod wttr;
 
 pub enum PolybarModule {
     BatteryMouse(battery_mouse::BatteryMouseModule),
     GpuNvidia(gpu_nvidia::GpuNvidiaModule),
+    InternetBandwidth(internet_bandwidth::InternetBandwidthModule),
     Wttr(wttr::WttrModule),
 }
 
-#[derive(PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum RuntimeMode {
     Unrestricted,
     LowNetworkBandwith,
@@ -27,7 +29,7 @@ pub trait StatefulPolybarModule {
 }
 
 pub struct PolybarModuleEnv {
-    low_bw_filepath: std::path::PathBuf,
+    pub low_bw_filepath: std::path::PathBuf,
 }
 
 impl PolybarModuleEnv {
