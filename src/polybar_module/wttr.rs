@@ -2,7 +2,7 @@ use lazy_static::lazy_static;
 use std::collections::HashMap;
 
 use crate::markup;
-use crate::polybar_module::{PolybarModuleEnv, RuntimeMode, StatefulPolybarModule};
+use crate::polybar_module::{PolybarModuleEnv, RenderablePolybarModule, RuntimeMode};
 use crate::theme;
 
 pub struct WttrModule {
@@ -78,7 +78,7 @@ impl WttrModule {
     }
 }
 
-impl StatefulPolybarModule for WttrModule {
+impl RenderablePolybarModule for WttrModule {
     type State = Option<WttrModuleState>;
 
     fn wait_update(&mut self, first_update: bool) {

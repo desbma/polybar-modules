@@ -1,5 +1,5 @@
 use crate::markup;
-use crate::polybar_module::StatefulPolybarModule;
+use crate::polybar_module::RenderablePolybarModule;
 use crate::theme;
 
 pub struct GpuNvidiaModule {}
@@ -99,7 +99,7 @@ impl GpuNvidiaModule {
     }
 }
 
-impl StatefulPolybarModule for GpuNvidiaModule {
+impl RenderablePolybarModule for GpuNvidiaModule {
     type State = Option<GpuNvidiaModuleState>;
 
     fn wait_update(&mut self, first_update: bool) {

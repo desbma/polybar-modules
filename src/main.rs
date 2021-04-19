@@ -18,6 +18,9 @@ fn main() {
 
     // Init stuff
     let module: polybar_module::PolybarModule = match opts.module {
+        PolybarModuleName::autolock => {
+            polybar_module::PolybarModule::Autolock(polybar_module::autolock::AutolockModule::new())
+        }
         PolybarModuleName::battery_mouse => polybar_module::PolybarModule::BatteryMouse(
             polybar_module::battery_mouse::BatteryMouseModule::new(),
         ),
@@ -34,6 +37,7 @@ fn main() {
 
     // Update/render loop, dynamic dispatch sadness, sadly https://crates.io/crates/enum_dispatch does not work here
     match module {
+        polybar_module::PolybarModule::Autolock(module) => render_loop(module),
         polybar_module::PolybarModule::BatteryMouse(module) => render_loop(module),
         polybar_module::PolybarModule::GpuNvidia(module) => render_loop(module),
         polybar_module::PolybarModule::InternetBandwidth(module) => render_loop(module),
@@ -43,7 +47,7 @@ fn main() {
 
 fn render_loop<T>(mut module: T)
 where
-    T: polybar_module::StatefulPolybarModule,
+    T: polybar_module::RenderablePolybarModule,
 {
     let mut prev_state: Option<T::State> = None;
     loop {

@@ -1,11 +1,13 @@
 use notify::Watcher;
 
+pub mod autolock;
 pub mod battery_mouse;
 pub mod gpu_nvidia;
 pub mod internet_bandwidth;
 pub mod wttr;
 
 pub enum PolybarModule {
+    Autolock(autolock::AutolockModule),
     BatteryMouse(battery_mouse::BatteryMouseModule),
     GpuNvidia(gpu_nvidia::GpuNvidiaModule),
     InternetBandwidth(internet_bandwidth::InternetBandwidthModule),
@@ -18,7 +20,7 @@ pub enum RuntimeMode {
     LowNetworkBandwith,
 }
 
-pub trait StatefulPolybarModule {
+pub trait RenderablePolybarModule {
     type State: std::fmt::Debug + PartialEq;
 
     fn wait_update(&mut self, first_update: bool);

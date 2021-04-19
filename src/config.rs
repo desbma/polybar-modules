@@ -3,6 +3,8 @@ use structopt::StructOpt;
 #[derive(Clone, Debug, StructOpt)]
 #[allow(non_camel_case_types)]
 pub enum PolybarModuleName {
+    #[structopt(about = "Start screen autolock module")]
+    autolock,
     #[structopt(about = "Start mouse battery module")]
     battery_mouse,
     #[structopt(about = "Start Nvidia GPU module")]

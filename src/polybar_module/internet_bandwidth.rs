@@ -1,5 +1,5 @@
 use crate::markup;
-use crate::polybar_module::{PolybarModuleEnv, RuntimeMode, StatefulPolybarModule};
+use crate::polybar_module::{PolybarModuleEnv, RenderablePolybarModule, RuntimeMode};
 use crate::theme;
 
 pub struct InternetBandwidthModule {
@@ -22,7 +22,7 @@ impl InternetBandwidthModule {
     }
 }
 
-impl StatefulPolybarModule for InternetBandwidthModule {
+impl RenderablePolybarModule for InternetBandwidthModule {
     type State = InternetBandwidthModuleState;
 
     fn wait_update(&mut self, first_update: bool) {

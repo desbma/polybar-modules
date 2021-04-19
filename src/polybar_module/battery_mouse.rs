@@ -1,5 +1,5 @@
 //use crate::markup;
-use crate::polybar_module::StatefulPolybarModule;
+use crate::polybar_module::RenderablePolybarModule;
 //use crate::theme;
 
 pub struct BatteryMouseModule {}
@@ -13,7 +13,7 @@ impl BatteryMouseModule {
     }
 }
 
-impl StatefulPolybarModule for BatteryMouseModule {
+impl RenderablePolybarModule for BatteryMouseModule {
     type State = BatteryMouseModuleState;
 
     fn wait_update(&mut self, _first_update: bool) {}
