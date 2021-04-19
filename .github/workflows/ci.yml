@@ -12,8 +12,13 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
+    env:
+      XDG_RUNTIME_DIR: /tmp/run
     steps:
       - uses: actions/checkout@v2
+      - run: |
+          mkdir -pv ${XDG_RUNTIME_DIR}
+          chmod -c 700 ${XDG_RUNTIME_DIR}
       - run: cargo test --verbose
 
   clippy:

@@ -101,7 +101,6 @@ mod tests {
     #[test]
     fn test_render() {
         let module = AutolockModule::new();
-        // For some reason get_runtime_directory is not public
         let runtime_dir = module
             .xdg_dirs
             .find_runtime_file(".")
