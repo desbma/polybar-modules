@@ -11,6 +11,8 @@ pub enum PolybarModuleName {
     gpu_nvidia,
     #[structopt(about = "Start low bandwidth button module")]
     internet_bandwidth,
+    #[structopt(about = "Start PulseAudio module")]
+    pulseaudio,
     #[structopt(about = "Start weather module")]
     wttr { location: Option<String> },
 }

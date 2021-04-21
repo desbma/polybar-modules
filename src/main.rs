@@ -30,6 +30,9 @@ fn main() {
         PolybarModuleName::internet_bandwidth => polybar_module::PolybarModule::InternetBandwidth(
             polybar_module::internet_bandwidth::InternetBandwidthModule::new(),
         ),
+        PolybarModuleName::pulseaudio => polybar_module::PolybarModule::PulseAudio(
+            polybar_module::pulseaudio::PulseAudioModule::new(),
+        ),
         PolybarModuleName::wttr { location } => {
             polybar_module::PolybarModule::Wttr(polybar_module::wttr::WttrModule::new(location))
         }
@@ -41,6 +44,7 @@ fn main() {
         polybar_module::PolybarModule::BatteryMouse(module) => render_loop(module),
         polybar_module::PolybarModule::GpuNvidia(module) => render_loop(module),
         polybar_module::PolybarModule::InternetBandwidth(module) => render_loop(module),
+        polybar_module::PolybarModule::PulseAudio(module) => render_loop(module),
         polybar_module::PolybarModule::Wttr(module) => render_loop(module),
     };
 }

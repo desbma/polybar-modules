@@ -4,6 +4,7 @@ pub mod autolock;
 pub mod battery_mouse;
 pub mod gpu_nvidia;
 pub mod internet_bandwidth;
+pub mod pulseaudio;
 pub mod wttr;
 
 pub enum PolybarModule {
@@ -11,6 +12,7 @@ pub enum PolybarModule {
     BatteryMouse(battery_mouse::BatteryMouseModule),
     GpuNvidia(gpu_nvidia::GpuNvidiaModule),
     InternetBandwidth(internet_bandwidth::InternetBandwidthModule),
+    PulseAudio(pulseaudio::PulseAudioModule),
     Wttr(wttr::WttrModule),
 }
 
