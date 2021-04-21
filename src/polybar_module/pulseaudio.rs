@@ -181,19 +181,25 @@ impl RenderablePolybarModule for PulseAudioModule {
             Some(state) => {
                 // TODO add markup to change source/sink
                 let mut fragments: Vec<String> = Vec::new();
-                for sink in &state.sinks {
-                    fragments.push(if sink.running {
-                        markup::style(&sink.name, None, Some(theme::Color::Foreground), None, None)
-                    } else {
-                        sink.name.to_owned()
-                    });
-                }
-                if state.sinks.is_empty() {
-                    fragments.push(" ".to_string());
-                } else {
+                if state.sinks.len() > 1 {
+                    for sink in &state.sinks {
+                        fragments.push(if sink.running {
+                            markup::style(
+                                &sink.name,
+                                None,
+                                Some(theme::Color::Foreground),
+                                None,
+                                None,
+                            )
+                        } else {
+                            sink.name.to_owned()
+                        });
+                    }
                     fragments.push("".to_string());
+                } else {
+                    fragments.push(" ".to_string());
                 }
-                if !state.sources.is_empty() {
+                if state.sources.len() > 1 {
                     fragments.push(markup::style(
                         "",
                         Some(theme::Color::MainIcon),
@@ -295,6 +301,18 @@ mod tests {
             ],
         });
         assert_eq!(module.render(&state), "si1 %{u#93a1a1}%{+u}si2%{-u}");
+
+        let state = Some(PulseAudioModuleState {
+            sources: vec![PulseAudioSource {
+                name: "so1".to_string(),
+                running: false,
+            }],
+            sinks: vec![PulseAudioSink {
+                name: "si1".to_string(),
+                running: false,
+            }],
+        });
+        assert_eq!(module.render(&state), "");
 
         let state = None;
         assert_eq!(module.render(&state), "%{F#cb4b16}%{F-}");
