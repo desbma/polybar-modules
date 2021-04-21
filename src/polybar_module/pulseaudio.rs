@@ -69,6 +69,14 @@ impl PulseAudioModule {
                 .find(|l| l.starts_with("State: "))
                 .ok_or_else(|| anyhow::anyhow!(parse_err_str))?
                 .ends_with("RUNNING");
+            if !output_lines
+                .find(|l| l.starts_with("device.class = "))
+                .unwrap()
+                .ends_with("\"sound\"")
+            {
+                // Not a real device
+                continue;
+            }
             let name = output_lines
                 .find(|l| l.starts_with("alsa.card_name = "))
                 .ok_or_else(|| anyhow::anyhow!(parse_err_str))?
@@ -104,6 +112,14 @@ impl PulseAudioModule {
                 .find(|l| l.starts_with("State: "))
                 .ok_or_else(|| anyhow::anyhow!(parse_err_str))?
                 .ends_with("RUNNING");
+            if !output_lines
+                .find(|l| l.starts_with("device.class = "))
+                .unwrap()
+                .ends_with("\"sound\"")
+            {
+                // Not a real device
+                continue;
+            }
             let name = output_lines
                 .find(|l| l.starts_with("alsa.card_name = "))
                 .ok_or_else(|| anyhow::anyhow!(parse_err_str))?
