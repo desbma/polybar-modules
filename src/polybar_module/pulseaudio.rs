@@ -11,12 +11,14 @@ pub struct PulseAudioModule {
 
 #[derive(Debug, PartialEq)]
 struct PulseAudioSource {
+    id: u32,
     name: String,
     running: bool,
 }
 
 #[derive(Debug, PartialEq)]
 struct PulseAudioSink {
+    id: u32,
     name: String,
     running: bool,
 }
@@ -61,33 +63,36 @@ impl PulseAudioModule {
         let mut sources = Vec::new();
         let parse_err_str = "Failed to parse pactl output";
         loop {
-            if output_lines.find(|l| l.starts_with("Source #")).is_none() {
-                break;
+            match output_lines.find(|l| l.starts_with("Source #")) {
+                None => break,
+                Some(source_line) => {
+                    let id = source_line.rsplit("#").next().unwrap().parse().unwrap();
+                    let running = output_lines
+                        .find(|l| l.starts_with("State: "))
+                        .ok_or_else(|| anyhow::anyhow!(parse_err_str))?
+                        .ends_with("RUNNING");
+                    if !output_lines
+                        .find(|l| l.starts_with("device.class = "))
+                        .unwrap()
+                        .ends_with("\"sound\"")
+                    {
+                        // Not a real device
+                        continue;
+                    }
+                    let name = output_lines
+                        .find(|l| l.starts_with("alsa.card_name = "))
+                        .ok_or_else(|| anyhow::anyhow!(parse_err_str))?
+                        .split('"')
+                        .nth(1)
+                        .ok_or_else(|| anyhow::anyhow!(parse_err_str))?
+                        .to_string();
+                    sources.push(PulseAudioSource {
+                        id,
+                        name: Self::abbrev(&name, 1),
+                        running,
+                    });
+                }
             }
-
-            let running = output_lines
-                .find(|l| l.starts_with("State: "))
-                .ok_or_else(|| anyhow::anyhow!(parse_err_str))?
-                .ends_with("RUNNING");
-            if !output_lines
-                .find(|l| l.starts_with("device.class = "))
-                .unwrap()
-                .ends_with("\"sound\"")
-            {
-                // Not a real device
-                continue;
-            }
-            let name = output_lines
-                .find(|l| l.starts_with("alsa.card_name = "))
-                .ok_or_else(|| anyhow::anyhow!(parse_err_str))?
-                .split('"')
-                .nth(1)
-                .ok_or_else(|| anyhow::anyhow!(parse_err_str))?
-                .to_string();
-            sources.push(PulseAudioSource {
-                name: Self::abbrev(&name, 1),
-                running,
-            });
         }
 
         // Run pactl
@@ -104,33 +109,36 @@ impl PulseAudioModule {
         let mut output_lines = output.stdout.lines().map(|l| l.unwrap().trim().to_owned());
         let mut sinks = Vec::new();
         loop {
-            if output_lines.find(|l| l.starts_with("Sink #")).is_none() {
-                break;
+            match output_lines.find(|l| l.starts_with("Sink #")) {
+                None => break,
+                Some(sink_line) => {
+                    let id = sink_line.rsplit("#").next().unwrap().parse().unwrap();
+                    let running = output_lines
+                        .find(|l| l.starts_with("State: "))
+                        .ok_or_else(|| anyhow::anyhow!(parse_err_str))?
+                        .ends_with("RUNNING");
+                    if !output_lines
+                        .find(|l| l.starts_with("device.class = "))
+                        .unwrap()
+                        .ends_with("\"sound\"")
+                    {
+                        // Not a real device
+                        continue;
+                    }
+                    let name = output_lines
+                        .find(|l| l.starts_with("alsa.card_name = "))
+                        .ok_or_else(|| anyhow::anyhow!(parse_err_str))?
+                        .split('"')
+                        .nth(1)
+                        .ok_or_else(|| anyhow::anyhow!(parse_err_str))?
+                        .to_string();
+                    sinks.push(PulseAudioSink {
+                        id,
+                        name: Self::abbrev(&name, 1),
+                        running,
+                    });
+                }
             }
-
-            let running = output_lines
-                .find(|l| l.starts_with("State: "))
-                .ok_or_else(|| anyhow::anyhow!(parse_err_str))?
-                .ends_with("RUNNING");
-            if !output_lines
-                .find(|l| l.starts_with("device.class = "))
-                .unwrap()
-                .ends_with("\"sound\"")
-            {
-                // Not a real device
-                continue;
-            }
-            let name = output_lines
-                .find(|l| l.starts_with("alsa.card_name = "))
-                .ok_or_else(|| anyhow::anyhow!(parse_err_str))?
-                .split('"')
-                .nth(1)
-                .ok_or_else(|| anyhow::anyhow!(parse_err_str))?
-                .to_string();
-            sinks.push(PulseAudioSink {
-                name: Self::abbrev(&name, 1),
-                running,
-            });
         }
 
         Ok(PulseAudioModuleState { sources, sinks })
@@ -198,7 +206,13 @@ impl RenderablePolybarModule for PulseAudioModule {
                                 None,
                             )
                         } else {
-                            sink.name.to_owned()
+                            markup::action(
+                                &sink.name,
+                                markup::PolybarAction {
+                                    type_: markup::PolybarActionType::ClickLeft,
+                                    command: format!("pacmd set-default-sink {}", sink.id),
+                                },
+                            )
                         });
                     }
                     fragments.push("".to_string());
@@ -223,7 +237,13 @@ impl RenderablePolybarModule for PulseAudioModule {
                                 None,
                             )
                         } else {
-                            source.name.to_owned()
+                            markup::action(
+                                &source.name,
+                                markup::PolybarAction {
+                                    type_: markup::PolybarActionType::ClickLeft,
+                                    command: format!("pacmd set-default-source {}", source.id),
+                                },
+                            )
                         });
                     }
                 }
@@ -252,20 +272,24 @@ mod tests {
         let state = Some(PulseAudioModuleState {
             sources: vec![
                 PulseAudioSource {
+                    id: 1,
                     name: "so1".to_string(),
                     running: false,
                 },
                 PulseAudioSource {
+                    id: 2,
                     name: "so2".to_string(),
                     running: true,
                 },
             ],
             sinks: vec![
                 PulseAudioSink {
+                    id: 1,
                     name: "si1".to_string(),
                     running: false,
                 },
                 PulseAudioSink {
+                    id: 2,
                     name: "si2".to_string(),
                     running: true,
                 },
@@ -273,16 +297,18 @@ mod tests {
         });
         assert_eq!(
             module.render(&state),
-            "si1 %{u#93a1a1}%{+u}si2%{-u}  %{F#eee8d5}%{F-} so1 %{u#93a1a1}%{+u}so2%{-u}"
+            "%{A1:pacmd set-default-sink 1:}si1%{A} %{u#93a1a1}%{+u}si2%{-u}  %{F#eee8d5}%{F-} %{A1:pacmd set-default-source 1:}so1%{A} %{u#93a1a1}%{+u}so2%{-u}"
         );
 
         let state = Some(PulseAudioModuleState {
             sources: vec![
                 PulseAudioSource {
+                    id: 1,
                     name: "so1".to_string(),
                     running: false,
                 },
                 PulseAudioSource {
+                    id: 2,
                     name: "so2".to_string(),
                     running: true,
                 },
@@ -291,30 +317,37 @@ mod tests {
         });
         assert_eq!(
             module.render(&state),
-            "  %{F#eee8d5}%{F-} so1 %{u#93a1a1}%{+u}so2%{-u}"
+            "  %{F#eee8d5}%{F-} %{A1:pacmd set-default-source 1:}so1%{A} %{u#93a1a1}%{+u}so2%{-u}"
         );
 
         let state = Some(PulseAudioModuleState {
             sources: vec![],
             sinks: vec![
                 PulseAudioSink {
+                    id: 1,
                     name: "si1".to_string(),
                     running: false,
                 },
                 PulseAudioSink {
+                    id: 2,
                     name: "si2".to_string(),
                     running: true,
                 },
             ],
         });
-        assert_eq!(module.render(&state), "si1 %{u#93a1a1}%{+u}si2%{-u}");
+        assert_eq!(
+            module.render(&state),
+            "%{A1:pacmd set-default-sink 1:}si1%{A} %{u#93a1a1}%{+u}si2%{-u}"
+        );
 
         let state = Some(PulseAudioModuleState {
             sources: vec![PulseAudioSource {
+                id: 1,
                 name: "so1".to_string(),
                 running: false,
             }],
             sinks: vec![PulseAudioSink {
+                id: 1,
                 name: "si1".to_string(),
                 running: false,
             }],
