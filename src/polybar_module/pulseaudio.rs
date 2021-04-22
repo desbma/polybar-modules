@@ -193,7 +193,6 @@ impl RenderablePolybarModule for PulseAudioModule {
     fn render(&self, state: &Self::State) -> String {
         match state {
             Some(state) => {
-                // TODO add markup to change source/sink
                 let mut fragments: Vec<String> = Vec::new();
                 if state.sinks.len() > 1 {
                     for sink in &state.sinks {
