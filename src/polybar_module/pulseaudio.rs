@@ -66,7 +66,7 @@ impl PulseAudioModule {
             match output_lines.find(|l| l.starts_with("Source #")) {
                 None => break,
                 Some(source_line) => {
-                    let id = source_line.rsplit("#").next().unwrap().parse().unwrap();
+                    let id = source_line.rsplit('#').next().unwrap().parse().unwrap();
                     let running = output_lines
                         .find(|l| l.starts_with("State: "))
                         .ok_or_else(|| anyhow::anyhow!(parse_err_str))?
@@ -112,7 +112,7 @@ impl PulseAudioModule {
             match output_lines.find(|l| l.starts_with("Sink #")) {
                 None => break,
                 Some(sink_line) => {
-                    let id = sink_line.rsplit("#").next().unwrap().parse().unwrap();
+                    let id = sink_line.rsplit('#').next().unwrap().parse().unwrap();
                     let running = output_lines
                         .find(|l| l.starts_with("State: "))
                         .ok_or_else(|| anyhow::anyhow!(parse_err_str))?

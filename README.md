@@ -12,7 +12,7 @@ Rewrite of my personal Python [Polybar](https://polybar.github.io/) modules as a
 - [x] Screen autolock status & control
 - [ ] Mouse battery status
 - [ ] Bluetooth devices status & control
-- [ ] Pulse audio input/output device status & control
+- [x] Pulse audio input/output device status & control
 - [x] Nvidia GPU status
 - [x] Low bandwidth button
 - [ ] Home network status
