@@ -85,7 +85,7 @@ impl PulseAudioModule {
                 .ok_or_else(|| anyhow::anyhow!(parse_err_str))?
                 .to_string();
             sources.push(PulseAudioSource {
-                name: Self::abbrev(&name, 3),
+                name: Self::abbrev(&name, 1),
                 running,
             });
         }
@@ -128,7 +128,7 @@ impl PulseAudioModule {
                 .ok_or_else(|| anyhow::anyhow!(parse_err_str))?
                 .to_string();
             sinks.push(PulseAudioSink {
-                name: Self::abbrev(&name, 3),
+                name: Self::abbrev(&name, 1),
                 running,
             });
         }
@@ -137,10 +137,16 @@ impl PulseAudioModule {
     }
 
     fn abbrev(s: &str, max_len: usize) -> String {
+        assert!(max_len >= 1);
         let mut longest_word = s.split(' ').max_by_key(|w| w.len()).unwrap().to_owned();
         if longest_word.len() > max_len {
-            longest_word.truncate(max_len - 1);
-            format!("{}…", longest_word)
+            if max_len > 1 {
+                longest_word.truncate(max_len - 1);
+                format!("{}…", longest_word)
+            } else {
+                longest_word.truncate(1);
+                longest_word
+            }
         } else {
             longest_word
         }
@@ -236,6 +242,7 @@ mod tests {
     fn test_abbrev() {
         assert_eq!(PulseAudioModule::abbrev(&"111 2222".to_string(), 4), "2222");
         assert_eq!(PulseAudioModule::abbrev(&"111 2222".to_string(), 3), "22…");
+        assert_eq!(PulseAudioModule::abbrev(&"111 2222".to_string(), 1), "2");
     }
 
     #[test]
