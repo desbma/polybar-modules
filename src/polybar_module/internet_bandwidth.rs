@@ -86,6 +86,7 @@ mod tests {
     fn test_render() {
         let home = std::env::var("HOME").unwrap();
         let module = InternetBandwidthModule::new();
+
         let state = InternetBandwidthModuleState {
             mode: RuntimeMode::Unrestricted,
         };
@@ -96,6 +97,7 @@ mod tests {
                 home
             )
         );
+
         let state = InternetBandwidthModuleState {
             mode: RuntimeMode::LowNetworkBandwith,
         };

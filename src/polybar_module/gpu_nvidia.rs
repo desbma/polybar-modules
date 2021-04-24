@@ -156,6 +156,7 @@ mod tests {
     #[test]
     fn test_render() {
         let module = GpuNvidiaModule::new();
+
         let state = Some(GpuNvidiaModuleState {
             mem_used: 200,
             mem_total: 4000,
@@ -169,6 +170,7 @@ mod tests {
             module.render(&state),
             "%{F#eee8d5}%{F-}  5% %{F#859900}▁%{F-}  600+ 800MHz 40°C  20W"
         );
+
         let state = Some(GpuNvidiaModuleState {
             mem_used: 3500,
             mem_total: 4000,
@@ -182,6 +184,7 @@ mod tests {
             module.render(&state),
             "%{F#eee8d5}%{F-} 88% %{F#dc322f}█%{F-} 1600+2000MHz 69°C 200W"
         );
+
         let state = Some(GpuNvidiaModuleState {
             mem_used: 3500,
             mem_total: 4000,
@@ -195,6 +198,7 @@ mod tests {
             module.render(&state),
             "%{F#eee8d5}%{F-} 88% %{F#dc322f}█%{F-} 1600+2000MHz %{u#dc322f}%{+u}%{F#dc322f}69°C%{F-}%{-u} 200W"
         );
+
         let state = Some(GpuNvidiaModuleState {
             mem_used: 3500,
             mem_total: 4000,
@@ -208,6 +212,7 @@ mod tests {
             module.render(&state),
             "%{F#eee8d5}%{F-} 88% %{F#dc322f}█%{F-} 1600+2000MHz %{u#dc322f}%{+u}%{F#dc322f}70°C%{F-}%{-u} 200W"
         );
+
         let state = None;
         assert_eq!(module.render(&state), "%{F#cb4b16}%{F-}");
     }

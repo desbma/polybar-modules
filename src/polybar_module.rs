@@ -4,6 +4,7 @@ pub mod autolock;
 pub mod battery_mouse;
 pub mod gpu_nvidia;
 pub mod internet_bandwidth;
+pub mod market;
 pub mod pulseaudio;
 pub mod wttr;
 
@@ -12,6 +13,7 @@ pub enum PolybarModule {
     BatteryMouse(battery_mouse::BatteryMouseModule),
     GpuNvidia(gpu_nvidia::GpuNvidiaModule),
     InternetBandwidth(internet_bandwidth::InternetBandwidthModule),
+    Market(market::MarketModule),
     PulseAudio(pulseaudio::PulseAudioModule),
     Wttr(wttr::WttrModule),
 }
@@ -50,7 +52,8 @@ impl PolybarModuleEnv {
         }
     }
 
-    pub fn wait_runtime_mode(&self, mode: RuntimeMode) {
+    pub fn wait_runtime_mode(&self, mode: RuntimeMode) -> bool {
+        let mut did_wait = false;
         let (events_tx, events_rx) = std::sync::mpsc::channel();
         let mut watcher = notify::raw_watcher(events_tx).unwrap();
         let parent_dir = self.low_bw_filepath.parent().unwrap();
@@ -60,7 +63,9 @@ impl PolybarModuleEnv {
             .unwrap();
         while self.get_runtime_mode() != mode {
             let evt = events_rx.recv().unwrap();
+            did_wait = true;
             log::trace!("{:?}", evt);
         }
+        did_wait
     }
 }

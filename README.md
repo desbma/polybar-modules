@@ -18,7 +18,7 @@ Rewrite of my personal Python [Polybar](https://polybar.github.io/) modules as a
 - [ ] Home network status
 - [ ] Work network status
 - [ ] Taskwarrior next task
-- [ ] Market trend
+- [x] Market trend
 - [x] Weather
 - [ ] ~~i3 layout status & control~~ I'm now using Xmonad instead
 - [ ] ~~Mount device control~~ I'm now using Udiskie instead

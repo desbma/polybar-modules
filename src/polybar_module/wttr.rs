@@ -119,10 +119,12 @@ mod tests {
     #[test]
     fn test_render() {
         let module = WttrModule::new(None);
+
         let state = Some(WttrModuleState {
             sky: "", temp: 15
         });
         assert_eq!(module.render(&state), "%{F#eee8d5}%{F-} 15°C");
+
         let state = None;
         assert_eq!(module.render(&state), "%{F#cb4b16}%{F-}");
     }

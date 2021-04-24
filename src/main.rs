@@ -13,11 +13,14 @@ fn main() {
     }
 
     // Parse command line args
-    let opts = config::CommandLineOpts::from_args();
-    log::trace!("{:?}", opts);
+    let cl_opts = config::CommandLineOpts::from_args();
+    log::trace!("{:?}", cl_opts);
+
+    // Parse config file
+    let cfg = config::parse_config_file();
 
     // Init stuff
-    let module: polybar_module::PolybarModule = match opts.module {
+    let module: polybar_module::PolybarModule = match cl_opts.module {
         PolybarModuleName::autolock => {
             polybar_module::PolybarModule::Autolock(polybar_module::autolock::AutolockModule::new())
         }
@@ -30,6 +33,21 @@ fn main() {
         PolybarModuleName::internet_bandwidth => polybar_module::PolybarModule::InternetBandwidth(
             polybar_module::internet_bandwidth::InternetBandwidthModule::new(),
         ),
+        PolybarModuleName::market => {
+            let market_cfg = cfg
+                .and_then(|c| {
+                    c.module
+                        .ok_or_else(|| anyhow::anyhow!("Missing 'module' config section"))
+                })
+                .and_then(|c| {
+                    c.market
+                        .ok_or_else(|| anyhow::anyhow!("Missing 'market' config section"))
+                })
+                .expect("Unable to get market module config from config file");
+            polybar_module::PolybarModule::Market(polybar_module::market::MarketModule::new(
+                market_cfg,
+            ))
+        }
         PolybarModuleName::pulseaudio => polybar_module::PolybarModule::PulseAudio(
             polybar_module::pulseaudio::PulseAudioModule::new(),
         ),
@@ -44,6 +62,7 @@ fn main() {
         polybar_module::PolybarModule::BatteryMouse(module) => render_loop(module),
         polybar_module::PolybarModule::GpuNvidia(module) => render_loop(module),
         polybar_module::PolybarModule::InternetBandwidth(module) => render_loop(module),
+        polybar_module::PolybarModule::Market(module) => render_loop(module),
         polybar_module::PolybarModule::PulseAudio(module) => render_loop(module),
         polybar_module::PolybarModule::Wttr(module) => render_loop(module),
     };

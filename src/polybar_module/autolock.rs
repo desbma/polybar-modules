@@ -118,6 +118,7 @@ mod tests {
             module.render(&state),
             format!("%{{A1:xidlehook-client --socket {}/xidlehook/autolock.socket control --action disable && pkill -USR1 -f \'polybar-modules autolock$\':}}%{{A}}", runtime_dir)
         );
+
         let state = Some(AutolockModuleState {
             enabled: false,
             socket_filepath: format!("{}/xidlehook/autolock.socket", runtime_dir),
@@ -126,6 +127,7 @@ mod tests {
             module.render(&state),
             format!("%{{A1:xidlehook-client --socket {}/xidlehook/autolock.socket control --action enable && pkill -USR1 -f \'polybar-modules autolock$\':}}%{{u#b58900}}%{{+u}}%{{-u}}%{{A}}", runtime_dir)
         );
+
         let state = None;
         assert_eq!(module.render(&state), "%{F#cb4b16}%{F-}");
     }
