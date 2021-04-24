@@ -3,27 +3,84 @@ use crate::polybar_module::{PolybarModuleEnv, RenderablePolybarModule, RuntimeMo
 use crate::theme;
 
 pub struct ArchUpdatesModule {
+    xdg_dirs: xdg::BaseDirectories,
     env: PolybarModuleEnv,
 }
 
 #[derive(Debug, PartialEq)]
 pub struct ArchUpdatesModuleState {
-    repo_update_count: u32,
-    repo_security_update_count: u32,
-    aur_update_count: u32,
+    repo_update_count: usize,
+    repo_security_update_count: usize,
+    aur_update_count: usize,
 }
 
 impl ArchUpdatesModule {
     pub fn new() -> ArchUpdatesModule {
+        let xdg_dirs = xdg::BaseDirectories::new().unwrap();
         let env = PolybarModuleEnv::new();
-        ArchUpdatesModule { env }
+        ArchUpdatesModule { xdg_dirs, env }
     }
 
     fn try_update(&mut self) -> anyhow::Result<ArchUpdatesModuleState> {
+        // Run checkupdates
+        let db_dir = self
+            .xdg_dirs
+            .find_cache_file("checkupdates")
+            .ok_or_else(|| anyhow::anyhow!("Unable to find checkupdates database dir"))?
+            .as_os_str()
+            .to_os_string()
+            .into_string()
+            .unwrap();
+        let output = std::process::Command::new("checkupdates")
+            .env("CHECKUPDATES_DB", &db_dir)
+            .stderr(std::process::Stdio::null())
+            .output()?;
+        // checkupdates returns non 0 when no updates is available
+
+        // Parse output
+        let output_str = String::from_utf8_lossy(&output.stdout);
+        let repo_updates: Vec<String> = output_str
+            .lines()
+            .map(|l| l.split(' ').next().unwrap().to_string())
+            .collect();
+
+        let repo_security_update_count = if !repo_updates.is_empty() {
+            // Run arch-audit
+            let output = std::process::Command::new("arch-audit")
+                .args(&["-u", "-b", &db_dir, "-f", "%n"])
+                .env("TERM", "xterm") // workaround arch-audit bug
+                .stderr(std::process::Stdio::null())
+                .output()?;
+            if !output.status.success() {
+                anyhow::bail!("arch-audit invocation failed");
+            }
+
+            // Parse output
+            let output_str = String::from_utf8_lossy(&output.stdout);
+            output_str
+                .lines()
+                .filter(|l| repo_updates.contains(&l.to_string()))
+                .count()
+        } else {
+            0
+        };
+
+        // Run arch-audit
+        let output = std::process::Command::new("checkupdates-aur")
+            .stderr(std::process::Stdio::null())
+            .output()?;
+        if !output.status.success() {
+            anyhow::bail!("checkupdates-aur invocation failed");
+        }
+
+        // Parse output
+        let output_str = String::from_utf8_lossy(&output.stdout);
+        let aur_update_count = output_str.lines().count();
+
         Ok(ArchUpdatesModuleState {
-            repo_update_count: 0,
-            repo_security_update_count: 0,
-            aur_update_count: 0,
+            repo_update_count: repo_updates.len(),
+            repo_security_update_count,
+            aur_update_count,
         })
     }
 }
