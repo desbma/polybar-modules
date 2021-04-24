@@ -21,6 +21,9 @@ fn main() {
 
     // Init stuff
     let module: polybar_module::PolybarModule = match cl_opts.module {
+        PolybarModuleName::arch_updates => polybar_module::PolybarModule::ArchUpdates(
+            polybar_module::arch_updates::ArchUpdatesModule::new(),
+        ),
         PolybarModuleName::autolock => {
             polybar_module::PolybarModule::Autolock(polybar_module::autolock::AutolockModule::new())
         }
@@ -58,6 +61,7 @@ fn main() {
 
     // Update/render loop, dynamic dispatch sadness, sadly https://crates.io/crates/enum_dispatch does not work here
     match module {
+        polybar_module::PolybarModule::ArchUpdates(module) => render_loop(module),
         polybar_module::PolybarModule::Autolock(module) => render_loop(module),
         polybar_module::PolybarModule::BatteryMouse(module) => render_loop(module),
         polybar_module::PolybarModule::GpuNvidia(module) => render_loop(module),

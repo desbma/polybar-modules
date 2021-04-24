@@ -1,5 +1,6 @@
 use notify::Watcher;
 
+pub mod arch_updates;
 pub mod autolock;
 pub mod battery_mouse;
 pub mod gpu_nvidia;
@@ -9,6 +10,7 @@ pub mod pulseaudio;
 pub mod wttr;
 
 pub enum PolybarModule {
+    ArchUpdates(arch_updates::ArchUpdatesModule),
     Autolock(autolock::AutolockModule),
     BatteryMouse(battery_mouse::BatteryMouseModule),
     GpuNvidia(gpu_nvidia::GpuNvidiaModule),

@@ -3,6 +3,8 @@ use structopt::StructOpt;
 #[derive(Clone, Debug, StructOpt)]
 #[allow(non_camel_case_types)]
 pub enum PolybarModuleName {
+    #[structopt(about = "Start Arch Linux update module")]
+    arch_updates,
     #[structopt(about = "Start screen autolock module")]
     autolock,
     #[structopt(about = "Start mouse battery module")]
