@@ -79,7 +79,7 @@ where
     let mut prev_state: Option<T::State> = None;
     loop {
         // Update
-        module.wait_update(prev_state.is_none());
+        module.wait_update(&prev_state);
         let state = module.update();
         log::debug!("{:?}", state);
 

@@ -16,7 +16,7 @@ impl BatteryMouseModule {
 impl RenderablePolybarModule for BatteryMouseModule {
     type State = BatteryMouseModuleState;
 
-    fn wait_update(&mut self, _first_update: bool) {}
+    fn wait_update(&mut self, _prev_state: &Option<Self::State>) {}
 
     fn update(&mut self) -> Self::State {
         Self::State {}

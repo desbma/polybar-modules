@@ -72,13 +72,18 @@ impl MarketModule {
 impl RenderablePolybarModule for MarketModule {
     type State = Option<MarketModuleState>;
 
-    fn wait_update(&mut self, first_update: bool) {
-        if !first_update {
-            std::thread::sleep(std::time::Duration::from_secs(60 * 30));
+    fn wait_update(&mut self, prev_state: &Option<Self::State>) {
+        if let Some(prev_state) = prev_state {
+            std::thread::sleep(match prev_state {
+                // Nominal
+                Some(_) => std::time::Duration::from_secs(60 * 30),
+                // Error occured
+                None => std::time::Duration::from_secs(5),
+            });
         }
         loop {
             let did_wait_mode = self.env.wait_runtime_mode(RuntimeMode::Unrestricted);
-            if first_update {
+            if prev_state.is_none() {
                 break;
             }
             let did_wait_workday = Self::wait_working_day();

@@ -81,9 +81,14 @@ impl WttrModule {
 impl RenderablePolybarModule for WttrModule {
     type State = Option<WttrModuleState>;
 
-    fn wait_update(&mut self, first_update: bool) {
-        if !first_update {
-            std::thread::sleep(std::time::Duration::from_secs(60));
+    fn wait_update(&mut self, prev_state: &Option<Self::State>) {
+        if let Some(prev_state) = prev_state {
+            std::thread::sleep(match prev_state {
+                // Nominal
+                Some(_) => std::time::Duration::from_secs(60),
+                // Error occured
+                None => std::time::Duration::from_secs(5),
+            });
         }
         self.env.wait_runtime_mode(RuntimeMode::Unrestricted);
     }

@@ -4,7 +4,6 @@ use crate::theme;
 
 pub struct InternetBandwidthModule {
     env: PolybarModuleEnv,
-    cur_state: InternetBandwidthModuleState,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -15,19 +14,16 @@ pub struct InternetBandwidthModuleState {
 impl InternetBandwidthModule {
     pub fn new() -> InternetBandwidthModule {
         let env = PolybarModuleEnv::new();
-        let cur_state = InternetBandwidthModuleState {
-            mode: env.get_runtime_mode(),
-        };
-        InternetBandwidthModule { env, cur_state }
+        InternetBandwidthModule { env }
     }
 }
 
 impl RenderablePolybarModule for InternetBandwidthModule {
     type State = InternetBandwidthModuleState;
 
-    fn wait_update(&mut self, first_update: bool) {
-        if !first_update {
-            let to_wait = match self.cur_state.mode {
+    fn wait_update(&mut self, prev_state: &Option<Self::State>) {
+        if let Some(prev_state) = prev_state {
+            let to_wait = match prev_state.mode {
                 RuntimeMode::Unrestricted => RuntimeMode::LowNetworkBandwith,
                 RuntimeMode::LowNetworkBandwith => RuntimeMode::Unrestricted,
             };
@@ -36,10 +32,9 @@ impl RenderablePolybarModule for InternetBandwidthModule {
     }
 
     fn update(&mut self) -> Self::State {
-        self.cur_state = Self::State {
+        Self::State {
             mode: self.env.get_runtime_mode(),
-        };
-        self.cur_state.clone()
+        }
     }
 
     fn render(&self, state: &Self::State) -> String {

@@ -29,7 +29,7 @@ pub enum RuntimeMode {
 pub trait RenderablePolybarModule {
     type State: std::fmt::Debug + PartialEq;
 
-    fn wait_update(&mut self, first_update: bool);
+    fn wait_update(&mut self, prev_state: &Option<Self::State>);
 
     fn update(&mut self) -> Self::State;
 

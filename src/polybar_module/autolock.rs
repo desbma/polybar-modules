@@ -55,9 +55,16 @@ impl AutolockModule {
 impl RenderablePolybarModule for AutolockModule {
     type State = Option<AutolockModuleState>;
 
-    fn wait_update(&mut self, first_update: bool) {
-        if !first_update {
-            self.signals.forever().next();
+    fn wait_update(&mut self, prev_state: &Option<Self::State>) {
+        if let Some(prev_state) = prev_state {
+            match prev_state {
+                // Nominal
+                Some(_) => {
+                    self.signals.forever().next();
+                }
+                // Error occured
+                None => std::thread::sleep(std::time::Duration::from_secs(1)),
+            }
         }
     }
 
