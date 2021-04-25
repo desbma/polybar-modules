@@ -52,7 +52,7 @@ impl TaskwarriorModule {
     }
 
     fn try_update(&mut self) -> anyhow::Result<TaskwarriorModuleState> {
-        let last_fs_change = self.get_max_task_data_file_mtime()?;
+        let last_fs_change = self.get_max_task_data_file_mtime();
         let common_task_args = &["rc.verbose:nothing", "rc.gc:off", "recurrence.limit=0"];
 
         // Run task
@@ -146,15 +146,14 @@ impl TaskwarriorModule {
         }
     }
 
-    fn get_max_task_data_file_mtime(&self) -> anyhow::Result<SystemTime> {
-        let mut mtimes = Vec::new();
-        mtimes.reserve(3);
-        for filename in &["backlog.data", "completed.data", "pending.data"] {
-            let path = Path::new(&self.data_dir).join(filename);
-            let mtime = metadata(path)?.modified()?;
-            mtimes.push(mtime);
-        }
-        Ok(*mtimes.iter().max().unwrap())
+    fn get_max_task_data_file_mtime(&self) -> SystemTime {
+        vec!["completed.data", "pending.data"]
+            .iter()
+            .map(|f| Path::new(&self.data_dir).join(f))
+            .filter_map(|p| metadata(p).ok())
+            .map(|m| m.modified().unwrap())
+            .max()
+            .unwrap()
     }
 }
 
@@ -169,11 +168,10 @@ impl RenderablePolybarModule for TaskwarriorModule {
                     let (events_tx, events_rx) = channel();
                     let mut watcher =
                         notify::watcher(events_tx, Duration::from_millis(10)).unwrap();
-                    let to_watch_filepaths: Vec<PathBuf> =
-                        vec!["backlog.data", "completed.data", "pending.data"]
-                            .iter()
-                            .map(|f| Path::new(&self.data_dir).join(f))
-                            .collect();
+                    let to_watch_filepaths: Vec<PathBuf> = vec!["completed.data", "pending.data"]
+                        .iter()
+                        .map(|f| Path::new(&self.data_dir).join(f))
+                        .collect();
 
                     log::debug!("Watching {:?}", to_watch_filepaths);
                     for to_watch_filepath in to_watch_filepaths {
@@ -182,7 +180,7 @@ impl RenderablePolybarModule for TaskwarriorModule {
                             .unwrap();
                     }
                     loop {
-                        let max_mtime = self.get_max_task_data_file_mtime().unwrap();
+                        let max_mtime = self.get_max_task_data_file_mtime();
                         if max_mtime > prev_state.last_fs_change {
                             break;
                         }

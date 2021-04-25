@@ -20,6 +20,7 @@ jobs:
       - run: |
           mkdir -pv ${XDG_RUNTIME_DIR}
           chmod -c 700 ${XDG_RUNTIME_DIR}
+      - run: "yes | task"
       - run: cargo test --verbose
 
   clippy:
