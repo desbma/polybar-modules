@@ -16,7 +16,7 @@ jobs:
       XDG_RUNTIME_DIR: /tmp/run
     steps:
       - uses: actions/checkout@v2
-      - run: sudo apt-get install pulseaudio-utils task
+      - run: sudo apt-get install pulseaudio-utils taskwarrior
       - run: |
           mkdir -pv ${XDG_RUNTIME_DIR}
           chmod -c 700 ${XDG_RUNTIME_DIR}
