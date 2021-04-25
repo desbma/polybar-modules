@@ -1,5 +1,8 @@
-use lazy_static::lazy_static;
 use std::collections::HashMap;
+use std::thread::sleep;
+use std::time::Duration;
+
+use lazy_static::lazy_static;
 
 use crate::markup;
 use crate::polybar_module::{PolybarModuleEnv, RenderablePolybarModule, RuntimeMode};
@@ -83,11 +86,11 @@ impl RenderablePolybarModule for WttrModule {
 
     fn wait_update(&mut self, prev_state: &Option<Self::State>) {
         if let Some(prev_state) = prev_state {
-            std::thread::sleep(match prev_state {
+            sleep(match prev_state {
                 // Nominal
-                Some(_) => std::time::Duration::from_secs(60),
+                Some(_) => Duration::from_secs(60),
                 // Error occured
-                None => std::time::Duration::from_secs(5),
+                None => Duration::from_secs(5),
             });
         }
         self.env.wait_runtime_mode(RuntimeMode::Unrestricted);

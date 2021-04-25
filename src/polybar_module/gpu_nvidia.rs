@@ -1,3 +1,7 @@
+use std::process::{Command, Stdio};
+use std::thread::sleep;
+use std::time::Duration;
+
 use crate::markup;
 use crate::polybar_module::RenderablePolybarModule;
 use crate::theme;
@@ -24,12 +28,12 @@ impl GpuNvidiaModule {
 
     fn try_update(&mut self) -> anyhow::Result<GpuNvidiaModuleState> {
         // Run nvidia-smi
-        let output = std::process::Command::new("nvidia-smi")
+        let output = Command::new("nvidia-smi")
             .args(&[
                 "--format=csv,noheader,nounits",
                 "--query-gpu=memory.used,memory.total,clocks.current.graphics,clocks.current.memory,clocks_throttle_reasons.hw_slowdown,temperature.gpu,power.draw"
             ])
-            .stderr(std::process::Stdio::null())
+            .stderr(Stdio::null())
             .output()?;
         if !output.status.success() {
             anyhow::bail!("nvidia-smi invocation failed");
@@ -104,7 +108,7 @@ impl RenderablePolybarModule for GpuNvidiaModule {
 
     fn wait_update(&mut self, prev_state: &Option<Self::State>) {
         if prev_state.is_some() {
-            std::thread::sleep(std::time::Duration::from_secs(1));
+            sleep(Duration::from_secs(1));
         }
     }
 

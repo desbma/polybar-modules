@@ -1,12 +1,13 @@
 use std::io::BufRead;
 use std::io::Read;
+use std::process::{ChildStdout, Command, Stdio};
 
 use crate::markup;
 use crate::polybar_module::RenderablePolybarModule;
 use crate::theme;
 
 pub struct PulseAudioModule {
-    pactl_subscribe_stdout: std::process::ChildStdout,
+    pactl_subscribe_stdout: ChildStdout,
 }
 
 #[derive(Debug, PartialEq)]
@@ -30,29 +31,28 @@ pub struct PulseAudioModuleState {
 }
 
 impl PulseAudioModule {
-    pub fn new() -> PulseAudioModule {
+    pub fn new() -> anyhow::Result<PulseAudioModule> {
         // Pactl process to follow events
-        let stdout = std::process::Command::new("pactl")
+        let stdout = Command::new("pactl")
             .args(&["subscribe"]) // LANG=C has no effect on this one
-            .stdin(std::process::Stdio::null())
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::null())
-            .spawn()
-            .unwrap()
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()?
             .stdout
             .unwrap();
 
-        PulseAudioModule {
+        Ok(PulseAudioModule {
             pactl_subscribe_stdout: stdout,
-        }
+        })
     }
 
     fn try_update(&mut self) -> anyhow::Result<PulseAudioModuleState> {
         // Run pactl
-        let output = std::process::Command::new("pactl")
+        let output = Command::new("pactl")
             .args(&["list", "sources"])
             .env("LANG", "C")
-            .stderr(std::process::Stdio::null())
+            .stderr(Stdio::null())
             .output()?;
         if !output.status.success() {
             anyhow::bail!("pactl invocation failed");
@@ -96,10 +96,10 @@ impl PulseAudioModule {
         }
 
         // Run pactl
-        let output = std::process::Command::new("pactl")
+        let output = Command::new("pactl")
             .args(&["list", "sinks"])
             .env("LANG", "C")
-            .stderr(std::process::Stdio::null())
+            .stderr(Stdio::null())
             .output()?;
         if !output.status.success() {
             anyhow::bail!("pactl invocation failed");
@@ -266,7 +266,8 @@ mod tests {
 
     #[test]
     fn test_render() {
-        let module = PulseAudioModule::new();
+        let module = PulseAudioModule::new().unwrap();
+        // TODO this leaves a pactl subscribe process
 
         let state = Some(PulseAudioModuleState {
             sources: vec![

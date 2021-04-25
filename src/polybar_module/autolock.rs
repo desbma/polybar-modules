@@ -1,3 +1,7 @@
+use std::process::{Command, Stdio};
+use std::thread::sleep;
+use std::time::Duration;
+
 use crate::markup;
 use crate::polybar_module::RenderablePolybarModule;
 use crate::theme;
@@ -14,11 +18,10 @@ pub struct AutolockModuleState {
 }
 
 impl AutolockModule {
-    pub fn new() -> AutolockModule {
-        let xdg_dirs = xdg::BaseDirectories::new().unwrap();
-        let signals =
-            signal_hook::iterator::Signals::new(&[signal_hook::consts::signal::SIGUSR1]).unwrap();
-        AutolockModule { xdg_dirs, signals }
+    pub fn new() -> anyhow::Result<AutolockModule> {
+        let xdg_dirs = xdg::BaseDirectories::new()?;
+        let signals = signal_hook::iterator::Signals::new(&[signal_hook::consts::signal::SIGUSR1])?;
+        Ok(AutolockModule { xdg_dirs, signals })
     }
 
     fn try_update(&mut self) -> anyhow::Result<AutolockModuleState> {
@@ -33,9 +36,9 @@ impl AutolockModule {
             .unwrap();
 
         // Run xidlehook-client
-        let output = std::process::Command::new("xidlehook-client")
+        let output = Command::new("xidlehook-client")
             .args(&["--socket", &socket_filepath, "query"])
-            .stderr(std::process::Stdio::null())
+            .stderr(Stdio::null())
             .output()?;
         if !output.status.success() {
             anyhow::bail!("xidlehook-client invocation failed");
@@ -63,7 +66,7 @@ impl RenderablePolybarModule for AutolockModule {
                     self.signals.forever().next();
                 }
                 // Error occured
-                None => std::thread::sleep(std::time::Duration::from_secs(1)),
+                None => sleep(Duration::from_secs(1)),
             }
         }
     }
@@ -107,7 +110,7 @@ mod tests {
 
     #[test]
     fn test_render() {
-        let module = AutolockModule::new();
+        let module = AutolockModule::new().unwrap();
         let runtime_dir = module
             .xdg_dirs
             .find_runtime_file(".")

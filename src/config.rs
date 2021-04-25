@@ -1,3 +1,5 @@
+use std::fs::read_to_string;
+
 use structopt::StructOpt;
 
 #[derive(Clone, Debug, StructOpt)]
@@ -17,6 +19,8 @@ pub enum PolybarModuleName {
     market,
     #[structopt(about = "Start PulseAudio module")]
     pulseaudio,
+    #[structopt(about = "Start Taskwarrior module")]
+    taskwarrior { max_len: Option<usize> },
     #[structopt(about = "Start weather module")]
     wttr { location: Option<String> },
 }
@@ -51,7 +55,7 @@ pub fn parse_config_file() -> anyhow::Result<Config> {
         .ok_or_else(|| anyhow::anyhow!("Unable to find config file"))?;
     log::debug!("Config filepath: {:?}", config_filepath);
 
-    let toml_data = std::fs::read_to_string(config_filepath)?;
+    let toml_data = read_to_string(config_filepath)?;
     log::trace!("Config data: {:?}", toml_data);
 
     let config = toml::from_str(&toml_data)?;

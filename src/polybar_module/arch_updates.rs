@@ -1,3 +1,5 @@
+use std::process::{Command, Stdio};
+
 use crate::markup;
 use crate::polybar_module::{PolybarModuleEnv, RenderablePolybarModule, RuntimeMode};
 use crate::theme;
@@ -15,10 +17,10 @@ pub struct ArchUpdatesModuleState {
 }
 
 impl ArchUpdatesModule {
-    pub fn new() -> ArchUpdatesModule {
-        let xdg_dirs = xdg::BaseDirectories::new().unwrap();
+    pub fn new() -> anyhow::Result<ArchUpdatesModule> {
+        let xdg_dirs = xdg::BaseDirectories::new()?;
         let env = PolybarModuleEnv::new();
-        ArchUpdatesModule { xdg_dirs, env }
+        Ok(ArchUpdatesModule { xdg_dirs, env })
     }
 
     fn try_update(&mut self) -> anyhow::Result<ArchUpdatesModuleState> {
@@ -31,9 +33,9 @@ impl ArchUpdatesModule {
             .to_os_string()
             .into_string()
             .unwrap();
-        let output = std::process::Command::new("checkupdates")
+        let output = Command::new("checkupdates")
             .env("CHECKUPDATES_DB", &db_dir)
-            .stderr(std::process::Stdio::null())
+            .stderr(Stdio::null())
             .output()?;
         // checkupdates returns non 0 when no updates is available
 
@@ -46,10 +48,10 @@ impl ArchUpdatesModule {
 
         let repo_security_update_count = if !repo_updates.is_empty() {
             // Run arch-audit
-            let output = std::process::Command::new("arch-audit")
+            let output = Command::new("arch-audit")
                 .args(&["-u", "-b", &db_dir, "-f", "%n"])
                 .env("TERM", "xterm") // workaround arch-audit bug
-                .stderr(std::process::Stdio::null())
+                .stderr(Stdio::null())
                 .output()?;
             if !output.status.success() {
                 anyhow::bail!("arch-audit invocation failed");
@@ -66,8 +68,8 @@ impl ArchUpdatesModule {
         };
 
         // Run arch-audit
-        let output = std::process::Command::new("checkupdates-aur")
-            .stderr(std::process::Stdio::null())
+        let output = Command::new("checkupdates-aur")
+            .stderr(Stdio::null())
             .output()?;
         if !output.status.success() {
             anyhow::bail!("checkupdates-aur invocation failed");
@@ -147,7 +149,7 @@ mod tests {
 
     #[test]
     fn test_render() {
-        let module = ArchUpdatesModule::new();
+        let module = ArchUpdatesModule::new().unwrap();
 
         let state = Some(ArchUpdatesModuleState {
             repo_update_count: 0,

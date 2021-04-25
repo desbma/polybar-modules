@@ -1,3 +1,6 @@
+use std::thread::sleep;
+use std::time::Duration;
+
 use chrono::Datelike;
 
 use crate::config;
@@ -44,7 +47,7 @@ impl MarketModule {
 
             // Don't try to be smart by computing absolute time to sleep until,
             // time shifts (NTP, DST...) could easily fuck that up
-            std::thread::sleep(std::time::Duration::from_secs(60 * 60 * 8));
+            sleep(Duration::from_secs(60 * 60 * 8));
             did_wait = true;
         }
         did_wait
@@ -74,11 +77,11 @@ impl RenderablePolybarModule for MarketModule {
 
     fn wait_update(&mut self, prev_state: &Option<Self::State>) {
         if let Some(prev_state) = prev_state {
-            std::thread::sleep(match prev_state {
+            sleep(match prev_state {
                 // Nominal
-                Some(_) => std::time::Duration::from_secs(60 * 30),
+                Some(_) => Duration::from_secs(60 * 30),
                 // Error occured
-                None => std::time::Duration::from_secs(5),
+                None => Duration::from_secs(5),
             });
         }
         loop {

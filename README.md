@@ -17,7 +17,7 @@ Rewrite of my personal Python [Polybar](https://polybar.github.io/) modules as a
 - [x] Low bandwidth button
 - [ ] Home network status
 - [ ] Work network status
-- [ ] Taskwarrior next task
+- [x] Taskwarrior next task
 - [x] Market trend
 - [x] Weather
 - [ ] ~~i3 layout status & control~~ I'm now using Xmonad instead

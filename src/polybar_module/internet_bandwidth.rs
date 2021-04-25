@@ -76,10 +76,11 @@ impl RenderablePolybarModule for InternetBandwidthModule {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::env;
 
     #[test]
     fn test_render() {
-        let home = std::env::var("HOME").unwrap();
+        let home = env::var("HOME").unwrap();
         let module = InternetBandwidthModule::new();
 
         let state = InternetBandwidthModuleState {

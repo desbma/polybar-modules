@@ -22,11 +22,13 @@ fn main() {
     // Init stuff
     let module: polybar_module::PolybarModule = match cl_opts.module {
         PolybarModuleName::arch_updates => polybar_module::PolybarModule::ArchUpdates(
-            polybar_module::arch_updates::ArchUpdatesModule::new(),
+            polybar_module::arch_updates::ArchUpdatesModule::new()
+                .expect("Failed to initialize Arch updates module"),
         ),
-        PolybarModuleName::autolock => {
-            polybar_module::PolybarModule::Autolock(polybar_module::autolock::AutolockModule::new())
-        }
+        PolybarModuleName::autolock => polybar_module::PolybarModule::Autolock(
+            polybar_module::autolock::AutolockModule::new()
+                .expect("Failed to initialize autolock module"),
+        ),
         PolybarModuleName::battery_mouse => polybar_module::PolybarModule::BatteryMouse(
             polybar_module::battery_mouse::BatteryMouseModule::new(),
         ),
@@ -52,7 +54,12 @@ fn main() {
             ))
         }
         PolybarModuleName::pulseaudio => polybar_module::PolybarModule::PulseAudio(
-            polybar_module::pulseaudio::PulseAudioModule::new(),
+            polybar_module::pulseaudio::PulseAudioModule::new()
+                .expect("Failed to initialize Pulseaudio module"),
+        ),
+        PolybarModuleName::taskwarrior { max_len } => polybar_module::PolybarModule::Taskwarrior(
+            polybar_module::taskwarrior::TaskwarriorModule::new(max_len)
+                .expect("Failed to initialize Taskwarrior module"),
         ),
         PolybarModuleName::wttr { location } => {
             polybar_module::PolybarModule::Wttr(polybar_module::wttr::WttrModule::new(location))
@@ -68,6 +75,7 @@ fn main() {
         polybar_module::PolybarModule::InternetBandwidth(module) => render_loop(module),
         polybar_module::PolybarModule::Market(module) => render_loop(module),
         polybar_module::PolybarModule::PulseAudio(module) => render_loop(module),
+        polybar_module::PolybarModule::Taskwarrior(module) => render_loop(module),
         polybar_module::PolybarModule::Wttr(module) => render_loop(module),
     };
 }
