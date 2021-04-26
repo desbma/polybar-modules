@@ -8,7 +8,7 @@ Rewrite of my personal Python [Polybar](https://polybar.github.io/) modules as a
 ## Module status
 
 - [x] Arch Linux updates
-- [ ] Debian updates
+- [x] Debian updates
 - [x] Screen autolock status & control
 - [ ] Mouse battery status
 - [ ] Bluetooth devices status & control

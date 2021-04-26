@@ -8,6 +8,7 @@ use notify::Watcher;
 pub mod arch_updates;
 pub mod autolock;
 pub mod battery_mouse;
+pub mod debian_updates;
 pub mod gpu_nvidia;
 pub mod internet_bandwidth;
 pub mod market;
@@ -19,6 +20,7 @@ pub enum PolybarModule {
     ArchUpdates(arch_updates::ArchUpdatesModule),
     Autolock(autolock::AutolockModule),
     BatteryMouse(battery_mouse::BatteryMouseModule),
+    DebianUpdates(debian_updates::DebianUpdatesModule),
     GpuNvidia(gpu_nvidia::GpuNvidiaModule),
     InternetBandwidth(internet_bandwidth::InternetBandwidthModule),
     Market(market::MarketModule),

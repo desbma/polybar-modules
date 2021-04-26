@@ -32,6 +32,10 @@ fn main() {
         PolybarModuleName::battery_mouse => polybar_module::PolybarModule::BatteryMouse(
             polybar_module::battery_mouse::BatteryMouseModule::new(),
         ),
+        PolybarModuleName::debian_updates => polybar_module::PolybarModule::DebianUpdates(
+            polybar_module::debian_updates::DebianUpdatesModule::new()
+                .expect("Failed to initialize Debian updates module"),
+        ),
         PolybarModuleName::gpu_nvidia => polybar_module::PolybarModule::GpuNvidia(
             polybar_module::gpu_nvidia::GpuNvidiaModule::new(),
         ),
@@ -71,6 +75,7 @@ fn main() {
         polybar_module::PolybarModule::ArchUpdates(module) => render_loop(module),
         polybar_module::PolybarModule::Autolock(module) => render_loop(module),
         polybar_module::PolybarModule::BatteryMouse(module) => render_loop(module),
+        polybar_module::PolybarModule::DebianUpdates(module) => render_loop(module),
         polybar_module::PolybarModule::GpuNvidia(module) => render_loop(module),
         polybar_module::PolybarModule::InternetBandwidth(module) => render_loop(module),
         polybar_module::PolybarModule::Market(module) => render_loop(module),

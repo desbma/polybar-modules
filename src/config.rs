@@ -11,6 +11,8 @@ pub enum PolybarModuleName {
     autolock,
     #[structopt(about = "Start mouse battery module")]
     battery_mouse,
+    #[structopt(about = "Start Debian update module")]
+    debian_updates,
     #[structopt(about = "Start Nvidia GPU module")]
     gpu_nvidia,
     #[structopt(about = "Start low bandwidth button module")]
