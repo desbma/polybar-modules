@@ -235,10 +235,9 @@ impl RenderablePolybarModule for TaskwarriorModule {
                     }
                     None => String::new(),
                 };
-                let max_task_len = match self.max_len {
-                    None => None,
-                    Some(max_len) => Some(max_len - s2.len() - s3.chars().count()),
-                };
+                let max_task_len = self
+                    .max_len
+                    .map(|max_len| max_len - s2.len() - s3.chars().count());
                 let s4 = Self::ellipsis(&state.next_task, max_task_len);
                 format!(
                     "{}{}{}",
