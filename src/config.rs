@@ -19,6 +19,8 @@ pub enum PolybarModuleName {
     internet_bandwidth,
     #[structopt(about = "Start market trend module")]
     market,
+    #[structopt(about = "Start network status module")]
+    network_status,
     #[structopt(about = "Start PulseAudio module")]
     pulseaudio,
     #[structopt(about = "Start Taskwarrior module")]
@@ -42,11 +44,25 @@ pub struct Config {
 #[derive(Debug, serde::Deserialize)]
 pub struct ModuleConfig {
     pub market: Option<MarketModuleConfig>,
+    pub network_status: Option<NetworkStatusModuleConfig>,
 }
 
 #[derive(Debug, serde::Deserialize)]
 pub struct MarketModuleConfig {
     pub api_token: String,
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub struct NetworkStatusHost {
+    pub name: String,
+    pub host: String,
+    #[serde(default)]
+    pub warn_unreachable: bool,
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub struct NetworkStatusModuleConfig {
+    pub hosts: Vec<NetworkStatusHost>,
 }
 
 pub fn parse_config_file() -> anyhow::Result<Config> {

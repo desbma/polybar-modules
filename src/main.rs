@@ -57,6 +57,22 @@ fn main() {
                 market_cfg,
             ))
         }
+        PolybarModuleName::network_status => {
+            let network_status_cfg = cfg
+                .and_then(|c| {
+                    c.module
+                        .ok_or_else(|| anyhow::anyhow!("Missing 'module' config section"))
+                })
+                .and_then(|c| {
+                    c.network_status
+                        .ok_or_else(|| anyhow::anyhow!("Missing 'network_status' config section"))
+                })
+                .expect("Unable to get network_status module config from config file");
+            polybar_module::PolybarModule::NetworkStatus(
+                polybar_module::network_status::NetworkStatusModule::new(network_status_cfg)
+                    .expect("Failed to initialize network status module"),
+            )
+        }
         PolybarModuleName::pulseaudio => polybar_module::PolybarModule::PulseAudio(
             polybar_module::pulseaudio::PulseAudioModule::new()
                 .expect("Failed to initialize Pulseaudio module"),
@@ -79,6 +95,7 @@ fn main() {
         polybar_module::PolybarModule::GpuNvidia(module) => render_loop(module),
         polybar_module::PolybarModule::InternetBandwidth(module) => render_loop(module),
         polybar_module::PolybarModule::Market(module) => render_loop(module),
+        polybar_module::PolybarModule::NetworkStatus(module) => render_loop(module),
         polybar_module::PolybarModule::PulseAudio(module) => render_loop(module),
         polybar_module::PolybarModule::Taskwarrior(module) => render_loop(module),
         polybar_module::PolybarModule::Wttr(module) => render_loop(module),

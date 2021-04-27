@@ -15,8 +15,8 @@ Rewrite of my personal Python [Polybar](https://polybar.github.io/) modules as a
 - [x] Pulse audio input/output device status & control
 - [x] Nvidia GPU status
 - [x] Low bandwidth button
-- [ ] Home network status
-- [ ] Work network status
+- [ ] Network status
+- [ ] Syncthing status
 - [x] Taskwarrior next task
 - [x] Market trend
 - [x] Weather
