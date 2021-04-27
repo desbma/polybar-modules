@@ -29,9 +29,13 @@ impl DebianUpdatesModule {
         }
 
         // Parse output
-        let debian_relase_codename = String::from_utf8_lossy(&output.stdout)
+        let mut debian_relase_codename = String::from_utf8_lossy(&output.stdout)
             .trim_end()
             .to_string();
+        if debian_relase_codename == "bullseye" {
+            // Debian, sigh...
+            debian_relase_codename = String::from("sid");
+        }
 
         Ok(DebianUpdatesModule {
             env,
