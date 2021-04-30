@@ -78,7 +78,7 @@ impl PulseAudioModule {
                         continue;
                     }
                     let name = output_lines
-                        .find(|l| l.starts_with("alsa.card_name = "))
+                        .find(|l| l.starts_with("alsa.card_name = ") || l.starts_with("bluez.alias = "))
                         .ok_or_else(|| anyhow::anyhow!(parse_err_str))?
                         .split('"')
                         .nth(1)
@@ -124,7 +124,7 @@ impl PulseAudioModule {
                         continue;
                     }
                     let name = output_lines
-                        .find(|l| l.starts_with("alsa.card_name = "))
+                        .find(|l| l.starts_with("alsa.card_name = ") || l.starts_with("bluez.alias = "))
                         .ok_or_else(|| anyhow::anyhow!(parse_err_str))?
                         .split('"')
                         .nth(1)
