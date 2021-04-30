@@ -67,7 +67,7 @@ fn main() {
                     c.network_status
                         .ok_or_else(|| anyhow::anyhow!("Missing 'network_status' config section"))
                 })
-                .expect("Unable to get network_status module config from config file");
+                .expect("Unable to get network status module config from config file");
             polybar_module::PolybarModule::NetworkStatus(
                 polybar_module::network_status::NetworkStatusModule::new(network_status_cfg)
                     .expect("Failed to initialize network status module"),
