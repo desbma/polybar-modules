@@ -22,7 +22,7 @@ pub struct TaskwarriorModuleState {
     next_task: String,
     next_task_project: Option<String>,
     next_task_urgency: f32,
-    last_fs_change: SystemTime,
+    last_fs_change: Option<SystemTime>,
 }
 
 impl TaskwarriorModule {
@@ -146,14 +146,13 @@ impl TaskwarriorModule {
         }
     }
 
-    fn get_max_task_data_file_mtime(&self) -> SystemTime {
+    fn get_max_task_data_file_mtime(&self) -> Option<SystemTime> {
         vec!["completed.data", "pending.data"]
             .iter()
             .map(|f| Path::new(&self.data_dir).join(f))
             .filter_map(|p| metadata(p).ok())
             .map(|m| m.modified().unwrap())
             .max()
-            .unwrap()
     }
 }
 
@@ -181,7 +180,7 @@ impl RenderablePolybarModule for TaskwarriorModule {
                     }
                     loop {
                         let max_mtime = self.get_max_task_data_file_mtime();
-                        if max_mtime > prev_state.last_fs_change {
+                        if max_mtime != prev_state.last_fs_change {
                             break;
                         }
 
@@ -302,7 +301,7 @@ mod tests {
             next_task: "todo".to_string(),
             next_task_project: Some("proj".to_string()),
             next_task_urgency: 1.5,
-            last_fs_change: SystemTime::now(),
+            last_fs_change: None,
         });
         assert_eq!(module.render(&state), "%{F#eee8d5}%{F-} 10 [proj] todo");
 
@@ -311,7 +310,7 @@ mod tests {
             next_task: "todo".to_string(),
             next_task_project: None,
             next_task_urgency: 1.5,
-            last_fs_change: SystemTime::now(),
+            last_fs_change: None,
         });
         assert_eq!(module.render(&state), "%{F#eee8d5}%{F-} 10 todo");
 
@@ -320,7 +319,7 @@ mod tests {
             next_task: "todo".to_string(),
             next_task_project: Some("proj".to_string()),
             next_task_urgency: 7.51,
-            last_fs_change: SystemTime::now(),
+            last_fs_change: None,
         });
         assert_eq!(
             module.render(&state),
@@ -332,7 +331,7 @@ mod tests {
             next_task: "todo".to_string(),
             next_task_project: Some("proj".to_string()),
             next_task_urgency: 8.51,
-            last_fs_change: SystemTime::now(),
+            last_fs_change: None,
         });
         assert_eq!(
             module.render(&state),
@@ -344,7 +343,7 @@ mod tests {
             next_task: "todo".to_string(),
             next_task_project: Some("proj".to_string()),
             next_task_urgency: 9.51,
-            last_fs_change: SystemTime::now(),
+            last_fs_change: None,
         });
         assert_eq!(
             module.render(&state),
@@ -358,7 +357,7 @@ mod tests {
             next_task: "todo".to_string(),
             next_task_project: Some("proj".to_string()),
             next_task_urgency: 1.5,
-            last_fs_change: SystemTime::now(),
+            last_fs_change: None,
         });
         assert_eq!(module.render(&state), "%{F#eee8d5}%{F-} 10 [proj] todo");
 
@@ -367,7 +366,7 @@ mod tests {
             next_task: "todo".to_string(),
             next_task_project: Some("proj".to_string()),
             next_task_urgency: 1.5,
-            last_fs_change: SystemTime::now(),
+            last_fs_change: None,
         });
         assert_eq!(module.render(&state), "%{F#eee8d5}%{F-} 101 [p…] todo");
 
@@ -376,7 +375,7 @@ mod tests {
             next_task: "todo".to_string(),
             next_task_project: Some("proj".to_string()),
             next_task_urgency: 1.5,
-            last_fs_change: SystemTime::now(),
+            last_fs_change: None,
         });
         assert_eq!(module.render(&state), "%{F#eee8d5}%{F-} 1011 [p…] todo");
 
@@ -385,7 +384,7 @@ mod tests {
             next_task: "todozz".to_string(),
             next_task_project: Some("proj".to_string()),
             next_task_urgency: 1.5,
-            last_fs_change: SystemTime::now(),
+            last_fs_change: None,
         });
         assert_eq!(module.render(&state), "%{F#eee8d5}%{F-} 10 [p…] todozz");
 
@@ -394,7 +393,7 @@ mod tests {
             next_task: "todozzz".to_string(),
             next_task_project: Some("proj".to_string()),
             next_task_urgency: 1.5,
-            last_fs_change: SystemTime::now(),
+            last_fs_change: None,
         });
         assert_eq!(module.render(&state), "%{F#eee8d5}%{F-} 10 [p…] todoz…");
     }
