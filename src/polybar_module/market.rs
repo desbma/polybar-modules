@@ -86,9 +86,12 @@ impl RenderablePolybarModule for MarketModule {
         }
         loop {
             let did_wait_mode = self.env.wait_runtime_mode(RuntimeMode::Unrestricted);
-            if prev_state.is_none() {
-                break;
+            match prev_state {
+                Some(None) => break,
+                None => break,
+                _ => {}
             }
+
             let did_wait_workday = Self::wait_working_day();
             // Yes I know, we could have written this much simplier with a while condition, but we don't want to short circuit
             if !did_wait_mode && !did_wait_workday {
