@@ -57,7 +57,7 @@ pub struct NetworkStatusHost {
     pub name: String,
     pub host: String,
     #[serde(default)]
-    pub warn_unreachable: bool, // TODO
+    pub warn_unreachable: bool,
 }
 
 #[derive(Debug, serde::Deserialize)]
