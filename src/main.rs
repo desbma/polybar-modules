@@ -1,3 +1,4 @@
+#![feature(hash_drain_filter)]
 use config::PolybarModuleName;
 use structopt::StructOpt;
 

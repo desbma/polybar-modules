@@ -1,13 +1,24 @@
-use std::thread::sleep;
-use std::time::Duration;
+use std::collections::HashMap;
+use std::io::Read;
+use std::os::unix::io::AsRawFd;
+use std::process::{Child, Command, Stdio};
+use std::time::{Duration, Instant};
 
 use crate::config;
 use crate::markup;
-use crate::polybar_module::RenderablePolybarModule;
+use crate::polybar_module::{PolybarModuleEnv, RenderablePolybarModule, RuntimeMode};
 use crate::theme;
 
+const PING_AVG_COUNT: usize = 3;
+
 pub struct NetworkStatusModule {
+    env: PolybarModuleEnv,
     cfg: config::NetworkStatusModuleConfig,
+    ping_childs: Vec<Child>,
+    poller: mio::Poll,
+    poller_events: mio::Events,
+    host_state_history: Vec<bounded_vec_deque::BoundedVecDeque<bool>>,
+    ping_child_deaths: HashMap<usize, Instant>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -17,13 +28,150 @@ pub struct NetworkStatusModuleState {
 
 impl NetworkStatusModule {
     pub fn new(cfg: config::NetworkStatusModuleConfig) -> anyhow::Result<NetworkStatusModule> {
-        Ok(NetworkStatusModule { cfg })
+        let env = PolybarModuleEnv::new();
+        let mut ping_childs = Vec::with_capacity(cfg.hosts.len());
+        let poller = mio::Poll::new().unwrap();
+        let poller_registry = poller.registry();
+        for (i, host) in cfg.hosts.iter().enumerate() {
+            // Start ping process & register poller event source
+            let child = Self::setup_ping_child(&host.host, i, &poller_registry, &env)?;
+
+            ping_childs.push(child);
+        }
+        let poller_events = mio::Events::with_capacity(ping_childs.len());
+
+        let host_state_history =
+            vec![
+                bounded_vec_deque::BoundedVecDeque::with_capacity(PING_AVG_COUNT, PING_AVG_COUNT);
+                ping_childs.len()
+            ];
+        let ping_child_deaths = HashMap::new();
+
+        Ok(NetworkStatusModule {
+            env,
+            cfg,
+            ping_childs,
+            poller,
+            poller_events,
+            host_state_history,
+            ping_child_deaths,
+        })
+    }
+
+    fn setup_ping_child(
+        host: &str,
+        idx: usize,
+        poller_registry: &mio::Registry,
+        env: &PolybarModuleEnv,
+    ) -> anyhow::Result<Child> {
+        let ping_period_s = Self::get_ping_period(&env).as_secs();
+
+        // Start ping process
+        let child = Command::new("ping")
+            .args(&[
+                "-O",
+                "-W",
+                &format!("{}", ping_period_s),
+                "-i",
+                &format!("{}", ping_period_s),
+                "-n",
+                host,
+            ])
+            .env("LANG", "C")
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()?;
+
+        // Setup poll event source
+        poller_registry.register(
+            &mut mio::unix::SourceFd(&child.stdout.as_ref().unwrap().as_raw_fd()),
+            mio::Token(idx),
+            mio::Interest::READABLE,
+        )?;
+
+        Ok(child)
     }
 
     fn try_update(&mut self) -> anyhow::Result<NetworkStatusModuleState> {
-        Ok(NetworkStatusModuleState {
-            reachable: vec![false; self.cfg.hosts.len()],
-        })
+        let now = Instant::now();
+        let poller_registry = self.poller.registry();
+
+        // Restart new processes if needed
+        let ping_period = Self::get_ping_period(&self.env);
+        for (i, _ts) in self
+            .ping_child_deaths
+            .drain_filter(|_i, ts| now >= *ts + ping_period)
+        {
+            // Setup new child in its place
+            self.ping_childs[i] =
+                Self::setup_ping_child(&self.cfg.hosts[i].host, i, &poller_registry, &self.env)?;
+        }
+
+        // Cleanup newly dead processes
+        for (i, child) in &mut self.ping_childs.iter_mut().enumerate() {
+            if let Ok(Some(_)) = child.try_wait() {
+                if self.ping_child_deaths.contains_key(&i) {
+                    continue;
+                }
+
+                log::debug!("ping process for {:?} has died", self.cfg.hosts[i].host);
+
+                // Keep death timestamp to avoid respawning too fast
+                self.ping_child_deaths.insert(i, Instant::now());
+
+                // Deregister source
+                poller_registry.deregister(&mut mio::unix::SourceFd(
+                    &child.stdout.as_ref().unwrap().as_raw_fd(),
+                ))?;
+
+                // Add state history entry
+                self.host_state_history[i].push_back(false);
+            }
+        }
+
+        let mut buffer = [0; 65536];
+
+        for event in self.poller_events.iter().filter(|e| e.is_readable()) {
+            // Read ping stdout pending data
+            let idx = usize::from(event.token());
+            let read_count = self.ping_childs[idx]
+                .stdout
+                .as_mut()
+                .unwrap()
+                .read(&mut buffer)?;
+            let read_str = String::from_utf8_lossy(&buffer[0..read_count]);
+            log::debug!("Got output: {:?}", read_str);
+
+            // Parse ping lines
+            for line in read_str.lines() {
+                self.host_state_history[idx].push_back(line.ends_with(" ms"));
+            }
+        }
+
+        let reachable = self
+            .host_state_history
+            .iter()
+            .map(|h| h.iter().filter(|e| **e).count() > h.iter().filter(|e| !**e).count())
+            .collect();
+
+        Ok(NetworkStatusModuleState { reachable })
+    }
+
+    fn get_ping_period(env: &PolybarModuleEnv) -> Duration {
+        match env.get_runtime_mode() {
+            RuntimeMode::LowNetworkBandwith => Duration::from_secs(5),
+            RuntimeMode::Unrestricted => Duration::from_secs(1),
+        }
+    }
+}
+
+impl Drop for NetworkStatusModule {
+    #[allow(unused_must_use)]
+    fn drop(&mut self) {
+        for ping_child in &mut self.ping_childs {
+            ping_child.kill();
+        }
     }
 }
 
@@ -32,7 +180,12 @@ impl RenderablePolybarModule for NetworkStatusModule {
 
     fn wait_update(&mut self, prev_state: &Option<Self::State>) {
         if prev_state.is_some() {
-            sleep(Duration::from_secs(999)); // TODO remove this
+            let duration = Self::get_ping_period(&self.env);
+            log::trace!("Waiting for network events");
+            self.poller
+                .poll(&mut self.poller_events, Some(duration))
+                .unwrap();
+            log::trace!("Poll returned with events {:?}", self.poller_events);
         }
     }
 
