@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::io::Read;
+use std::io::{ErrorKind, Read};
 use std::os::unix::io::AsRawFd;
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
@@ -182,9 +182,14 @@ impl RenderablePolybarModule for NetworkStatusModule {
         if prev_state.is_some() {
             let duration = Self::get_ping_period(&self.env);
             log::trace!("Waiting for network events");
-            self.poller
-                .poll(&mut self.poller_events, Some(duration))
-                .unwrap();
+            let poll_res = self.poller.poll(&mut self.poller_events, Some(duration));
+            if let Err(ref e) = poll_res {
+                if e.kind() == ErrorKind::Interrupted {
+                    // Ignore error, and do not retry, can occur on return from hibernation
+                    return;
+                }
+            }
+            poll_res.unwrap();
             log::trace!("Poll returned with events {:?}", self.poller_events);
         }
     }
