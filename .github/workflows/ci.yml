@@ -12,6 +12,7 @@ jobs:
         with:
           profile: minimal
           toolchain: nightly
+          override: true
       - run: cargo build --verbose
 
   test:
@@ -29,6 +30,7 @@ jobs:
         with:
           profile: minimal
           toolchain: nightly
+          override: true
       - run: cargo test --verbose
 
   clippy:
@@ -39,6 +41,7 @@ jobs:
         with:
           profile: minimal
           toolchain: nightly
+          override: true
       - run: rustup component add clippy
       - uses: actions-rs/cargo@v1
         with:
@@ -53,6 +56,7 @@ jobs:
         with:
           profile: minimal
           toolchain: nightly
+          override: true
       - run: rustup component add rustfmt
       - uses: actions-rs/cargo@v1
         with:
