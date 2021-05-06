@@ -5,6 +5,8 @@ use std::process::{Child, Command, Stdio};
 use std::thread::sleep;
 use std::time::{Duration, Instant};
 
+use sysinfo::{ProcessExt, System, SystemExt};
+
 use crate::config;
 use crate::markup;
 use crate::polybar_module::{PolybarModuleEnv, RenderablePolybarModule, RuntimeMode};
@@ -20,6 +22,7 @@ pub struct NetworkStatusModule {
     poller_events: mio::Events,
     host_state_history: Vec<bounded_vec_deque::BoundedVecDeque<bool>>,
     ping_child_deaths: HashMap<usize, Instant>,
+    system: Box<System>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -49,6 +52,10 @@ impl NetworkStatusModule {
             ];
         let ping_child_deaths = HashMap::new();
 
+        let system = Box::new(SystemExt::new_with_specifics(
+            sysinfo::RefreshKind::new().with_processes(),
+        ));
+
         Ok(NetworkStatusModule {
             env,
             cfg,
@@ -57,6 +64,7 @@ impl NetworkStatusModule {
             poller_events,
             host_state_history,
             ping_child_deaths,
+            system,
         })
     }
 
@@ -162,13 +170,11 @@ impl NetworkStatusModule {
             .filter(|i| i.name.starts_with("wg"))
             .map(|i| i.name.to_owned())
             .collect();
-        if psutil::process::processes()?
-            .iter()
-            .filter_map(|p| p.as_ref().ok())
-            .filter_map(|p| p.name().ok())
-            .filter(|n| n == "openvpn")
-            .count()
-            > 0
+        if self
+            .system
+            .get_processes()
+            .values()
+            .any(|p| p.name() == "openvpn")
         {
             vpn.push("ovpn".to_string());
         }
