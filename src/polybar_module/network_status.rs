@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::io::{ErrorKind, Read};
 use std::os::unix::io::AsRawFd;
 use std::process::{Child, Command, Stdio};
+use std::thread::sleep;
 use std::time::{Duration, Instant};
 
 use crate::config;
@@ -24,7 +25,7 @@ pub struct NetworkStatusModule {
 #[derive(Debug, PartialEq)]
 pub struct NetworkStatusModuleState {
     reachable_hosts: Vec<bool>,
-    wireguard_interfaces: Vec<String>,
+    vpn: Vec<String>,
 }
 
 impl NetworkStatusModule {
@@ -156,16 +157,26 @@ impl NetworkStatusModule {
             .map(|h| h.iter().filter(|e| **e).count() > h.iter().filter(|e| !**e).count())
             .collect();
 
-        let mut wireguard_interfaces: Vec<String> = interfaces::Interface::get_all()?
+        let mut vpn: Vec<String> = interfaces::Interface::get_all()?
             .iter()
             .filter(|i| i.name.starts_with("wg"))
             .map(|i| i.name.to_owned())
             .collect();
-        wireguard_interfaces.sort();
+        if psutil::process::processes()?
+            .iter()
+            .filter_map(|p| p.as_ref().ok())
+            .filter_map(|p| p.name().ok())
+            .filter(|n| n == "openvpn")
+            .count()
+            > 0
+        {
+            vpn.push("ovpn".to_string());
+        }
+        vpn.sort();
 
         Ok(NetworkStatusModuleState {
             reachable_hosts,
-            wireguard_interfaces,
+            vpn,
         })
     }
 
@@ -191,6 +202,9 @@ impl RenderablePolybarModule for NetworkStatusModule {
 
     fn wait_update(&mut self, prev_state: &Option<Self::State>) {
         if prev_state.is_some() {
+            // Micro sleep to aggregate several ping events
+            sleep(Duration::from_millis(10));
+
             let duration = Self::get_ping_period(&self.env);
             log::trace!("Waiting for network events");
             let poll_res = self.poller.poll(&mut self.poller_events, Some(duration));
@@ -242,12 +256,12 @@ impl RenderablePolybarModule for NetworkStatusModule {
                         None,
                     ));
                 }
-                if !state.wireguard_interfaces.is_empty() {
+                if !state.vpn.is_empty() {
                     fragments.push(format!(
                         " {}",
                         markup::style("", Some(theme::Color::MainIcon), None, None, None,)
                     ));
-                    for wireguard_interface in &state.wireguard_interfaces {
+                    for wireguard_interface in &state.vpn {
                         fragments.push(markup::style(
                             &wireguard_interface,
                             None,
@@ -288,7 +302,7 @@ mod tests {
 
         let state = Some(NetworkStatusModuleState {
             reachable_hosts: vec![true, true],
-            wireguard_interfaces: vec![],
+            vpn: vec![],
         });
         assert_eq!(
             module.render(&state),
@@ -297,7 +311,7 @@ mod tests {
 
         let state = Some(NetworkStatusModuleState {
             reachable_hosts: vec![false, true],
-            wireguard_interfaces: vec![],
+            vpn: vec![],
         });
         assert_eq!(
             module.render(&state),
@@ -306,7 +320,7 @@ mod tests {
 
         let state = Some(NetworkStatusModuleState {
             reachable_hosts: vec![true, false],
-            wireguard_interfaces: vec![],
+            vpn: vec![],
         });
         assert_eq!(
             module.render(&state),
@@ -315,7 +329,7 @@ mod tests {
 
         let state = Some(NetworkStatusModuleState {
             reachable_hosts: vec![true, false],
-            wireguard_interfaces: vec!["i1".to_string()],
+            vpn: vec!["i1".to_string()],
         });
         assert_eq!(
             module.render(&state),
