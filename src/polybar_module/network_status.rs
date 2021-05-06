@@ -5,7 +5,7 @@ use std::process::{Child, Command, Stdio};
 use std::thread::sleep;
 use std::time::{Duration, Instant};
 
-use sysinfo::{ProcessExt, System, SystemExt};
+use sysinfo::{NetworksExt, ProcessExt, System, SystemExt};
 
 use crate::config;
 use crate::markup;
@@ -53,7 +53,9 @@ impl NetworkStatusModule {
         let ping_child_deaths = HashMap::new();
 
         let system = Box::new(SystemExt::new_with_specifics(
-            sysinfo::RefreshKind::new().with_processes(),
+            sysinfo::RefreshKind::new()
+                .with_networks_list()
+                .with_processes(),
         ));
 
         Ok(NetworkStatusModule {
@@ -165,10 +167,12 @@ impl NetworkStatusModule {
             .map(|h| h.iter().filter(|e| **e).count() > h.iter().filter(|e| !**e).count())
             .collect();
 
-        let mut vpn: Vec<String> = interfaces::Interface::get_all()?
+        let mut vpn: Vec<String> = self
+            .system
+            .get_networks()
             .iter()
-            .filter(|i| i.name.starts_with("wg"))
-            .map(|i| i.name.to_owned())
+            .filter(|i| i.0.starts_with("wg"))
+            .map(|i| i.0.to_owned())
             .collect();
         if self
             .system
