@@ -23,7 +23,8 @@ pub struct NetworkStatusModule {
 
 #[derive(Debug, PartialEq)]
 pub struct NetworkStatusModuleState {
-    reachable: Vec<bool>,
+    reachable_hosts: Vec<bool>,
+    wireguard_interfaces: Vec<String>,
 }
 
 impl NetworkStatusModule {
@@ -149,13 +150,23 @@ impl NetworkStatusModule {
             }
         }
 
-        let reachable = self
+        let reachable_hosts = self
             .host_state_history
             .iter()
             .map(|h| h.iter().filter(|e| **e).count() > h.iter().filter(|e| !**e).count())
             .collect();
 
-        Ok(NetworkStatusModuleState { reachable })
+        let mut wireguard_interfaces: Vec<String> = interfaces::Interface::get_all()?
+            .iter()
+            .filter(|i| i.name.starts_with("wg"))
+            .map(|i| i.name.to_owned())
+            .collect();
+        wireguard_interfaces.sort();
+
+        Ok(NetworkStatusModuleState {
+            reachable_hosts,
+            wireguard_interfaces,
+        })
     }
 
     fn get_ping_period(env: &PolybarModuleEnv) -> Duration {
@@ -214,7 +225,7 @@ impl RenderablePolybarModule for NetworkStatusModule {
                     None,
                     None,
                 )];
-                for (reachable, host_info) in state.reachable.iter().zip(&self.cfg.hosts) {
+                for (reachable, host_info) in state.reachable_hosts.iter().zip(&self.cfg.hosts) {
                     fragments.push(markup::style(
                         &host_info.name,
                         if !reachable && host_info.warn_unreachable {
@@ -230,6 +241,21 @@ impl RenderablePolybarModule for NetworkStatusModule {
                         None,
                         None,
                     ));
+                }
+                if !state.wireguard_interfaces.is_empty() {
+                    fragments.push(format!(
+                        " {}",
+                        markup::style("", Some(theme::Color::MainIcon), None, None, None,)
+                    ));
+                    for wireguard_interface in &state.wireguard_interfaces {
+                        fragments.push(markup::style(
+                            &wireguard_interface,
+                            None,
+                            Some(theme::Color::Foreground),
+                            None,
+                            None,
+                        ));
+                    }
                 }
                 fragments.join(" ")
             }
@@ -261,7 +287,8 @@ mod tests {
         .unwrap();
 
         let state = Some(NetworkStatusModuleState {
-            reachable: vec![true, true],
+            reachable_hosts: vec![true, true],
+            wireguard_interfaces: vec![],
         });
         assert_eq!(
             module.render(&state),
@@ -269,7 +296,8 @@ mod tests {
         );
 
         let state = Some(NetworkStatusModuleState {
-            reachable: vec![false, true],
+            reachable_hosts: vec![false, true],
+            wireguard_interfaces: vec![],
         });
         assert_eq!(
             module.render(&state),
@@ -277,11 +305,21 @@ mod tests {
         );
 
         let state = Some(NetworkStatusModuleState {
-            reachable: vec![true, false],
+            reachable_hosts: vec![true, false],
+            wireguard_interfaces: vec![],
         });
         assert_eq!(
             module.render(&state),
             "%{F#eee8d5}%{F-} %{u#93a1a1}%{+u}h1%{-u} %{F#cb4b16}h2%{F-}"
+        );
+
+        let state = Some(NetworkStatusModuleState {
+            reachable_hosts: vec![true, false],
+            wireguard_interfaces: vec!["i1".to_string()],
+        });
+        assert_eq!(
+            module.render(&state),
+            "%{F#eee8d5}%{F-} %{u#93a1a1}%{+u}h1%{-u} %{F#cb4b16}h2%{F-}  %{F#eee8d5}%{F-} %{u#93a1a1}%{+u}i1%{-u}"
         );
 
         let state = None;
