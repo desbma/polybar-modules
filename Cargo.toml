@@ -9,6 +9,7 @@ anyhow = "1.0"
 atty = "0.2"
 bounded-vec-deque = "0.1"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+glob = "0.3"
 lazy_static = "1.4"
 log = { version = "0.4", features = ["max_level_trace", "release_max_level_info"] }
 mio = "0.7"
