@@ -74,6 +74,12 @@ fn main() {
                     .expect("Failed to initialize network status module"),
             )
         }
+        PolybarModuleName::progressbar_server { max_len } => {
+            polybar_module::PolybarModule::ProgressBarServer(
+                polybar_module::progressbar_server::ProgressBarServerModule::new(max_len)
+                    .expect("Failed to initialize progress bar server module"),
+            )
+        }
         PolybarModuleName::pulseaudio => polybar_module::PolybarModule::PulseAudio(
             polybar_module::pulseaudio::PulseAudioModule::new()
                 .expect("Failed to initialize Pulseaudio module"),
@@ -97,6 +103,7 @@ fn main() {
         polybar_module::PolybarModule::InternetBandwidth(module) => render_loop(module),
         polybar_module::PolybarModule::Market(module) => render_loop(module),
         polybar_module::PolybarModule::NetworkStatus(module) => render_loop(module),
+        polybar_module::PolybarModule::ProgressBarServer(module) => render_loop(module),
         polybar_module::PolybarModule::PulseAudio(module) => render_loop(module),
         polybar_module::PolybarModule::Taskwarrior(module) => render_loop(module),
         polybar_module::PolybarModule::Wttr(module) => render_loop(module),

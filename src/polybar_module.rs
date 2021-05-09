@@ -13,6 +13,7 @@ pub mod gpu_nvidia;
 pub mod internet_bandwidth;
 pub mod market;
 pub mod network_status;
+pub mod progressbar_server;
 pub mod pulseaudio;
 pub mod taskwarrior;
 pub mod wttr;
@@ -26,6 +27,7 @@ pub enum PolybarModule {
     InternetBandwidth(internet_bandwidth::InternetBandwidthModule),
     Market(market::MarketModule),
     NetworkStatus(network_status::NetworkStatusModule),
+    ProgressBarServer(progressbar_server::ProgressBarServerModule),
     PulseAudio(pulseaudio::PulseAudioModule),
     Taskwarrior(taskwarrior::TaskwarriorModule),
     Wttr(wttr::WttrModule),
