@@ -109,17 +109,6 @@ impl NetworkStatusModule {
         let now = Instant::now();
         let poller_registry = self.poller.registry();
 
-        // Restart new processes if needed
-        let ping_period = Self::get_ping_period(&self.env);
-        for (i, _ts) in self
-            .ping_child_deaths
-            .drain_filter(|_i, ts| now >= *ts + ping_period)
-        {
-            // Setup new child in its place
-            self.ping_childs[i] =
-                Self::setup_ping_child(&self.cfg.hosts[i].host, i, &poller_registry, &self.env)?;
-        }
-
         // Cleanup newly dead processes
         for (i, child) in &mut self.ping_childs.iter_mut().enumerate() {
             if let Ok(Some(_)) = child.try_wait() {
@@ -161,12 +150,12 @@ impl NetworkStatusModule {
             }
         }
 
+        // Build state
         let reachable_hosts = self
             .host_state_history
             .iter()
             .map(|h| h.iter().filter(|e| **e).count() > h.iter().filter(|e| !**e).count())
             .collect();
-
         let mut vpn: Vec<String> = self
             .system
             .get_networks()
@@ -183,6 +172,17 @@ impl NetworkStatusModule {
             vpn.push("ovpn".to_string());
         }
         vpn.sort();
+
+        // Restart new processes if needed
+        let ping_period = Self::get_ping_period(&self.env);
+        for (i, _ts) in self
+            .ping_child_deaths
+            .drain_filter(|_i, ts| now >= *ts + ping_period)
+        {
+            // Setup new child in its place
+            self.ping_childs[i] =
+                Self::setup_ping_child(&self.cfg.hosts[i].host, i, &poller_registry, &self.env)?;
+        }
 
         Ok(NetworkStatusModuleState {
             reachable_hosts,
