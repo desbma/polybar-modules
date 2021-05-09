@@ -20,6 +20,7 @@ pub struct BatteryMouseModuleState {
 
 impl BatteryMouseModule {
     pub fn new() -> BatteryMouseModule {
+        // TODO do this in update loop
         let sysfs_dirs = match glob::glob("/sys/class/power_supply/hidpp_battery_*") {
             Err(_) => vec![],
             Ok(g) => g.filter_map(|e| e.ok()).collect(),
@@ -59,17 +60,33 @@ impl RenderablePolybarModule for BatteryMouseModule {
             .sysfs_dirs
             .iter()
             .map(|p| {
+                // TODO function to shorten model name, 'Anywhere MX' => 'AMX',  G604 Wireless Gaming Mouse => G604
+
+                // Parse capacity
                 let mut capacity_filepath = p.to_owned();
-                capacity_filepath.push("capacity_level");
+                capacity_filepath.push("capacity");
                 log::trace!("{:?}", capacity_filepath);
-                // TODO read name only once
+                let capacity = match File::open(&capacity_filepath) {
+                    Ok(mut f) => {
+                        let mut capacity_str = String::new();
+                        f.read_to_string(&mut capacity_str)?;
+                        Some(capacity_str.parse::<u8>()?)
+                    }
+                    Err(_) => {
+                        let mut capacity_level_filepath = p.to_owned();
+                        capacity_level_filepath.push("capacity_level");
+                        log::trace!("{:?}", capacity_level_filepath);
+                        let mut capacity_level_str = String::new();
+                        File::open(&capacity_level_filepath)?
+                            .read_to_string(&mut capacity_level_str)?;
+                        capacity_level_str = capacity_level_str.trim_end().to_string();
+                        Self::sysfs_capacity_level_to_prct(&capacity_level_str)
+                    }
+                };
+
+                // Parse model name
                 let mut name_filepath = p.to_owned();
                 name_filepath.push("model_name");
-                log::trace!("{:?}", name_filepath);
-                let mut capacity_str = String::new();
-                File::open(&capacity_filepath)?.read_to_string(&mut capacity_str)?;
-                capacity_str = capacity_str.trim_end().to_string();
-                let capacity = Self::sysfs_capacity_level_to_prct(&capacity_str);
                 let mut name_str = String::new();
                 File::open(&name_filepath)?.read_to_string(&mut name_str)?;
                 name_str = name_str.trim_end().to_string();
@@ -78,6 +95,7 @@ impl RenderablePolybarModule for BatteryMouseModule {
                     .next()
                     .ok_or_else(|| anyhow::anyhow!("Failed to parse device name"))?
                     .to_string();
+
                 Ok((name_str, capacity))
             })
             .filter_map(|d: Result<(String, Option<u8>), Box<dyn Error>>| d.ok())
