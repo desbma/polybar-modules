@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 use std::fs;
-use std::io::Read;
+use std::io::{ErrorKind, Read};
 use std::os::unix::io::AsRawFd;
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::time::Duration;
@@ -137,7 +137,16 @@ impl RenderablePolybarModule for ProgressBarServerModule {
     type State = Option<ProgressBarServerModuleState>;
 
     fn wait_update(&mut self, _prev_state: &Option<Self::State>) {
-        self.poller.poll(&mut self.poller_events, None).unwrap();
+        loop {
+            let poll_res = self.poller.poll(&mut self.poller_events, None);
+            if let Err(ref e) = poll_res {
+                if e.kind() == ErrorKind::Interrupted {
+                    continue;
+                }
+            }
+            poll_res.unwrap();
+            break;
+        }
     }
 
     fn update(&mut self) -> Self::State {
