@@ -28,6 +28,21 @@ impl BatteryMouseModule {
 
         BatteryMouseModule { sysfs_dirs }
     }
+
+    fn sysfs_capacity_level_to_prct(s: &str) -> Option<u8> {
+        // See in kernel tree:
+        // drivers/hid/hid-logitech-hidpp.c: hidpp_map_battery_level
+        // drivers/power/supply/power_supply_sysfs.c: POWER_SUPPLY_CAPACITY_LEVEL_TEXT
+        match s {
+            "Full" => Some(100),
+            "High" => Some(80),
+            "Normal" => Some(60),
+            "Low" => Some(30),
+            "Critical" => Some(10),
+            "Unknown" => None,
+            v => panic!("Unexpected value: {:?}", v),
+        }
+    }
 }
 
 impl RenderablePolybarModule for BatteryMouseModule {
@@ -54,15 +69,7 @@ impl RenderablePolybarModule for BatteryMouseModule {
                 let mut capacity_str = String::new();
                 File::open(&capacity_filepath)?.read_to_string(&mut capacity_str)?;
                 capacity_str = capacity_str.trim_end().to_string();
-                log::trace!("{:?}", capacity_str);
-                let capacity = if capacity_str == "Full" {
-                    Some(100)
-                } else if capacity_str == "Unknown" {
-                    None
-                } else {
-                    // TODO
-                    Some(0)
-                };
+                let capacity = Self::sysfs_capacity_level_to_prct(&capacity_str);
                 let mut name_str = String::new();
                 File::open(&name_filepath)?.read_to_string(&mut name_str)?;
                 name_str = name_str.trim_end().to_string();
