@@ -1,7 +1,6 @@
 use std::error::Error;
 use std::fs::File;
 use std::io::Read;
-use std::path::PathBuf;
 use std::thread::sleep;
 use std::time::Duration;
 
@@ -9,9 +8,7 @@ use crate::markup;
 use crate::polybar_module::RenderablePolybarModule;
 use crate::theme;
 
-pub struct BatteryMouseModule {
-    sysfs_dirs: Vec<PathBuf>,
-}
+pub struct BatteryMouseModule {}
 
 #[derive(Debug, PartialEq)]
 pub struct BatteryMouseModuleState {
@@ -20,14 +17,7 @@ pub struct BatteryMouseModuleState {
 
 impl BatteryMouseModule {
     pub fn new() -> BatteryMouseModule {
-        // TODO do this in update loop
-        let sysfs_dirs = match glob::glob("/sys/class/power_supply/hidpp_battery_*") {
-            Err(_) => vec![],
-            Ok(g) => g.filter_map(|e| e.ok()).collect(),
-        };
-        log::trace!("{:?}", sysfs_dirs);
-
-        BatteryMouseModule { sysfs_dirs }
+        BatteryMouseModule {}
     }
 
     fn sysfs_capacity_level_to_prct(s: &str) -> Option<u8> {
@@ -75,43 +65,46 @@ impl RenderablePolybarModule for BatteryMouseModule {
     }
 
     fn update(&mut self) -> Self::State {
-        let levels: Vec<(String, Option<u8>)> = self
-            .sysfs_dirs
-            .iter()
-            .map(|p| {
-                // Parse capacity
-                let mut capacity_filepath = p.to_owned();
-                capacity_filepath.push("capacity");
-                log::trace!("{:?}", capacity_filepath);
-                let capacity = match File::open(&capacity_filepath) {
-                    Ok(mut f) => {
-                        let mut capacity_str = String::new();
-                        f.read_to_string(&mut capacity_str)?;
-                        Some(capacity_str.parse::<u8>()?)
-                    }
-                    Err(_) => {
-                        let mut capacity_level_filepath = p.to_owned();
-                        capacity_level_filepath.push("capacity_level");
-                        log::trace!("{:?}", capacity_level_filepath);
-                        let mut capacity_level_str = String::new();
-                        File::open(&capacity_level_filepath)?
-                            .read_to_string(&mut capacity_level_str)?;
-                        capacity_level_str = capacity_level_str.trim_end().to_string();
-                        Self::sysfs_capacity_level_to_prct(&capacity_level_str)
-                    }
-                };
+        let levels: Vec<(String, Option<u8>)> =
+            match glob::glob("/sys/class/power_supply/hidpp_battery_*") {
+                Err(_) => vec![],
+                Ok(g) => g
+                    .filter_map(|e| e.ok())
+                    .map(|p| {
+                        // Parse capacity
+                        let mut capacity_filepath = p.to_owned();
+                        capacity_filepath.push("capacity");
+                        log::trace!("{:?}", capacity_filepath);
+                        let capacity = match File::open(&capacity_filepath) {
+                            Ok(mut f) => {
+                                let mut capacity_str = String::new();
+                                f.read_to_string(&mut capacity_str)?;
+                                Some(capacity_str.parse::<u8>()?)
+                            }
+                            Err(_) => {
+                                let mut capacity_level_filepath = p.to_owned();
+                                capacity_level_filepath.push("capacity_level");
+                                log::trace!("{:?}", capacity_level_filepath);
+                                let mut capacity_level_str = String::new();
+                                File::open(&capacity_level_filepath)?
+                                    .read_to_string(&mut capacity_level_str)?;
+                                capacity_level_str = capacity_level_str.trim_end().to_string();
+                                Self::sysfs_capacity_level_to_prct(&capacity_level_str)
+                            }
+                        };
 
-                // Parse model name
-                let mut name_filepath = p.to_owned();
-                name_filepath.push("model_name");
-                let mut name_str = String::new();
-                File::open(&name_filepath)?.read_to_string(&mut name_str)?;
-                name_str = Self::shorten_model_name(name_str.trim_end());
+                        // Parse model name
+                        let mut name_filepath = p;
+                        name_filepath.push("model_name");
+                        let mut name_str = String::new();
+                        File::open(&name_filepath)?.read_to_string(&mut name_str)?;
+                        name_str = Self::shorten_model_name(name_str.trim_end());
 
-                Ok((name_str, capacity))
-            })
-            .filter_map(|d: Result<(String, Option<u8>), Box<dyn Error>>| d.ok())
-            .collect();
+                        Ok((name_str, capacity))
+                    })
+                    .filter_map(|d: Result<(String, Option<u8>), Box<dyn Error>>| d.ok())
+                    .collect(),
+            };
 
         BatteryMouseModuleState { levels }
     }
