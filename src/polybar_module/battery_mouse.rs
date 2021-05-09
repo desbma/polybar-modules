@@ -15,7 +15,7 @@ pub struct BatteryMouseModule {
 
 #[derive(Debug, PartialEq)]
 pub struct BatteryMouseModuleState {
-    levels: Vec<(String, u8)>,
+    levels: Vec<(String, Option<u8>)>,
 }
 
 impl BatteryMouseModule {
@@ -40,13 +40,14 @@ impl RenderablePolybarModule for BatteryMouseModule {
     }
 
     fn update(&mut self) -> Self::State {
-        let levels: Vec<(String, u8)> = self
+        let levels: Vec<(String, Option<u8>)> = self
             .sysfs_dirs
             .iter()
             .map(|p| {
                 let mut capacity_filepath = p.to_owned();
                 capacity_filepath.push("capacity_level");
                 log::trace!("{:?}", capacity_filepath);
+                // TODO read name only once
                 let mut name_filepath = p.to_owned();
                 name_filepath.push("model_name");
                 log::trace!("{:?}", name_filepath);
@@ -55,10 +56,12 @@ impl RenderablePolybarModule for BatteryMouseModule {
                 capacity_str = capacity_str.trim_end().to_string();
                 log::trace!("{:?}", capacity_str);
                 let capacity = if capacity_str == "Full" {
-                    100
+                    Some(100)
+                } else if capacity_str == "Unknown" {
+                    None
                 } else {
                     // TODO
-                    0
+                    Some(0)
                 };
                 let mut name_str = String::new();
                 File::open(&name_filepath)?.read_to_string(&mut name_str)?;
@@ -70,7 +73,7 @@ impl RenderablePolybarModule for BatteryMouseModule {
                     .to_string();
                 Ok((name_str, capacity))
             })
-            .filter_map(|d: Result<(String, u8), Box<dyn Error>>| d.ok())
+            .filter_map(|d: Result<(String, Option<u8>), Box<dyn Error>>| d.ok())
             .collect();
 
         BatteryMouseModuleState { levels }
@@ -87,19 +90,22 @@ impl RenderablePolybarModule for BatteryMouseModule {
                 None,
             ));
             for (name, level) in &state.levels {
-                fragments.push(markup::style(
-                    &format!("{} {}%", name, level),
-                    if level < &40 {
-                        Some(theme::Color::Attention)
-                    } else if level < &50 {
-                        Some(theme::Color::Notice)
-                    } else {
-                        None
-                    },
-                    None,
-                    None,
-                    None,
-                ));
+                fragments.push(match level {
+                    Some(level) => markup::style(
+                        &format!("{} {}%", name, level),
+                        if level < &40 {
+                            Some(theme::Color::Attention)
+                        } else if level < &50 {
+                            Some(theme::Color::Notice)
+                        } else {
+                            None
+                        },
+                        None,
+                        None,
+                        None,
+                    ),
+                    None => format!("{} ?", name),
+                });
             }
         }
         fragments.join(" ")
@@ -115,17 +121,18 @@ mod tests {
         let module = BatteryMouseModule::new();
 
         let levels = vec![
-            ("m0".to_string(), 100),
-            ("m1".to_string(), 50),
-            ("m2".to_string(), 49),
-            ("m3".to_string(), 30),
-            ("m4".to_string(), 29),
-            ("m5".to_string(), 5),
+            ("m0".to_string(), Some(100)),
+            ("m1".to_string(), Some(50)),
+            ("m2".to_string(), Some(49)),
+            ("m3".to_string(), Some(30)),
+            ("m4".to_string(), Some(29)),
+            ("m5".to_string(), Some(5)),
+            ("m6".to_string(), None),
         ];
         let state = BatteryMouseModuleState { levels };
         assert_eq!(
             module.render(&state),
-            "%{F#eee8d5}%{F-} m0 100% m1 50% %{F#b58900}m2 49%%{F-} %{F#cb4b16}m3 30%%{F-} %{F#cb4b16}m4 29%%{F-} %{F#cb4b16}m5 5%%{F-}"
+            "%{F#eee8d5}%{F-} m0 100% m1 50% %{F#b58900}m2 49%%{F-} %{F#cb4b16}m3 30%%{F-} %{F#cb4b16}m4 29%%{F-} %{F#cb4b16}m5 5%%{F-} m6 ?"
         );
     }
 }
