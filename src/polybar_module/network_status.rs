@@ -5,7 +5,7 @@ use std::process::{Child, Command, Stdio};
 use std::thread::sleep;
 use std::time::{Duration, Instant};
 
-use sysinfo::{NetworksExt, ProcessExt, System, SystemExt};
+use sysinfo::{NetworksExt, System, SystemExt};
 
 use crate::config;
 use crate::markup;
@@ -53,9 +53,7 @@ impl NetworkStatusModule {
         let ping_child_deaths = HashMap::new();
 
         let system = Box::new(SystemExt::new_with_specifics(
-            sysinfo::RefreshKind::new()
-                .with_networks_list()
-                .with_processes(),
+            sysinfo::RefreshKind::new().with_networks_list(),
         ));
 
         Ok(NetworkStatusModule {
@@ -156,19 +154,22 @@ impl NetworkStatusModule {
             .iter()
             .map(|h| h.iter().filter(|e| **e).count() > h.iter().filter(|e| !**e).count())
             .collect();
+        self.system
+            .refresh_specifics(sysinfo::RefreshKind::new().with_networks_list());
         let mut vpn: Vec<String> = self
             .system
             .get_networks()
             .iter()
-            .filter(|i| i.0.starts_with("wg"))
+            .filter(|i| i.0.starts_with("wg")) // TODO if interface disapears, it stays here
             .map(|i| i.0.to_owned())
             .collect();
-        if self
-            .system
-            .get_processes()
-            .values()
-            .any(|p| p.name() == "openvpn")
-        {
+        let pgrep_status = Command::new("pgrep")
+            .args(&["-x", "openvpn"])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()?;
+        if pgrep_status.success() {
             vpn.push("ovpn".to_string());
         }
         vpn.sort();
