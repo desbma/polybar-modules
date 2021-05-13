@@ -154,13 +154,12 @@ impl NetworkStatusModule {
             .iter()
             .map(|h| h.iter().filter(|e| **e).count() > h.iter().filter(|e| !**e).count())
             .collect();
-        self.system
-            .refresh_specifics(sysinfo::RefreshKind::new().with_networks_list());
+        self.system.refresh_networks_list();
         let mut vpn: Vec<String> = self
             .system
             .get_networks()
             .iter()
-            .filter(|i| i.0.starts_with("wg")) // TODO if interface disapears, it stays here
+            .filter(|i| i.0.starts_with("wg"))
             .map(|i| i.0.to_owned())
             .collect();
         let pgrep_status = Command::new("pgrep")
