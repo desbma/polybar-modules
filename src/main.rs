@@ -84,6 +84,10 @@ fn main() {
             polybar_module::pulseaudio::PulseAudioModule::new()
                 .expect("Failed to initialize Pulseaudio module"),
         ),
+        PolybarModuleName::syncthing => polybar_module::PolybarModule::Syncthing(
+            polybar_module::syncthing::SyncthingModule::new()
+                .expect("Failed to initialize Syncthing module"),
+        ),
         PolybarModuleName::taskwarrior { max_len } => polybar_module::PolybarModule::Taskwarrior(
             polybar_module::taskwarrior::TaskwarriorModule::new(max_len)
                 .expect("Failed to initialize Taskwarrior module"),
@@ -105,6 +109,7 @@ fn main() {
         polybar_module::PolybarModule::NetworkStatus(module) => render_loop(module),
         polybar_module::PolybarModule::ProgressBarServer(module) => render_loop(module),
         polybar_module::PolybarModule::PulseAudio(module) => render_loop(module),
+        polybar_module::PolybarModule::Syncthing(module) => render_loop(module),
         polybar_module::PolybarModule::Taskwarrior(module) => render_loop(module),
         polybar_module::PolybarModule::Wttr(module) => render_loop(module),
     };

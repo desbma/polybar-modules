@@ -15,6 +15,7 @@ pub mod market;
 pub mod network_status;
 pub mod progressbar_server;
 pub mod pulseaudio;
+pub mod syncthing;
 pub mod taskwarrior;
 pub mod wttr;
 
@@ -29,6 +30,7 @@ pub enum PolybarModule {
     NetworkStatus(network_status::NetworkStatusModule),
     ProgressBarServer(progressbar_server::ProgressBarServerModule),
     PulseAudio(pulseaudio::PulseAudioModule),
+    Syncthing(syncthing::SyncthingModule),
     Taskwarrior(taskwarrior::TaskwarriorModule),
     Wttr(wttr::WttrModule),
 }

@@ -25,6 +25,8 @@ pub enum PolybarModuleName {
     progressbar_server { max_len: usize },
     #[structopt(about = "Start PulseAudio module")]
     pulseaudio,
+    #[structopt(about = "Start Syncthing module")]
+    syncthing,
     #[structopt(about = "Start Taskwarrior module")]
     taskwarrior { max_len: Option<usize> },
     #[structopt(about = "Start weather module")]
