@@ -107,28 +107,6 @@ impl NetworkStatusModule {
         let now = Instant::now();
         let poller_registry = self.poller.registry();
 
-        // Cleanup newly dead processes
-        for (i, child) in &mut self.ping_childs.iter_mut().enumerate() {
-            if let Ok(Some(_)) = child.try_wait() {
-                if self.ping_child_deaths.contains_key(&i) {
-                    continue;
-                }
-
-                log::debug!("ping process for {:?} has died", self.cfg.hosts[i].host);
-
-                // Keep death timestamp to avoid respawning too fast
-                self.ping_child_deaths.insert(i, Instant::now());
-
-                // Deregister source
-                poller_registry.deregister(&mut mio::unix::SourceFd(
-                    &child.stdout.as_ref().unwrap().as_raw_fd(),
-                ))?;
-
-                // Add state history entry
-                self.host_state_history[i].push_back(false);
-            }
-        }
-
         let mut buffer = [0; 65536];
 
         for event in self.poller_events.iter().filter(|e| e.is_readable()) {
@@ -172,6 +150,28 @@ impl NetworkStatusModule {
             vpn.push("ovpn".to_string());
         }
         vpn.sort();
+
+        // Cleanup newly dead processes
+        for (i, child) in &mut self.ping_childs.iter_mut().enumerate() {
+            if let Ok(Some(_)) = child.try_wait() {
+                if self.ping_child_deaths.contains_key(&i) {
+                    continue;
+                }
+
+                log::debug!("ping process for {:?} has died", self.cfg.hosts[i].host);
+
+                // Keep death timestamp to avoid respawning too fast
+                self.ping_child_deaths.insert(i, Instant::now());
+
+                // Deregister source
+                poller_registry.deregister(&mut mio::unix::SourceFd(
+                    &child.stdout.as_ref().unwrap().as_raw_fd(),
+                ))?;
+
+                // Add state history entry
+                self.host_state_history[i].push_back(false);
+            }
+        }
 
         // Restart new processes if needed
         let ping_period = Self::get_ping_period(&self.env);
