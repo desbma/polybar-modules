@@ -1,3 +1,4 @@
+use std::fs;
 use std::thread::sleep;
 use std::time::Duration;
 
@@ -5,7 +6,9 @@ use crate::markup;
 use crate::polybar_module::RenderablePolybarModule;
 use crate::theme;
 
-pub struct SyncthingModule {}
+pub struct SyncthingModule {
+    api_key: String,
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct SyncthingModuleState {
@@ -16,9 +19,27 @@ pub struct SyncthingModuleState {
     device_total_count: usize,
 }
 
+#[derive(serde::Deserialize)]
+struct SyncthingLocalConfig {
+    gui: SyncthingLocalConfigGui,
+}
+
+#[derive(serde::Deserialize)]
+struct SyncthingLocalConfigGui {
+    apikey: String,
+}
+
 impl SyncthingModule {
     pub fn new() -> anyhow::Result<SyncthingModule> {
-        Ok(SyncthingModule {})
+        let xdg_dirs = xdg::BaseDirectories::with_prefix("syncthing")?;
+        let st_config_filepath = xdg_dirs
+            .find_config_file("config.xml")
+            .ok_or_else(|| anyhow::anyhow!("Unable fo find Synthing config file"))?;
+        let st_config_xml = fs::read_to_string(st_config_filepath)?;
+        let st_config: SyncthingLocalConfig = quick_xml::de::from_str(&st_config_xml)?;
+        Ok(SyncthingModule {
+            api_key: st_config.gui.apikey,
+        })
     }
 
     fn try_update(&mut self) -> anyhow::Result<SyncthingModuleState> {
