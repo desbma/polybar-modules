@@ -7,7 +7,8 @@ use crate::polybar_module::RenderablePolybarModule;
 use crate::theme;
 
 pub struct SyncthingModule {
-    api_key: String,
+    session: reqwest::blocking::Client,
+    system_config: Option<SyncthingResponseSystemConfig>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -20,36 +21,75 @@ pub struct SyncthingModuleState {
 }
 
 #[derive(serde::Deserialize)]
-struct SyncthingLocalConfig {
-    gui: SyncthingLocalConfigGui,
+struct SyncthingXmlConfig {
+    gui: SyncthingXmlConfigGui,
 }
 
 #[derive(serde::Deserialize)]
-struct SyncthingLocalConfigGui {
+struct SyncthingXmlConfigGui {
     apikey: String,
+}
+
+#[derive(serde::Deserialize)]
+struct SyncthingResponseSystemConfig {
+    folders: Vec<SyncthingResponseSystemConfigFolder>,
+}
+
+#[derive(serde::Deserialize)]
+struct SyncthingResponseSystemConfigFolder {
+    path: String,
+    id: String,
 }
 
 impl SyncthingModule {
     pub fn new() -> anyhow::Result<SyncthingModule> {
+        // Read config to get API key
         let xdg_dirs = xdg::BaseDirectories::with_prefix("syncthing")?;
         let st_config_filepath = xdg_dirs
             .find_config_file("config.xml")
             .ok_or_else(|| anyhow::anyhow!("Unable fo find Synthing config file"))?;
         let st_config_xml = fs::read_to_string(st_config_filepath)?;
-        let st_config: SyncthingLocalConfig = quick_xml::de::from_str(&st_config_xml)?;
+        let st_config: SyncthingXmlConfig = quick_xml::de::from_str(&st_config_xml)?;
+
+        // Build session
+        let mut session_headers = reqwest::header::HeaderMap::new();
+        let mut api_key = reqwest::header::HeaderValue::from_str(&st_config.gui.apikey)?;
+        api_key.set_sensitive(true);
+        session_headers.insert("X-API-Key", api_key);
+        let session = reqwest::blocking::Client::builder()
+            .default_headers(session_headers)
+            .timeout(Duration::from_secs(5))
+            .build()?;
+
         Ok(SyncthingModule {
-            api_key: st_config.gui.apikey,
+            session,
+            system_config: None,
         })
     }
 
     fn try_update(&mut self) -> anyhow::Result<SyncthingModuleState> {
+        let system_config = match &self.system_config {
+            None => {
+                let system_config_str = self.syncthing_rest_call("system/config")?;
+                self.system_config = Some(serde_json::from_str(&system_config_str)?);
+                self.system_config.as_ref().unwrap()
+            }
+            Some(c) => c,
+        };
+
         Ok(SyncthingModuleState {
-            folder_count: 0,
+            folder_count: system_config.folders.len(),
             device_connected_count: 0,
             device_syncing_to_count: 0,
             device_syncing_from_count: 0,
             device_total_count: 0,
         })
+    }
+
+    fn syncthing_rest_call(&self, path: &str) -> anyhow::Result<String> {
+        let url = format!("http://127.0.0.1:8384/rest/{}", path);
+        log::debug!("GET {:?}", url);
+        Ok(self.session.get(url).send()?.text()?)
     }
 }
 
