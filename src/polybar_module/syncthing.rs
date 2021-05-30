@@ -33,12 +33,18 @@ struct SyncthingXmlConfigGui {
 #[derive(serde::Deserialize)]
 struct SyncthingResponseSystemConfig {
     folders: Vec<SyncthingResponseSystemConfigFolder>,
+    devices: Vec<SyncthingResponseSystemConfigDevice>,
 }
 
 #[derive(serde::Deserialize)]
 struct SyncthingResponseSystemConfigFolder {
     path: String,
     id: String,
+}
+
+#[derive(serde::Deserialize)]
+struct SyncthingResponseSystemConfigDevice {
+    name: String,
 }
 
 impl SyncthingModule {
@@ -82,14 +88,16 @@ impl SyncthingModule {
             device_connected_count: 0,
             device_syncing_to_count: 0,
             device_syncing_from_count: 0,
-            device_total_count: 0,
+            device_total_count: system_config.devices.len(),
         })
     }
 
     fn syncthing_rest_call(&self, path: &str) -> anyhow::Result<String> {
         let url = format!("http://127.0.0.1:8384/rest/{}", path);
         log::debug!("GET {:?}", url);
-        Ok(self.session.get(url).send()?.text()?)
+        let json_str = self.session.get(url).send()?.text()?;
+        log::trace!("{}", json_str);
+        Ok(json_str)
     }
 }
 
