@@ -213,7 +213,7 @@ impl RenderablePolybarModule for NetworkStatusModule {
     fn wait_update(&mut self, prev_state: &Option<Self::State>) {
         if prev_state.is_some() {
             // Micro sleep to aggregate several ping events
-            sleep(Duration::from_millis(10));
+            sleep(Duration::from_millis(100));
 
             let duration = Self::get_ping_period(&self.env);
             log::trace!("Waiting for network events");
