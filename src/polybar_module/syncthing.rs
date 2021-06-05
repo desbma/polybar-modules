@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fs;
 use std::thread::sleep;
 use std::time::Duration;
@@ -36,15 +37,27 @@ struct SyncthingResponseSystemConfig {
     devices: Vec<SyncthingResponseSystemConfigDevice>,
 }
 
+#[allow(dead_code)]
 #[derive(serde::Deserialize)]
 struct SyncthingResponseSystemConfigFolder {
     path: String,
     id: String,
 }
 
+#[allow(dead_code)]
 #[derive(serde::Deserialize)]
 struct SyncthingResponseSystemConfigDevice {
     name: String,
+}
+
+#[derive(serde::Deserialize)]
+struct SyncthingResponseSystemConnections {
+    connections: HashMap<String, SyncthingResponseSystemConnectionsConnection>,
+}
+
+#[derive(serde::Deserialize)]
+struct SyncthingResponseSystemConnectionsConnection {
+    connected: bool,
 }
 
 impl SyncthingModule {
@@ -83,9 +96,17 @@ impl SyncthingModule {
             Some(c) => c,
         };
 
+        let system_connections_str = self.syncthing_rest_call("system/connections")?;
+        let system_connections: SyncthingResponseSystemConnections =
+            serde_json::from_str(&system_connections_str)?;
+
         Ok(SyncthingModuleState {
             folder_count: system_config.folders.len(),
-            device_connected_count: 0,
+            device_connected_count: system_connections
+                .connections
+                .values()
+                .filter(|c| c.connected)
+                .count(),
             device_syncing_to_count: 0,
             device_syncing_from_count: 0,
             device_total_count: system_config.devices.len(),
