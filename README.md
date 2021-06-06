@@ -16,7 +16,7 @@ Rewrite of my personal Python [Polybar](https://polybar.github.io/) modules as a
 - [x] Nvidia GPU status
 - [x] Low bandwidth button
 - [x] Network status
-- [ ] Syncthing status
+- [x] Syncthing status
 - [x] Taskwarrior next task
 - [x] Market trend
 - [x] Weather
