@@ -78,6 +78,7 @@ impl SyncthingModule {
         let st_config_filepath = xdg_dirs
             .find_config_file("config.xml")
             .ok_or_else(|| anyhow::anyhow!("Unable fo find Synthing config file"))?;
+        log::debug!("st_config_filepath = {:?}", st_config_filepath);
         let st_config_xml = fs::read_to_string(st_config_filepath)?;
         let st_config: SyncthingXmlConfig = quick_xml::de::from_str(&st_config_xml)?;
 

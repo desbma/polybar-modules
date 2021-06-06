@@ -19,12 +19,14 @@ jobs:
     runs-on: ubuntu-latest
     env:
       XDG_RUNTIME_DIR: /tmp/run
+      XDG_CONFIG_HOME: /tmp/config
     steps:
       - uses: actions/checkout@v2
       - run: sudo apt-get install pulseaudio-utils taskwarrior
       - run: |
-          mkdir -pv ${XDG_RUNTIME_DIR}
-          chmod -c 700 ${XDG_RUNTIME_DIR}
+          mkdir -pv ${XDG_RUNTIME_DIR} ${XDG_CONFIG_HOME}/syncthing
+          echo '<configuration><gui><apikey>dummykeydummykeydummykeydummykey</apikey></gui></configuration>' > ${XDG_CONFIG_HOME}/syncthing/config.xml
+          chmod -Rc 700 ${XDG_RUNTIME_DIR} ${XDG_CONFIG_HOME}
       - run: "yes | task || true"
       - uses: actions-rs/toolchain@v1
         with:
