@@ -10,6 +10,7 @@ use crate::theme;
 pub struct SyncthingModule {
     session: reqwest::blocking::Client,
     system_config: Option<SyncthingResponseSystemConfig>,
+    last_event_id: u64,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -60,6 +61,16 @@ struct SyncthingResponseSystemConnectionsConnection {
     connected: bool,
 }
 
+type SyncthingResponseEvents = Vec<SyncthingResponseEventsEvent>;
+
+#[derive(serde::Deserialize)]
+struct SyncthingResponseEventsEvent {
+    id: u64,
+}
+
+const REST_EVENT_TIMEOUT: Duration = Duration::from_secs(60 * 60);
+const REST_NORMAL_TIMEOUT: Duration = Duration::from_secs(10);
+
 impl SyncthingModule {
     pub fn new() -> anyhow::Result<SyncthingModule> {
         // Read config to get API key
@@ -77,12 +88,15 @@ impl SyncthingModule {
         session_headers.insert("X-API-Key", api_key);
         let session = reqwest::blocking::Client::builder()
             .default_headers(session_headers)
-            .timeout(Duration::from_secs(5))
+            // Set maximum timeout and override with lower one for non event requests otherwise the timeout only
+            // applies for connect
+            .timeout(REST_EVENT_TIMEOUT)
             .build()?;
 
         Ok(SyncthingModule {
             session,
             system_config: None,
+            last_event_id: 0,
         })
     }
 
@@ -113,10 +127,33 @@ impl SyncthingModule {
         })
     }
 
+    fn syncthing_events(&self) -> anyhow::Result<SyncthingResponseEvents> {
+        // See https://docs.syncthing.net/dev/events.html
+        let mut url = reqwest::Url::parse("http://127.0.0.1:8384/rest/events")?;
+        url.query_pairs_mut()
+            .append_pair("since", &self.last_event_id.to_string());
+        url.query_pairs_mut().append_pair(
+            "timeout",
+            &(REST_EVENT_TIMEOUT + REST_NORMAL_TIMEOUT)
+                .as_secs()
+                .to_string(),
+        );
+        log::debug!("GET {:?}", url.to_string());
+        let json_str = self.session.get(url).send()?.text()?;
+        log::trace!("{}", json_str);
+        let events: SyncthingResponseEvents = serde_json::from_str(&json_str)?;
+        Ok(events)
+    }
+
     fn syncthing_rest_call(&self, path: &str) -> anyhow::Result<String> {
         let url = format!("http://127.0.0.1:8384/rest/{}", path);
         log::debug!("GET {:?}", url);
-        let json_str = self.session.get(url).send()?.text()?;
+        let json_str = self
+            .session
+            .get(url)
+            .timeout(REST_NORMAL_TIMEOUT)
+            .send()?
+            .text()?;
         log::trace!("{}", json_str);
         Ok(json_str)
     }
@@ -127,7 +164,19 @@ impl RenderablePolybarModule for SyncthingModule {
 
     fn wait_update(&mut self, prev_state: &Option<Self::State>) {
         if prev_state.is_some() {
-            sleep(Duration::from_secs(1)); // TODO wait for events instead
+            loop {
+                if let Ok(events) = self.syncthing_events() {
+                    // TODO filter events to wait for
+                    if let Some(last_evt) = events.iter().last() {
+                        self.last_event_id = last_evt.id;
+                    } else {
+                        continue;
+                    }
+                } else {
+                    sleep(Duration::from_secs(10));
+                }
+                break;
+            }
         }
     }
 
