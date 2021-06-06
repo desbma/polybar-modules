@@ -125,7 +125,20 @@ impl SyncthingModule {
         for (device_id, device) in &system_connections.connections {
             if device.connected {
                 let db_completion_str =
-                    self.syncthing_rest_call("db/completion", &[("device", device_id)])?;
+                    match self.syncthing_rest_call("db/completion", &[("device", device_id)]) {
+                        Ok(s) => s,
+                        Err(e) => {
+                            if let Some(e) = e.downcast_ref::<reqwest::Error>() {
+                                if e.is_status()
+                                    && e.status().unwrap() == reqwest::StatusCode::NOT_FOUND
+                                {
+                                    // Paused devices return 404
+                                    continue;
+                                }
+                            }
+                            anyhow::bail!(e);
+                        }
+                    };
                 let db_completion: SyncthingResponseDbCompletion =
                     serde_json::from_str(&db_completion_str)?;
                 if (db_completion.need_bytes > 0)
