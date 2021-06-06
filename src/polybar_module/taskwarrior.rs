@@ -230,7 +230,7 @@ impl RenderablePolybarModule for TaskwarriorModule {
                 };
                 let s3 = match &state.next_task_project {
                     Some(next_task_project) => {
-                        format!("[{}] ", Self::ellipsis(&next_task_project, max_project_len))
+                        format!("[{}] ", Self::ellipsis(next_task_project, max_project_len))
                     }
                     None => String::new(),
                 };

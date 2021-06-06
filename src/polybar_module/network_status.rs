@@ -39,7 +39,7 @@ impl NetworkStatusModule {
         let poller_registry = poller.registry();
         for (i, host) in cfg.hosts.iter().enumerate() {
             // Start ping process & register poller event source
-            let child = Self::setup_ping_child(&host.host, i, &poller_registry, &env)?;
+            let child = Self::setup_ping_child(&host.host, i, poller_registry, &env)?;
 
             ping_childs.push(child);
         }
@@ -74,7 +74,7 @@ impl NetworkStatusModule {
         poller_registry: &mio::Registry,
         env: &PolybarModuleEnv,
     ) -> anyhow::Result<Child> {
-        let ping_period_s = Self::get_ping_period(&env).as_secs();
+        let ping_period_s = Self::get_ping_period(env).as_secs();
 
         // Start ping process
         let child = Command::new("ping")
@@ -181,7 +181,7 @@ impl NetworkStatusModule {
         {
             // Setup new child in its place
             self.ping_childs[i] =
-                Self::setup_ping_child(&self.cfg.hosts[i].host, i, &poller_registry, &self.env)?;
+                Self::setup_ping_child(&self.cfg.hosts[i].host, i, poller_registry, &self.env)?;
         }
 
         Ok(NetworkStatusModuleState {
@@ -273,7 +273,7 @@ impl RenderablePolybarModule for NetworkStatusModule {
                     ));
                     for wireguard_interface in &state.vpn {
                         fragments.push(markup::style(
-                            &wireguard_interface,
+                            wireguard_interface,
                             None,
                             Some(theme::Color::Foreground),
                             None,
