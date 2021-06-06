@@ -163,7 +163,7 @@ impl SyncthingModule {
                 .to_string(),
         );
         log::debug!("GET {:?}", url.to_string());
-        let json_str = self.session.get(url).send()?.text()?;
+        let json_str = self.session.get(url).send()?.error_for_status()?.text()?;
         log::trace!("{}", json_str);
         let events: Vec<SyncthingResponseEvent> = serde_json::from_str(&json_str)?;
         Ok(events)
@@ -181,6 +181,7 @@ impl SyncthingModule {
             .get(url)
             .timeout(REST_NORMAL_TIMEOUT)
             .send()?
+            .error_for_status()?
             .text()?;
         log::trace!("{}", json_str);
         Ok(json_str)
