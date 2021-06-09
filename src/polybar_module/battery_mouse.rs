@@ -79,7 +79,7 @@ impl RenderablePolybarModule for BatteryMouseModule {
                             Ok(mut f) => {
                                 let mut capacity_str = String::new();
                                 f.read_to_string(&mut capacity_str)?;
-                                Some(capacity_str.parse::<u8>()?)
+                                Some(capacity_str.trim_end().parse::<u8>()?)
                             }
                             Err(_) => {
                                 let mut capacity_level_filepath = p.to_owned();
@@ -96,6 +96,7 @@ impl RenderablePolybarModule for BatteryMouseModule {
                         // Parse model name
                         let mut name_filepath = p;
                         name_filepath.push("model_name");
+                        log::trace!("{:?}", name_filepath);
                         let mut name_str = String::new();
                         File::open(&name_filepath)?.read_to_string(&mut name_str)?;
                         name_str = Self::shorten_model_name(name_str.trim_end());
