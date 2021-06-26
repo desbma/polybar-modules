@@ -166,16 +166,18 @@ impl RenderablePolybarModule for ProgressBarServerModule {
                     "".to_string()
                 } else if state.progress.len() == 1 {
                     format!(
-                        "{} {}",
+                        "{} {} {}",
                         markup::style("", Some(theme::Color::Foreground), None, None, None),
-                        Self::render_progress(state.progress[0], self.max_len)
+                        state.progress.len(),
+                        Self::render_progress(state.progress[0], self.max_len - 2)
                     )
                 } else if state.progress.len() == 2 {
                     format!(
-                        "{} {} {}",
+                        "{} {} {} {}",
                         markup::style("", Some(theme::Color::Foreground), None, None, None),
-                        Self::render_progress(state.progress[0], (self.max_len - 1) / 2),
-                        Self::render_progress(state.progress[1], (self.max_len - 1) / 2),
+                        state.progress.len(),
+                        Self::render_progress(state.progress[0], (self.max_len - 3) / 2),
+                        Self::render_progress(state.progress[1], (self.max_len - 3) / 2),
                     )
                 } else {
                     // Average progress, then maximum
@@ -213,7 +215,7 @@ mod tests {
         let state = Some(ProgressBarServerModuleState { progress: vec![30] });
         assert_eq!(
             module.render(&state),
-            "%{F#93a1a1}%{F-} ■■■■■■              "
+            "%{F#93a1a1}%{F-} 1 ■■■■■             "
         );
 
         let state = Some(ProgressBarServerModuleState {
@@ -221,7 +223,7 @@ mod tests {
         });
         assert_eq!(
             module.render(&state),
-            "%{F#93a1a1}%{F-} ■■        ■■■      "
+            "%{F#93a1a1}%{F-} 2 ■■       ■■■     "
         );
 
         let state = Some(ProgressBarServerModuleState {
@@ -235,12 +237,12 @@ mod tests {
         let module = ProgressBarServerModule::new(5).unwrap();
 
         let state = Some(ProgressBarServerModuleState { progress: vec![30] });
-        assert_eq!(module.render(&state), "%{F#93a1a1}%{F-} ■    ");
+        assert_eq!(module.render(&state), "%{F#93a1a1}%{F-} 1    ");
 
         let state = Some(ProgressBarServerModuleState {
             progress: vec![30, 40],
         });
-        assert_eq!(module.render(&state), "%{F#93a1a1}%{F-}      ");
+        assert_eq!(module.render(&state), "%{F#93a1a1}%{F-} 2 ▃ ▄");
 
         let state = Some(ProgressBarServerModuleState {
             progress: vec![30, 40, 50],
