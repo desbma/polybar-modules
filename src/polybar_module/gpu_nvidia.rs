@@ -99,7 +99,13 @@ impl GpuNvidiaModule {
                 return markup::style(icon, Some(color.to_owned()), None, None, None);
             }
         }
-        unreachable!();
+        markup::style(
+            icons[icons.len() - 1].0,
+            Some(icons[icons.len() - 1].1.to_owned()),
+            None,
+            None,
+            None,
+        )
     }
 }
 
@@ -215,6 +221,20 @@ mod tests {
         assert_eq!(
             module.render(&state),
             "%{F#eee8d5}%{F-} 88% %{F#dc322f}█%{F-} 1600+2000MHz %{u#dc322f}%{+u}%{F#dc322f}70°C%{F-}%{-u} 200W"
+        );
+
+        let state = Some(GpuNvidiaModuleState {
+            mem_used: 3963,
+            mem_total: 4040,
+            freq_graphics: 1600,
+            freq_mem: 2000,
+            throttle: false,
+            temp: 70,
+            power_draw: 200,
+        });
+        assert_eq!(
+            module.render(&state),
+            "%{F#eee8d5}%{F-} 98% %{F#dc322f}█%{F-} 1600+2000MHz %{u#dc322f}%{+u}%{F#dc322f}70°C%{F-}%{-u} 200W"
         );
 
         let state = None;
