@@ -28,11 +28,7 @@ impl ArchUpdatesModule {
         let db_dir = self
             .xdg_dirs
             .find_cache_file("checkupdates")
-            .ok_or_else(|| anyhow::anyhow!("Unable to find checkupdates database dir"))?
-            .as_os_str()
-            .to_os_string()
-            .into_string()
-            .unwrap();
+            .ok_or_else(|| anyhow::anyhow!("Unable to find checkupdates database dir"))?;
         let output = Command::new("checkupdates")
             .env("CHECKUPDATES_DB", &db_dir)
             .stderr(Stdio::null())
@@ -49,7 +45,7 @@ impl ArchUpdatesModule {
         let repo_security_update_count = if !repo_updates.is_empty() {
             // Run arch-audit
             let output = Command::new("arch-audit")
-                .args(&["-u", "-b", &db_dir, "-f", "%n"])
+                .args(&["-u", "-b", db_dir.to_str().unwrap(), "-f", "%n"])
                 .env("TERM", "xterm") // workaround arch-audit bug
                 .stderr(Stdio::null())
                 .output()?;

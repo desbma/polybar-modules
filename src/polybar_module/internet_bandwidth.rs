@@ -43,15 +43,7 @@ impl RenderablePolybarModule for InternetBandwidthModule {
                 "",
                 markup::PolybarAction {
                     type_: markup::PolybarActionType::ClickLeft,
-                    command: format!(
-                        "touch {}",
-                        self.env
-                            .low_bw_filepath
-                            .as_os_str()
-                            .to_os_string()
-                            .into_string()
-                            .unwrap()
-                    ),
+                    command: format!("touch {}", self.env.low_bw_filepath.to_str().unwrap()),
                 },
             ),
             RuntimeMode::LowNetworkBandwith => markup::action(
