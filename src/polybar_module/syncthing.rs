@@ -1,6 +1,7 @@
 use std::cmp::max;
 use std::collections::HashSet;
 use std::fs;
+use std::path::Path;
 use std::thread::sleep;
 use std::time::Duration;
 
@@ -77,12 +78,8 @@ const REST_EVENT_TIMEOUT: Duration = Duration::from_secs(60 * 60);
 const REST_NORMAL_TIMEOUT: Duration = Duration::from_secs(10);
 
 impl SyncthingModule {
-    pub fn new() -> anyhow::Result<SyncthingModule> {
+    pub fn new(st_config_filepath: &Path) -> anyhow::Result<SyncthingModule> {
         // Read config to get API key
-        let xdg_dirs = xdg::BaseDirectories::with_prefix("syncthing")?;
-        let st_config_filepath = xdg_dirs
-            .find_config_file("config.xml")
-            .ok_or_else(|| anyhow::anyhow!("Unable fo find Synthing config file"))?;
         log::debug!("st_config_filepath = {:?}", st_config_filepath);
         let st_config_xml = fs::read_to_string(st_config_filepath)?;
         let st_config: SyncthingXmlConfig = quick_xml::de::from_str(&st_config_xml)?;
@@ -271,9 +268,14 @@ impl RenderablePolybarModule for SyncthingModule {
 mod tests {
     use super::*;
 
+    use std::io::Write;
+
     #[test]
     fn test_render() {
-        let module = SyncthingModule::new().unwrap();
+        let mut st_config_file = tempfile::NamedTempFile::new().unwrap();
+        st_config_file.write_all("<configuration><gui><apikey>dummykeydummykeydummykeydummykey</apikey></gui></configuration>".as_bytes()).unwrap();
+
+        let module = SyncthingModule::new(st_config_file.path()).unwrap();
 
         let state = Some(SyncthingModuleState {
             folder_count: 1,

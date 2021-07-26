@@ -84,10 +84,17 @@ fn main() {
             polybar_module::pulseaudio::PulseAudioModule::new()
                 .expect("Failed to initialize Pulseaudio module"),
         ),
-        PolybarModuleName::syncthing => polybar_module::PolybarModule::Syncthing(
-            polybar_module::syncthing::SyncthingModule::new()
-                .expect("Failed to initialize Syncthing module"),
-        ),
+        PolybarModuleName::syncthing => {
+            let xdg_dirs = xdg::BaseDirectories::with_prefix("syncthing")
+                .expect("Unable fo find Synthing config directory");
+            let st_config_filepath = xdg_dirs
+                .find_config_file("config.xml")
+                .expect("Unable fo find Synthing config file");
+            polybar_module::PolybarModule::Syncthing(
+                polybar_module::syncthing::SyncthingModule::new(&st_config_filepath)
+                    .expect("Failed to initialize Syncthing module"),
+            )
+        }
         PolybarModuleName::taskwarrior { max_len } => polybar_module::PolybarModule::Taskwarrior(
             polybar_module::taskwarrior::TaskwarriorModule::new(max_len)
                 .expect("Failed to initialize Taskwarrior module"),

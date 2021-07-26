@@ -922,6 +922,7 @@ dependencies = [
  "structopt",
  "syncthing",
  "sysinfo",
+ "tempfile",
  "toml",
  "xdg",
 ]
