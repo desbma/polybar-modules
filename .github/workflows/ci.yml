@@ -23,6 +23,9 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - run: sudo apt-get install pulseaudio-utils taskwarrior
+      - run: |
+          mkdir -pv ${XDG_RUNTIME_DIR}
+          chmod -Rc 700 ${XDG_RUNTIME_DIR}
       - run: "yes | task || true"
       - uses: actions-rs/toolchain@v1
         with:
