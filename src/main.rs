@@ -33,8 +33,10 @@ fn main() {
         PolybarModuleName::battery_mouse => polybar_module::PolybarModule::BatteryMouse(
             polybar_module::battery_mouse::BatteryMouseModule::new(),
         ),
-        PolybarModuleName::bluetooth => polybar_module::PolybarModule::Bluetooth(
-            polybar_module::bluetooth::BluetoothModule::new()
+        PolybarModuleName::bluetooth {
+            device_whitelist_addrs,
+        } => polybar_module::PolybarModule::Bluetooth(
+            polybar_module::bluetooth::BluetoothModule::new(device_whitelist_addrs)
                 .expect("Failed to initialize bluetooth module"),
         ),
         PolybarModuleName::debian_updates => polybar_module::PolybarModule::DebianUpdates(

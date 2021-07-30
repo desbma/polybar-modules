@@ -12,7 +12,9 @@ pub enum PolybarModuleName {
     #[structopt(about = "Start mouse battery module")]
     battery_mouse,
     #[structopt(about = "Start bluetooth module")]
-    bluetooth,
+    bluetooth {
+        device_whitelist_addrs: Vec<macaddr::MacAddr6>,
+    },
     #[structopt(about = "Start Debian update module")]
     debian_updates,
     #[structopt(about = "Start Nvidia GPU module")]
