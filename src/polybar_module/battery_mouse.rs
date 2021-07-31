@@ -34,25 +34,6 @@ impl BatteryMouseModule {
             v => panic!("Unexpected value: {:?}", v),
         }
     }
-
-    fn shorten_model_name(s: &str) -> String {
-        match s.split(' ').find(|s| s.chars().any(|c| c.is_numeric())) {
-            Some(w) => w.to_string(),
-            None => s
-                .split(' ')
-                .map(|w| {
-                    if w.chars().all(|c| c.is_ascii_uppercase()) {
-                        w.to_string()
-                    } else {
-                        let mut w2 = w.to_owned();
-                        w2.truncate(1);
-                        w2
-                    }
-                })
-                .collect::<Vec<String>>()
-                .join(""),
-        }
-    }
 }
 
 impl RenderablePolybarModule for BatteryMouseModule {
@@ -99,7 +80,7 @@ impl RenderablePolybarModule for BatteryMouseModule {
                         log::trace!("{:?}", name_filepath);
                         let mut name_str = String::new();
                         File::open(&name_filepath)?.read_to_string(&mut name_str)?;
-                        name_str = Self::shorten_model_name(name_str.trim_end());
+                        name_str = theme::shorten_model_name(name_str.trim_end());
 
                         Ok((name_str, capacity))
                     })
@@ -146,15 +127,6 @@ impl RenderablePolybarModule for BatteryMouseModule {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_shorten_model_name() {
-        assert_eq!(
-            BatteryMouseModule::shorten_model_name("G604 Wireless Gaming Mouse"),
-            "G604"
-        );
-        assert_eq!(BatteryMouseModule::shorten_model_name("Anywhere MX"), "AMX");
-    }
 
     #[test]
     fn test_render() {

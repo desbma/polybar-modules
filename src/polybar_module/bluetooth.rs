@@ -174,8 +174,6 @@ impl RenderablePolybarModule for BluetoothModule {
                             regex::Regex::new("^\\[CHG\\] Controller (([A-F0-9]{2}:){5}[A-F0-9]{2}) Powered: (yes|no)$").unwrap();
                         static ref CONNECT_EVENT_REGEX: regex::Regex =
                             regex::Regex::new("^\\[CHG\\] Device (([A-F0-9]{2}:){5}[A-F0-9]{2}) Connected: (yes|no)$").unwrap();
-                        static ref AUTHORIZE_EVENT_REGEX: regex::Regex =
-                            regex::Regex::new("^\\[agent\\] Authorize service [0-9a-f-]+ \\(yes/no\\): $").unwrap();
                     }
 
                     if let Some(power_event_match) = POWER_EVENT_REGEX.captures(line) {
@@ -214,11 +212,6 @@ impl RenderablePolybarModule for BluetoothModule {
                         );
 
                         need_render = true;
-                    } else if let Some(authorize_event_match) = AUTHORIZE_EVENT_REGEX.captures(line)
-                    {
-                        log::trace!("{:?}", authorize_event_match);
-
-                        need_render = true;
                     } else {
                         log::debug!("Ignored line: {:?}", line);
                     }
@@ -254,7 +247,7 @@ impl RenderablePolybarModule for BluetoothModule {
                         &format!(
                             "{}{}",
                             if device.connected { "" } else { "" },
-                            device.name
+                            theme::ellipsis(&theme::shorten_model_name(&device.name), Some(4))
                         ),
                         None,
                         if device.connected {
@@ -275,10 +268,50 @@ impl RenderablePolybarModule for BluetoothModule {
 
 #[cfg(test)]
 mod tests {
+    use std::env;
+    use std::fs::{File, Permissions};
+    use std::io::Write;
+    use std::os::unix::fs::PermissionsExt;
+    use std::path::PathBuf;
+
     use super::*;
+
+    fn update_path(dir: &str) -> std::ffi::OsString {
+        let path_orig = env::var_os("PATH").unwrap();
+
+        let mut paths_vec = env::split_paths(&path_orig).collect::<Vec<_>>();
+        paths_vec.insert(0, PathBuf::from(dir));
+
+        let paths = env::join_paths(paths_vec).unwrap();
+        env::set_var("PATH", &paths);
+
+        path_orig
+    }
 
     #[test]
     fn test_render() {
+        let tmp_dir = tempfile::TempDir::new().unwrap();
+        let fake_bluetoothctl_filepath = tmp_dir.path().join("bluetoothctl");
+        let mut fake_bluetoothctl_file = File::create(fake_bluetoothctl_filepath).unwrap();
+        write!(
+            &mut fake_bluetoothctl_file,
+            concat!(
+                "#!/bin/sh\n",
+                "if [ $1 = 'show' ]; then\n",
+                "  echo 'Controller 01:02:03:04:05:06 '\n",
+                "  echo '\tPowered: yes'\n",
+                "elif [ $# -eq 0 ]; then\n",
+                "  exec sleep inf\n",
+                "fi\n"
+            )
+        )
+        .unwrap();
+        fake_bluetoothctl_file
+            .set_permissions(Permissions::from_mode(0o700))
+            .unwrap();
+        drop(fake_bluetoothctl_file);
+        let path_orig = update_path(tmp_dir.path().to_str().unwrap());
+
         let module = BluetoothModule::new(vec![]).unwrap();
 
         let state = Some(BluetoothModuleState {
@@ -313,5 +346,7 @@ mod tests {
 
         let state = None;
         assert_eq!(module.render(&state), "%{F#cb4b16}%{F-}");
+
+        env::set_var("PATH", &path_orig);
     }
 }

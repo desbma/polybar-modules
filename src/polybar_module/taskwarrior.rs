@@ -128,24 +128,6 @@ impl TaskwarriorModule {
         })
     }
 
-    fn ellipsis(s: &str, max_len: Option<usize>) -> String {
-        match max_len {
-            Some(max_len) => {
-                if s.len() > max_len {
-                    let mut s2: String = s.trim_end().to_string();
-                    if s2.len() > max_len {
-                        s2.truncate(max_len - 1);
-                        s2.push('…');
-                    }
-                    s2
-                } else {
-                    s.to_string()
-                }
-            }
-            None => s.to_string(),
-        }
-    }
-
     fn get_max_task_data_file_mtime(&self) -> Option<SystemTime> {
         vec!["completed.data", "pending.data"]
             .iter()
@@ -230,14 +212,14 @@ impl RenderablePolybarModule for TaskwarriorModule {
                 };
                 let s3 = match &state.next_task_project {
                     Some(next_task_project) => {
-                        format!("[{}] ", Self::ellipsis(next_task_project, max_project_len))
+                        format!("[{}] ", theme::ellipsis(next_task_project, max_project_len))
                     }
                     None => String::new(),
                 };
                 let max_task_len = self
                     .max_len
                     .map(|max_len| max_len - s2.len() - s3.chars().count());
-                let s4 = Self::ellipsis(&state.next_task, max_task_len);
+                let s4 = theme::ellipsis(&state.next_task, max_task_len);
                 format!(
                     "{}{}{}",
                     s1,
@@ -267,30 +249,6 @@ impl RenderablePolybarModule for TaskwarriorModule {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_ellipsis() {
-        assert_eq!(
-            TaskwarriorModule::ellipsis("blah blah blah", None),
-            "blah blah blah"
-        );
-        assert_eq!(
-            TaskwarriorModule::ellipsis("blah blah blah", Some(14)),
-            "blah blah blah"
-        );
-        assert_eq!(
-            TaskwarriorModule::ellipsis("blah blah blah!", Some(14)),
-            "blah blah bla…"
-        );
-        assert_eq!(
-            TaskwarriorModule::ellipsis("blah blah blah ", Some(14)),
-            "blah blah blah"
-        );
-        assert_eq!(
-            TaskwarriorModule::ellipsis("blah blah bla h", Some(14)),
-            "blah blah bla…"
-        );
-    }
 
     #[test]
     fn test_render() {
