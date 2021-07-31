@@ -169,9 +169,9 @@ impl RenderablePolybarModule for BluetoothModule {
                 for line in read_str.lines() {
                     lazy_static! {
                         static ref POWER_EVENT_REGEX: regex::Regex =
-                            regex::Regex::new("^\\[CHG\\] Controller (([A-F0-9]{2}:){5}[A-F0-9]{2}) Powered: (yes|no)$").unwrap();
+                            regex::Regex::new("\\[CHG\\] Controller (([A-F0-9]{2}:){5}[A-F0-9]{2}) Powered: (yes|no)$").unwrap();
                         static ref CONNECT_EVENT_REGEX: regex::Regex =
-                            regex::Regex::new("^\\[CHG\\] Device (([A-F0-9]{2}:){5}[A-F0-9]{2}) Connected: (yes|no)$").unwrap();
+                            regex::Regex::new("\\[CHG\\] Device (([A-F0-9]{2}:){5}[A-F0-9]{2}) Connected: (yes|no)$").unwrap();
                     }
 
                     if let Some(power_event_match) = POWER_EVENT_REGEX.captures(line) {
@@ -228,13 +228,15 @@ impl RenderablePolybarModule for BluetoothModule {
     }
 
     fn update(&mut self) -> Self::State {
+        let mut devices = if self.controller.powered {
+            self.devices.values().cloned().collect()
+        } else {
+            vec![]
+        };
+        devices.sort_by_key(|d| d.name.to_owned());
         BluetoothModuleState {
             controller_powered: self.controller.powered,
-            devices: if self.controller.powered {
-                self.devices.values().cloned().collect()
-            } else {
-                vec![]
-            },
+            devices,
         }
     }
 
