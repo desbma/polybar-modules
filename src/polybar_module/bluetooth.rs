@@ -48,13 +48,6 @@ impl BluetoothModule {
         })
     }
 
-    fn try_update(&mut self) -> anyhow::Result<BluetoothModuleState> {
-        Ok(BluetoothModuleState {
-            controller_powered: self.controller.powered,
-            devices: self.devices.values().cloned().collect(),
-        })
-    }
-
     fn bluetoothcl_cmd(args: &[&str]) -> anyhow::Result<String> {
         let output = Command::new("bluetoothctl")
             .args(args)
@@ -153,7 +146,7 @@ impl Drop for BluetoothModule {
 }
 
 impl RenderablePolybarModule for BluetoothModule {
-    type State = Option<BluetoothModuleState>;
+    type State = BluetoothModuleState;
 
     fn wait_update(&mut self, prev_state: &Option<Self::State>) {
         if prev_state.is_some() {
@@ -199,6 +192,9 @@ impl RenderablePolybarModule for BluetoothModule {
                             log::warn!("Power event for unknown controller");
                         } else {
                             self.controller.powered = status;
+                            if !status {
+                                self.devices.values_mut().for_each(|d| d.connected = false);
+                            }
                             need_render = true;
                         }
                     } else if let Some(connect_event_match) = CONNECT_EVENT_REGEX.captures(line) {
@@ -232,69 +228,65 @@ impl RenderablePolybarModule for BluetoothModule {
     }
 
     fn update(&mut self) -> Self::State {
-        match self.try_update() {
-            Ok(s) => Some(s),
-            Err(e) => {
-                log::error!("{}", e);
-                None
-            }
+        BluetoothModuleState {
+            controller_powered: self.controller.powered,
+            devices: if self.controller.powered {
+                self.devices.values().cloned().collect()
+            } else {
+                vec![]
+            },
         }
     }
 
     fn render(&self, state: &Self::State) -> String {
-        match state {
-            Some(state) => {
-                let mut fragments: Vec<String> = vec![format!(
-                    "{} {}",
-                    markup::style("", Some(theme::Color::MainIcon), None, None, None),
-                    if state.controller_powered {
-                        markup::action(
-                            "",
-                            markup::PolybarAction {
-                                type_: markup::PolybarActionType::ClickLeft,
-                                command: "bluetoothctl power off".to_string(),
-                            },
-                        )
-                    } else {
-                        markup::action(
-                            "",
-                            markup::PolybarAction {
-                                type_: markup::PolybarActionType::ClickLeft,
-                                command: "bluetoothctl power on".to_string(),
-                            },
-                        )
+        let mut fragments: Vec<String> = vec![format!(
+            "{} {}",
+            markup::style("", Some(theme::Color::MainIcon), None, None, None),
+            if state.controller_powered {
+                markup::action(
+                    "",
+                    markup::PolybarAction {
+                        type_: markup::PolybarActionType::ClickLeft,
+                        command: "bluetoothctl power off".to_string(),
                     },
-                )];
-                for device in &state.devices {
-                    let name = theme::ellipsis(&theme::shorten_model_name(&device.name), Some(4));
-                    let device_markup = markup::style(
-                        &format!("{}{}", if device.connected { "" } else { "" }, name),
-                        None,
-                        if device.connected {
-                            Some(theme::Color::Foreground)
-                        } else {
-                            None
-                        },
-                        None,
-                        None,
-                    );
-                    let action_markup = markup::action(
-                        &device_markup,
-                        markup::PolybarAction {
-                            type_: markup::PolybarActionType::ClickLeft,
-                            command: format!(
-                                "bluetoothctl {}connect {}",
-                                if device.connected { "dis" } else { "" },
-                                device.addr
-                            ),
-                        },
-                    );
-                    fragments.push(action_markup);
-                }
-                fragments.join(" ")
-            }
-            None => markup::style("", Some(theme::Color::Attention), None, None, None),
+                )
+            } else {
+                markup::action(
+                    "",
+                    markup::PolybarAction {
+                        type_: markup::PolybarActionType::ClickLeft,
+                        command: "bluetoothctl power on".to_string(),
+                    },
+                )
+            },
+        )];
+        for device in &state.devices {
+            let name = theme::ellipsis(&theme::shorten_model_name(&device.name), Some(4));
+            let device_markup = markup::style(
+                &format!("{}{}", if device.connected { "" } else { "" }, name),
+                None,
+                if device.connected {
+                    Some(theme::Color::Foreground)
+                } else {
+                    None
+                },
+                None,
+                None,
+            );
+            let action_markup = markup::action(
+                &device_markup,
+                markup::PolybarAction {
+                    type_: markup::PolybarActionType::ClickLeft,
+                    command: format!(
+                        "bluetoothctl {}connect {}",
+                        if device.connected { "dis" } else { "" },
+                        device.addr
+                    ),
+                },
+            );
+            fragments.push(action_markup);
         }
+        fragments.join(" ")
     }
 }
 
@@ -346,25 +338,25 @@ mod tests {
 
         let module = BluetoothModule::new(vec![]).unwrap();
 
-        let state = Some(BluetoothModuleState {
+        let state = BluetoothModuleState {
             controller_powered: false,
             devices: vec![],
-        });
+        };
         assert_eq!(
             module.render(&state),
             "%{F#eee8d5}%{F-} %{A1:bluetoothctl power on:}%{A}"
         );
 
-        let state = Some(BluetoothModuleState {
+        let state = BluetoothModuleState {
             controller_powered: true,
             devices: vec![],
-        });
+        };
         assert_eq!(
             module.render(&state),
             "%{F#eee8d5}%{F-} %{A1:bluetoothctl power off:}%{A}"
         );
 
-        let state = Some(BluetoothModuleState {
+        let state = BluetoothModuleState {
             controller_powered: true,
             devices: vec![
                 BluetoothDevice {
@@ -378,14 +370,11 @@ mod tests {
                     addr: macaddr::MacAddr6::from_str("02:01:03:04:05:06").unwrap(),
                 },
             ],
-        });
+        };
         assert_eq!(
             module.render(&state),
             "%{F#eee8d5}%{F-} %{A1:bluetoothctl power off:}%{A} %{A1:bluetoothctl connect 01\\:02\\:03\\:04\\:05\\:06:}D1%{A} %{A1:bluetoothctl disconnect 02\\:01\\:03\\:04\\:05\\:06:}%{u#93a1a1}%{+u}D2%{-u}%{A}"
         );
-
-        let state = None;
-        assert_eq!(module.render(&state), "%{F#cb4b16}%{F-}");
 
         env::set_var("PATH", &path_orig);
     }
