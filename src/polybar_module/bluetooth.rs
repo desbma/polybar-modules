@@ -19,6 +19,7 @@ pub struct BluetoothModule {
 struct BluetoothDevice {
     connected: bool,
     name: String,
+    addr: macaddr::MacAddr6,
 }
 
 struct BluetoothController {
@@ -130,7 +131,11 @@ impl BluetoothModule {
                 .next()
                 .ok_or_else(|| anyhow::anyhow!("Unable to probe device connected state"))?
                 == "yes";
-            let device = BluetoothDevice { connected, name };
+            let device = BluetoothDevice {
+                connected,
+                name,
+                addr,
+            };
 
             log::debug!("New known device ({}): {:?}", addr, device);
             devices.insert(addr, device);
@@ -211,7 +216,13 @@ impl RenderablePolybarModule for BluetoothModule {
                             if status { "" } else { "dis" }
                         );
 
-                        need_render = true;
+                        match self.devices.get_mut(&addr) {
+                            Some(d) => {
+                                d.connected = status;
+                                need_render = true;
+                            }
+                            None => log::warn!("Ignoring event for unknown device {}", addr),
+                        }
                     } else {
                         log::debug!("Ignored line: {:?}", line);
                     }
@@ -237,18 +248,27 @@ impl RenderablePolybarModule for BluetoothModule {
                     "{} {}",
                     markup::style("", Some(theme::Color::MainIcon), None, None, None),
                     if state.controller_powered {
-                        ""
+                        markup::action(
+                            "",
+                            markup::PolybarAction {
+                                type_: markup::PolybarActionType::ClickLeft,
+                                command: "bluetoothctl power off".to_string(),
+                            },
+                        )
                     } else {
-                        ""
+                        markup::action(
+                            "",
+                            markup::PolybarAction {
+                                type_: markup::PolybarActionType::ClickLeft,
+                                command: "bluetoothctl power on".to_string(),
+                            },
+                        )
                     },
                 )];
                 for device in &state.devices {
-                    fragments.push(markup::style(
-                        &format!(
-                            "{}{}",
-                            if device.connected { "" } else { "" },
-                            theme::ellipsis(&theme::shorten_model_name(&device.name), Some(4))
-                        ),
+                    let name = theme::ellipsis(&theme::shorten_model_name(&device.name), Some(4));
+                    let device_markup = markup::style(
+                        &format!("{}{}", if device.connected { "" } else { "" }, name),
                         None,
                         if device.connected {
                             Some(theme::Color::Foreground)
@@ -257,7 +277,19 @@ impl RenderablePolybarModule for BluetoothModule {
                         },
                         None,
                         None,
-                    ));
+                    );
+                    let action_markup = markup::action(
+                        &device_markup,
+                        markup::PolybarAction {
+                            type_: markup::PolybarActionType::ClickLeft,
+                            command: format!(
+                                "bluetoothctl {}connect {}",
+                                if device.connected { "dis" } else { "" },
+                                device.addr
+                            ),
+                        },
+                    );
+                    fragments.push(action_markup);
                 }
                 fragments.join(" ")
             }
@@ -318,13 +350,19 @@ mod tests {
             controller_powered: false,
             devices: vec![],
         });
-        assert_eq!(module.render(&state), "%{F#eee8d5}%{F-} ");
+        assert_eq!(
+            module.render(&state),
+            "%{F#eee8d5}%{F-} %{A1:bluetoothctl power on:}%{A}"
+        );
 
         let state = Some(BluetoothModuleState {
             controller_powered: true,
             devices: vec![],
         });
-        assert_eq!(module.render(&state), "%{F#eee8d5}%{F-} ");
+        assert_eq!(
+            module.render(&state),
+            "%{F#eee8d5}%{F-} %{A1:bluetoothctl power off:}%{A}"
+        );
 
         let state = Some(BluetoothModuleState {
             controller_powered: true,
@@ -332,16 +370,18 @@ mod tests {
                 BluetoothDevice {
                     connected: false,
                     name: "D1".to_string(),
+                    addr: macaddr::MacAddr6::from_str("01:02:03:04:05:06").unwrap(),
                 },
                 BluetoothDevice {
                     connected: true,
                     name: "D2".to_string(),
+                    addr: macaddr::MacAddr6::from_str("02:01:03:04:05:06").unwrap(),
                 },
             ],
         });
         assert_eq!(
             module.render(&state),
-            "%{F#eee8d5}%{F-}  D1 %{u#93a1a1}%{+u}D2%{-u}"
+            "%{F#eee8d5}%{F-} %{A1:bluetoothctl power off:}%{A} %{A1:bluetoothctl connect 01\\:02\\:03\\:04\\:05\\:06:}D1%{A} %{A1:bluetoothctl disconnect 02\\:01\\:03\\:04\\:05\\:06:}%{u#93a1a1}%{+u}D2%{-u}%{A}"
         );
 
         let state = None;

@@ -11,7 +11,7 @@ Rewrite of my personal Python [Polybar](https://polybar.github.io/) modules as a
 - [x] Debian updates
 - [x] Screen autolock status & control
 - [x] Mouse battery status
-- [ ] Bluetooth devices status & control
+- [x] Bluetooth devices status & control
 - [x] Pulse audio input/output device status & control
 - [x] Nvidia GPU status
 - [x] Low bandwidth button
