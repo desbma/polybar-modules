@@ -19,6 +19,7 @@ pub mod pulseaudio;
 pub mod syncthing;
 pub mod taskwarrior;
 pub mod wttr;
+pub mod xmonad;
 
 pub enum PolybarModule {
     ArchUpdates(arch_updates::ArchUpdatesModule),
@@ -35,6 +36,7 @@ pub enum PolybarModule {
     Syncthing(syncthing::SyncthingModule),
     Taskwarrior(taskwarrior::TaskwarriorModule),
     Wttr(wttr::WttrModule),
+    Xmonad(xmonad::XmonadModule),
 }
 
 #[derive(Clone, Debug, PartialEq)]

@@ -108,6 +108,10 @@ fn main() {
         PolybarModuleName::wttr { location } => {
             polybar_module::PolybarModule::Wttr(polybar_module::wttr::WttrModule::new(location))
         }
+        PolybarModuleName::xmonad => polybar_module::PolybarModule::Xmonad(
+            polybar_module::xmonad::XmonadModule::new()
+                .expect("Failed to initialize Xmonad module"),
+        ),
     };
 
     // Update/render loop, dynamic dispatch sadness, sadly https://crates.io/crates/enum_dispatch does not work here
@@ -126,6 +130,7 @@ fn main() {
         polybar_module::PolybarModule::Syncthing(module) => render_loop(module),
         polybar_module::PolybarModule::Taskwarrior(module) => render_loop(module),
         polybar_module::PolybarModule::Wttr(module) => render_loop(module),
+        polybar_module::PolybarModule::Xmonad(module) => render_loop(module),
     };
 }
 

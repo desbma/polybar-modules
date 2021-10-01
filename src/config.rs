@@ -35,6 +35,8 @@ pub enum PolybarModuleName {
     taskwarrior { max_len: Option<usize> },
     #[structopt(about = "Start weather module")]
     wttr { location: Option<String> },
+    #[structopt(about = "Start Xmonad module")]
+    xmonad,
 }
 
 #[derive(Debug, StructOpt)]
