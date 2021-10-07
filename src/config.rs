@@ -15,6 +15,8 @@ pub enum PolybarModuleName {
     bluetooth {
         device_whitelist_addrs: Vec<macaddr::MacAddr6>,
     },
+    #[structopt(about = "Start CPU frequency module")]
+    cpu_freq,
     #[structopt(about = "Start Debian update module")]
     debian_updates,
     #[structopt(about = "Start Nvidia GPU module")]

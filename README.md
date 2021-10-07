@@ -9,6 +9,7 @@ Rewrite of my personal Python [Polybar](https://polybar.github.io/) modules (and
 
 - [x] Arch Linux updates
 - [x] Bluetooth devices status & control
+- [x] CPU frequency
 - [x] Debian updates
 - [ ] ~~i3 layout status & control~~ I'm now using Xmonad instead
 - [x] Low bandwidth button

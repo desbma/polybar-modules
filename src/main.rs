@@ -39,6 +39,10 @@ fn main() {
             polybar_module::bluetooth::BluetoothModule::new(device_whitelist_addrs)
                 .expect("Failed to initialize bluetooth module"),
         ),
+        PolybarModuleName::cpu_freq => polybar_module::PolybarModule::CpuFreq(
+            polybar_module::cpu_freq::CpuFreqModule::new()
+                .expect("Failed to initialize CPU frequency module"),
+        ),
         PolybarModuleName::debian_updates => polybar_module::PolybarModule::DebianUpdates(
             polybar_module::debian_updates::DebianUpdatesModule::new()
                 .expect("Failed to initialize Debian updates module"),
@@ -120,6 +124,7 @@ fn main() {
         polybar_module::PolybarModule::Autolock(module) => render_loop(module),
         polybar_module::PolybarModule::BatteryMouse(module) => render_loop(module),
         polybar_module::PolybarModule::Bluetooth(module) => render_loop(module),
+        polybar_module::PolybarModule::CpuFreq(module) => render_loop(module),
         polybar_module::PolybarModule::DebianUpdates(module) => render_loop(module),
         polybar_module::PolybarModule::GpuNvidia(module) => render_loop(module),
         polybar_module::PolybarModule::InternetBandwidth(module) => render_loop(module),

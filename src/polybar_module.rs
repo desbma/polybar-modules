@@ -9,6 +9,7 @@ pub mod arch_updates;
 pub mod autolock;
 pub mod battery_mouse;
 pub mod bluetooth;
+pub mod cpu_freq;
 pub mod debian_updates;
 pub mod gpu_nvidia;
 pub mod internet_bandwidth;
@@ -26,6 +27,7 @@ pub enum PolybarModule {
     Autolock(autolock::AutolockModule),
     BatteryMouse(battery_mouse::BatteryMouseModule),
     Bluetooth(bluetooth::BluetoothModule),
+    CpuFreq(cpu_freq::CpuFreqModule),
     DebianUpdates(debian_updates::DebianUpdatesModule),
     GpuNvidia(gpu_nvidia::GpuNvidiaModule),
     InternetBandwidth(internet_bandwidth::InternetBandwidthModule),
