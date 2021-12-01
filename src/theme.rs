@@ -17,7 +17,7 @@ pub fn ellipsis(s: &str, max_len: Option<usize>) -> String {
             if s.len() > max_len {
                 let mut s2: String = s.trim_end().to_string();
                 if s2.len() > max_len {
-                    s2.truncate(max_len - 1);
+                    s2 = s2.chars().take(max_len - 1).collect();
                     s2.push('…');
                 }
                 s2
@@ -73,6 +73,7 @@ mod tests {
         assert_eq!(ellipsis("blah blah blah!", Some(14)), "blah blah bla…");
         assert_eq!(ellipsis("blah blah blah ", Some(14)), "blah blah blah");
         assert_eq!(ellipsis("blah blah bla h", Some(14)), "blah blah bla…");
+        assert_eq!(ellipsis("éééé", Some(2)), "é…");
     }
 
     #[test]
