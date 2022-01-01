@@ -52,7 +52,7 @@ pub struct PolybarAction {
 }
 
 pub fn action(inner: &str, action: PolybarAction) -> String {
-    let cmd = action.command.replace(":", "\\:");
+    let cmd = action.command.replace(':', "\\:");
     format!("%{{A{}:{}:}}{}%{{A}}", action.type_ as u8, cmd, inner)
 }
 
