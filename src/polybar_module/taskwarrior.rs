@@ -90,10 +90,14 @@ impl TaskwarriorModule {
         // Parse output
         let output = String::from_utf8_lossy(&output.stdout);
         let mut output_tokens = output.trim().splitn(2, ' ');
-        let next_task_urgency = output_tokens.next().unwrap().parse()?;
+        let parse_err_str = "Failed to parse task output";
+        let next_task_urgency = output_tokens
+            .next()
+            .ok_or_else(|| anyhow::anyhow!(parse_err_str))?
+            .parse()?;
         let next_task = output_tokens
             .next()
-            .ok_or_else(|| anyhow::anyhow!("Failed to parse task output"))?
+            .ok_or_else(|| anyhow::anyhow!(parse_err_str))?
             .parse()?;
 
         // Run task

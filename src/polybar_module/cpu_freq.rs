@@ -22,47 +22,51 @@ pub struct CpuFreqModuleState {
 
 impl CpuFreqModule {
     pub fn new() -> anyhow::Result<CpuFreqModule> {
-        let dirs: Vec<PathBuf> = glob::glob("/sys/devices/system/cpu/cpu*/cpufreq/")?
-            .flatten()
-            .collect();
+        let dirs: Vec<PathBuf> =
+            glob::glob("/sys/devices/system/cpu/cpu*/cpufreq/")?.collect::<Result<_, _>>()?;
         log::debug!("{} CPUs", dirs.len());
 
         let freq_files: Vec<File> = dirs
             .iter()
             .map(|p| p.join("scaling_cur_freq"))
             .map(File::open)
-            .flatten()
-            .collect();
+            .collect::<Result<_, _>>()?;
         assert_eq!(dirs.len(), freq_files.len());
 
         let freq_min: u32 = dirs
             .iter()
             .map(|p| p.join("scaling_min_freq"))
             .map(File::open)
-            .flatten()
+            .collect::<Result<Vec<_>, _>>()?
+            .into_iter()
             .map(|mut f| -> std::io::Result<String> {
                 let mut s = String::new();
                 f.read_to_string(&mut s)?;
                 Ok(s)
             })
-            .flatten()
+            .collect::<Result<Vec<_>, _>>()?
+            .into_iter()
             .map(|s| s.trim_end().parse::<u32>())
-            .flatten()
+            .collect::<Result<Vec<_>, _>>()?
+            .into_iter()
             .min()
             .ok_or_else(|| anyhow::anyhow!("Unable to read minimum CPU frequency"))?;
         let freq_max: u32 = dirs
             .iter()
             .map(|p| p.join("scaling_max_freq"))
             .map(File::open)
-            .flatten()
+            .collect::<Result<Vec<_>, _>>()?
+            .into_iter()
             .map(|mut f| -> std::io::Result<String> {
                 let mut s = String::new();
                 f.read_to_string(&mut s)?;
                 Ok(s)
             })
-            .flatten()
+            .collect::<Result<Vec<_>, _>>()?
+            .into_iter()
             .map(|s| s.trim_end().parse::<u32>())
-            .flatten()
+            .collect::<Result<Vec<_>, _>>()?
+            .into_iter()
             .max()
             .ok_or_else(|| anyhow::anyhow!("Unable to read maximum CPU frequency"))?;
         log::debug!("Frequency range: [{}, {}]", freq_min, freq_max);
@@ -83,9 +87,11 @@ impl CpuFreqModule {
                 f.seek(SeekFrom::Start(0))?;
                 Ok(s)
             })
-            .flatten()
+            .collect::<Result<Vec<_>, _>>()?
+            .into_iter()
             .map(|s| s.trim_end().parse::<u32>())
-            .flatten()
+            .collect::<Result<Vec<_>, _>>()?
+            .into_iter()
             .collect();
         let min_freq: u32 = *freqs
             .iter()

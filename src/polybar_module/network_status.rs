@@ -35,7 +35,7 @@ impl NetworkStatusModule {
     pub fn new(cfg: config::NetworkStatusModuleConfig) -> anyhow::Result<NetworkStatusModule> {
         let env = PolybarModuleEnv::new();
         let mut ping_childs = Vec::with_capacity(cfg.hosts.len());
-        let poller = mio::Poll::new().unwrap();
+        let poller = mio::Poll::new()?;
         let poller_registry = poller.registry();
         for (i, host) in cfg.hosts.iter().enumerate() {
             // Start ping process & register poller event source

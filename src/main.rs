@@ -1,4 +1,5 @@
 #![feature(hash_drain_filter)]
+use anyhow::Context;
 use config::PolybarModuleName;
 use structopt::StructOpt;
 
@@ -7,10 +8,12 @@ mod markup;
 mod polybar_module;
 mod theme;
 
-fn main() {
+fn main() -> anyhow::Result<()> {
     // Init logger
     if atty::is(atty::Stream::Stdout) {
-        simple_logger::SimpleLogger::new().init().unwrap();
+        simple_logger::SimpleLogger::new()
+            .init()
+            .context("Failed to init logger")?;
     }
 
     // Parse command line args
@@ -24,11 +27,11 @@ fn main() {
     let module: polybar_module::PolybarModule = match cl_opts.module {
         PolybarModuleName::arch_updates => polybar_module::PolybarModule::ArchUpdates(
             polybar_module::arch_updates::ArchUpdatesModule::new()
-                .expect("Failed to initialize Arch updates module"),
+                .context("Failed to initialize Arch updates module")?,
         ),
         PolybarModuleName::autolock => polybar_module::PolybarModule::Autolock(
             polybar_module::autolock::AutolockModule::new()
-                .expect("Failed to initialize autolock module"),
+                .context("Failed to initialize autolock module")?,
         ),
         PolybarModuleName::battery_mouse => polybar_module::PolybarModule::BatteryMouse(
             polybar_module::battery_mouse::BatteryMouseModule::new(),
@@ -37,15 +40,15 @@ fn main() {
             device_whitelist_addrs,
         } => polybar_module::PolybarModule::Bluetooth(
             polybar_module::bluetooth::BluetoothModule::new(device_whitelist_addrs)
-                .expect("Failed to initialize bluetooth module"),
+                .context("Failed to initialize bluetooth module")?,
         ),
         PolybarModuleName::cpu_freq => polybar_module::PolybarModule::CpuFreq(
             polybar_module::cpu_freq::CpuFreqModule::new()
-                .expect("Failed to initialize CPU frequency module"),
+                .context("Failed to initialize CPU frequency module")?,
         ),
         PolybarModuleName::debian_updates => polybar_module::PolybarModule::DebianUpdates(
             polybar_module::debian_updates::DebianUpdatesModule::new()
-                .expect("Failed to initialize Debian updates module"),
+                .context("Failed to initialize Debian updates module")?,
         ),
         PolybarModuleName::gpu_nvidia => polybar_module::PolybarModule::GpuNvidia(
             polybar_module::gpu_nvidia::GpuNvidiaModule::new(),
@@ -63,7 +66,7 @@ fn main() {
                     c.market
                         .ok_or_else(|| anyhow::anyhow!("Missing 'market' config section"))
                 })
-                .expect("Unable to get market module config from config file");
+                .context("Unable to get market module config from config file")?;
             polybar_module::PolybarModule::Market(polybar_module::market::MarketModule::new(
                 market_cfg,
             ))
@@ -78,43 +81,43 @@ fn main() {
                     c.network_status
                         .ok_or_else(|| anyhow::anyhow!("Missing 'network_status' config section"))
                 })
-                .expect("Unable to get network status module config from config file");
+                .context("Unable to get network status module config from config file")?;
             polybar_module::PolybarModule::NetworkStatus(
                 polybar_module::network_status::NetworkStatusModule::new(network_status_cfg)
-                    .expect("Failed to initialize network status module"),
+                    .context("Failed to initialize network status module")?,
             )
         }
         PolybarModuleName::progressbar_server { max_len } => {
             polybar_module::PolybarModule::ProgressBarServer(
                 polybar_module::progressbar_server::ProgressBarServerModule::new(max_len)
-                    .expect("Failed to initialize progress bar server module"),
+                    .context("Failed to initialize progress bar server module")?,
             )
         }
         PolybarModuleName::pulseaudio => polybar_module::PolybarModule::PulseAudio(
             polybar_module::pulseaudio::PulseAudioModule::new()
-                .expect("Failed to initialize Pulseaudio module"),
+                .context("Failed to initialize Pulseaudio module")?,
         ),
         PolybarModuleName::syncthing => {
             let xdg_dirs = xdg::BaseDirectories::with_prefix("syncthing")
-                .expect("Unable fo find Synthing config directory");
+                .context("Unable fo find Synthing config directory")?;
             let st_config_filepath = xdg_dirs
                 .find_config_file("config.xml")
-                .expect("Unable fo find Synthing config file");
+                .context("Unable fo find Synthing config file")?;
             polybar_module::PolybarModule::Syncthing(
                 polybar_module::syncthing::SyncthingModule::new(&st_config_filepath)
-                    .expect("Failed to initialize Syncthing module"),
+                    .context("Failed to initialize Syncthing module")?,
             )
         }
         PolybarModuleName::taskwarrior { max_len } => polybar_module::PolybarModule::Taskwarrior(
             polybar_module::taskwarrior::TaskwarriorModule::new(max_len)
-                .expect("Failed to initialize Taskwarrior module"),
+                .context("Failed to initialize Taskwarrior module")?,
         ),
         PolybarModuleName::wttr { location } => {
             polybar_module::PolybarModule::Wttr(polybar_module::wttr::WttrModule::new(location))
         }
         PolybarModuleName::xmonad => polybar_module::PolybarModule::Xmonad(
             polybar_module::xmonad::XmonadModule::new()
-                .expect("Failed to initialize Xmonad module"),
+                .context("Failed to initialize Xmonad module")?,
         ),
     };
 
@@ -137,6 +140,8 @@ fn main() {
         polybar_module::PolybarModule::Wttr(module) => render_loop(module),
         polybar_module::PolybarModule::Xmonad(module) => render_loop(module),
     };
+
+    Ok(())
 }
 
 fn render_loop<T>(mut module: T)

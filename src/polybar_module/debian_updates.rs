@@ -59,8 +59,12 @@ impl DebianUpdatesModule {
         let updates: Vec<&str> = output_str
             .lines()
             .filter(|l| l.contains('['))
-            .map(|l| l.split('/').next().unwrap())
-            .collect();
+            .map(|l| {
+                l.split('/')
+                    .next()
+                    .ok_or_else(|| anyhow::anyhow!("Failed to parse apt output"))
+            })
+            .collect::<Result<_, _>>()?;
 
         let security_update_count = if !updates.is_empty() {
             // Run debsecan

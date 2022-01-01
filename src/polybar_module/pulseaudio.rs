@@ -57,21 +57,30 @@ impl PulseAudioModule {
         }
 
         // Parse output
-        let mut output_lines = output.stdout.lines().map(|l| l.unwrap().trim().to_owned());
+        let mut output_lines = output
+            .stdout
+            .lines()
+            .collect::<Result<Vec<_>, _>>()?
+            .into_iter()
+            .map(|l| l.trim().to_owned());
         let mut sources = Vec::new();
         let parse_err_str = "Failed to parse pactl output";
         loop {
             match output_lines.find(|l| l.starts_with("Source #")) {
                 None => break,
                 Some(source_line) => {
-                    let id = source_line.rsplit('#').next().unwrap().parse().unwrap();
+                    let id = source_line
+                        .rsplit('#')
+                        .next()
+                        .ok_or_else(|| anyhow::anyhow!(parse_err_str))?
+                        .parse()?;
                     let running = output_lines
                         .find(|l| l.starts_with("State: "))
                         .ok_or_else(|| anyhow::anyhow!(parse_err_str))?
                         .ends_with("RUNNING");
                     if !output_lines
                         .find(|l| l.starts_with("device.class = "))
-                        .unwrap()
+                        .ok_or_else(|| anyhow::anyhow!(parse_err_str))?
                         .ends_with("\"sound\"")
                     {
                         // Not a real device
@@ -106,20 +115,29 @@ impl PulseAudioModule {
         }
 
         // Parse output
-        let mut output_lines = output.stdout.lines().map(|l| l.unwrap().trim().to_owned());
+        let mut output_lines = output
+            .stdout
+            .lines()
+            .collect::<Result<Vec<_>, _>>()?
+            .into_iter()
+            .map(|l| l.trim().to_owned());
         let mut sinks = Vec::new();
         loop {
             match output_lines.find(|l| l.starts_with("Sink #")) {
                 None => break,
                 Some(sink_line) => {
-                    let id = sink_line.rsplit('#').next().unwrap().parse().unwrap();
+                    let id = sink_line
+                        .rsplit('#')
+                        .next()
+                        .ok_or_else(|| anyhow::anyhow!(parse_err_str))?
+                        .parse()?;
                     let running = output_lines
                         .find(|l| l.starts_with("State: "))
                         .ok_or_else(|| anyhow::anyhow!(parse_err_str))?
                         .ends_with("RUNNING");
                     if !output_lines
                         .find(|l| l.starts_with("device.class = "))
-                        .unwrap()
+                        .ok_or_else(|| anyhow::anyhow!(parse_err_str))?
                         .ends_with("\"sound\"")
                     {
                         // Not a real device

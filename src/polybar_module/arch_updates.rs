@@ -39,13 +39,26 @@ impl ArchUpdatesModule {
         let output_str = String::from_utf8_lossy(&output.stdout);
         let repo_updates: Vec<String> = output_str
             .lines()
-            .map(|l| l.split(' ').next().unwrap().to_string())
-            .collect();
+            .map(|l| {
+                l.split(' ')
+                    .next()
+                    .ok_or_else(|| anyhow::anyhow!("Failed to parse checkupdates output"))
+                    .map(|s| s.to_string())
+            })
+            .collect::<Result<Vec<String>, _>>()?;
 
         let repo_security_update_count = if !repo_updates.is_empty() {
             // Run arch-audit
             let output = Command::new("arch-audit")
-                .args(&["-u", "-b", db_dir.to_str().unwrap(), "-f", "%n"])
+                .args(&[
+                    "-u",
+                    "-b",
+                    db_dir
+                        .to_str()
+                        .ok_or_else(|| anyhow::anyhow!("Invalid database directory"))?,
+                    "-f",
+                    "%n",
+                ])
                 .env("TERM", "xterm") // workaround arch-audit bug
                 .stderr(Stdio::null())
                 .output()?;

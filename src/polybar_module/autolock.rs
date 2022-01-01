@@ -34,7 +34,13 @@ impl AutolockModule {
 
         // Run xidlehook-client
         let output = Command::new("xidlehook-client")
-            .args(&["--socket", socket_filepath.to_str().unwrap(), "query"])
+            .args(&[
+                "--socket",
+                socket_filepath
+                    .to_str()
+                    .ok_or_else(|| anyhow::anyhow!("Invalid socket filepath"))?,
+                "query",
+            ])
             .stderr(Stdio::null())
             .output()?;
         if !output.status.success() {
