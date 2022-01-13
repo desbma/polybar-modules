@@ -120,7 +120,7 @@ impl ProgressBarServerModule {
         assert!(len >= 1);
         assert!(progress <= 100);
         if len == 1 {
-            RAMP_ICONS[progress as usize / (100 / (RAMP_ICONS.len() -1))].to_string()
+            RAMP_ICONS[progress as usize / (100 / (RAMP_ICONS.len() - 1))].to_string()
         } else {
             let progress_chars = len * progress as usize / 100;
             let remaining_chars = len - progress_chars;
@@ -239,7 +239,9 @@ mod tests {
         let state = Some(ProgressBarServerModuleState { progress: vec![30] });
         assert_eq!(module.render(&state), "%{F#93a1a1}%{F-} 1    ");
 
-        let state = Some(ProgressBarServerModuleState { progress: vec![100] });
+        let state = Some(ProgressBarServerModuleState {
+            progress: vec![100],
+        });
         assert_eq!(module.render(&state), "%{F#93a1a1}%{F-} 1 ■■■");
 
         let state = Some(ProgressBarServerModuleState {
