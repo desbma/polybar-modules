@@ -1,5 +1,5 @@
 use std::cmp::max;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::Path;
 use std::thread::sleep;
@@ -70,8 +70,39 @@ struct SyncthingResponseDbCompletion {
     need_deletes: u64,
 }
 
+#[derive(Debug, serde::Deserialize)]
+pub struct SyncthingDeviceStats {
+    pub address: String,
+    pub at: String,
+    #[serde(rename = "clientVersion")]
+    pub client_version: String,
+    pub connected: bool,
+    pub crypto: String,
+    #[serde(rename = "inBytesTotal")]
+    pub in_bytes_total: u64,
+    #[serde(rename = "outBytesTotal")]
+    pub out_bytes_total: u64,
+    pub paused: bool,
+    #[serde(rename = "type")]
+    pub device_type: String,
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub struct SyncthingDeviceTotalStats {
+    pub at: String,
+    #[serde(rename = "inBytesTotal")]
+    pub in_bytes_total: u64,
+    #[serde(rename = "outBytesTotal")]
+    pub out_bytes_total: u64,
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub struct SyncthingResponseSystemConnections {
+    pub total: SyncthingDeviceTotalStats,
+    pub connections: HashMap<String, SyncthingDeviceStats>,
+}
+
 // Use structs from the syncthing crate, because a nice guy made all the grunt work
-type SyncthingResponseSystemConnections = syncthing::rest::system::connections::Connections;
 type SyncthingResponseEvent = syncthing::rest::events::Event;
 
 const REST_EVENT_TIMEOUT: Duration = Duration::from_secs(60 * 60);
