@@ -88,8 +88,12 @@ impl ProgressBarServerModule {
                     let mut buffer = [0; 4096];
                     let read_count = client_stream.read(&mut buffer)?;
                     if read_count > 0 {
-                        self.cur_progress
-                            .insert(token, buffer[read_count - 1] as u32);
+                        let progress = buffer[read_count - 1] as u32;
+                        if progress <= 100 {
+                            self.cur_progress.insert(token, progress);
+                        } else {
+                            log::warn!("Received invalid progress {:?}", progress);
+                        }
                     } else {
                         client_disconnected = true;
                     }
