@@ -22,6 +22,7 @@ pub struct NetworkStatusModule {
     poller_events: mio::Events,
     host_state_history: Vec<bounded_vec_deque::BoundedVecDeque<bool>>,
     ping_child_deaths: HashMap<usize, Instant>,
+    ping_child_last_output: HashMap<usize, Instant>,
     system: Box<System>,
 }
 
@@ -37,11 +38,13 @@ impl NetworkStatusModule {
         let mut ping_childs = Vec::with_capacity(cfg.hosts.len());
         let poller = mio::Poll::new()?;
         let poller_registry = poller.registry();
+        let now = Instant::now();
+        let mut ping_child_last_output = HashMap::new();
         for (i, host) in cfg.hosts.iter().enumerate() {
             // Start ping process & register poller event source
             let child = Self::setup_ping_child(&host.host, i, poller_registry, &env)?;
-
             ping_childs.push(child);
+            ping_child_last_output.insert(i, now);
         }
         let poller_events = mio::Events::with_capacity(ping_childs.len());
 
@@ -64,6 +67,7 @@ impl NetworkStatusModule {
             poller_events,
             host_state_history,
             ping_child_deaths,
+            ping_child_last_output,
             system,
         })
     }
@@ -106,7 +110,7 @@ impl NetworkStatusModule {
     fn try_update(&mut self) -> anyhow::Result<NetworkStatusModuleState> {
         let now = Instant::now();
         let poller_registry = self.poller.registry();
-
+        let ping_period = Self::get_ping_period(&self.env);
         let mut buffer = [0; 65536];
 
         for event in self.poller_events.iter().filter(|e| e.is_readable()) {
@@ -123,7 +127,20 @@ impl NetworkStatusModule {
             // Parse ping lines
             for line in read_str.lines() {
                 self.host_state_history[idx].push_back(line.ends_with(" ms"));
+                self.ping_child_last_output.insert(idx, now);
             }
+        }
+
+        // Kill processes with no output for too long
+        for (i, _ts) in self
+            .ping_child_last_output
+            .drain_filter(|_i, ts| now.saturating_duration_since(*ts) > 2 * ping_period)
+        {
+            log::debug!(
+                "ping process for {:?} had no output for a while, killing it",
+                self.cfg.hosts[i].host
+            );
+            let _ = self.ping_childs[i].kill(); // ignore error, it can already be dead
         }
 
         // Build state
@@ -161,7 +178,7 @@ impl NetworkStatusModule {
                 log::debug!("ping process for {:?} has died", self.cfg.hosts[i].host);
 
                 // Keep death timestamp to avoid respawning too fast
-                self.ping_child_deaths.insert(i, Instant::now());
+                self.ping_child_deaths.insert(i, now);
 
                 // Deregister source
                 poller_registry.deregister(&mut mio::unix::SourceFd(
@@ -174,14 +191,14 @@ impl NetworkStatusModule {
         }
 
         // Restart new processes if needed
-        let ping_period = Self::get_ping_period(&self.env);
         for (i, _ts) in self
             .ping_child_deaths
-            .drain_filter(|_i, ts| now >= *ts + ping_period)
+            .drain_filter(|_i, ts| now.saturating_duration_since(*ts) > ping_period)
         {
             // Setup new child in its place
             self.ping_childs[i] =
                 Self::setup_ping_child(&self.cfg.hosts[i].host, i, poller_registry, &self.env)?;
+            self.ping_child_last_output.insert(i, now);
         }
 
         Ok(NetworkStatusModuleState {
