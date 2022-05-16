@@ -1,3 +1,4 @@
+use std::fmt::Write;
 use std::process::{Command, Stdio};
 
 use crate::markup;
@@ -142,7 +143,7 @@ impl RenderablePolybarModule for ArchUpdatesModule {
                         );
                     }
                     if state.aur_update_count > 0 {
-                        r += &format!("+{}", state.aur_update_count);
+                        write!(r, "+{}", state.aur_update_count).unwrap();
                     }
                     r
                 }
