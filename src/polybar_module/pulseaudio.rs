@@ -80,8 +80,8 @@ impl PulseAudioModule {
                         .ends_with("RUNNING");
                     if !output_lines
                         .find(|l| l.starts_with("device.class = "))
-                        .ok_or_else(|| anyhow::anyhow!(parse_err_str))?
-                        .ends_with("\"sound\"")
+                        .map(|l| l.ends_with("\"sound\""))
+                        .unwrap_or(false)
                     {
                         // Not a real device
                         continue;
@@ -137,8 +137,8 @@ impl PulseAudioModule {
                         .ends_with("RUNNING");
                     if !output_lines
                         .find(|l| l.starts_with("device.class = "))
-                        .ok_or_else(|| anyhow::anyhow!(parse_err_str))?
-                        .ends_with("\"sound\"")
+                        .map(|l| l.ends_with("\"sound\""))
+                        .unwrap_or(false)
                     {
                         // Not a real device
                         continue;
