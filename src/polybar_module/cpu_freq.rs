@@ -13,7 +13,7 @@ pub struct CpuFreqModule {
     freq_files: Vec<File>,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct CpuFreqModuleState {
     min_freq: u32,
     max_freq: u32,

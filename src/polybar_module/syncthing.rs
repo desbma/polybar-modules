@@ -16,7 +16,7 @@ pub struct SyncthingModule {
     folders_syncing_down: HashSet<String>,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SyncthingModuleState {
     folder_count: usize,
     device_connected_count: usize,

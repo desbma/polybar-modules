@@ -9,7 +9,7 @@ pub struct DebianUpdatesModule {
     debian_relase_codename: String,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct DebianUpdatesModuleState {
     update_count: usize,
     security_update_count: usize,

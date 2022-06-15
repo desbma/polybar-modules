@@ -12,7 +12,7 @@ pub struct AutolockModule {
     signals: signal_hook::iterator::Signals,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct AutolockModuleState {
     enabled: bool,
     socket_filepath: PathBuf,

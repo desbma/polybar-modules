@@ -41,7 +41,7 @@ pub enum PolybarModule {
     Xmonad(xmonad::XmonadModule),
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum RuntimeMode {
     Unrestricted,
     LowNetworkBandwith,

@@ -10,7 +10,7 @@ use crate::theme;
 
 pub struct BatteryMouseModule {}
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct BatteryMouseModuleState {
     levels: Vec<(String, Option<u8>)>,
 }

@@ -8,7 +8,7 @@ use crate::theme;
 
 pub struct GpuNvidiaModule {}
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct GpuNvidiaModuleState {
     mem_used: u16,
     mem_total: u16,

@@ -10,7 +10,7 @@ pub struct ArchUpdatesModule {
     env: PolybarModuleEnv,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct ArchUpdatesModuleState {
     repo_update_count: usize,
     repo_security_update_count: usize,

@@ -10,21 +10,21 @@ pub struct PulseAudioModule {
     pactl_subscribe_child: Child,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Eq, PartialEq)]
 struct PulseAudioSource {
     id: u32,
     name: String,
     running: bool,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Eq, PartialEq)]
 struct PulseAudioSink {
     id: u32,
     name: String,
     running: bool,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct PulseAudioModuleState {
     sources: Vec<PulseAudioSource>,
     sinks: Vec<PulseAudioSink>,

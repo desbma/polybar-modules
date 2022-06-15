@@ -13,7 +13,7 @@ pub struct WttrModule {
     env: PolybarModuleEnv,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct WttrModuleState {
     sky: &'static str,
     temp: i8,

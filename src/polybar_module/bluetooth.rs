@@ -15,7 +15,7 @@ pub struct BluetoothModule {
     bluetoothctl_child: Child,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 struct BluetoothDevice {
     connected: bool,
     name: String,
@@ -27,7 +27,7 @@ struct BluetoothController {
     addr: macaddr::MacAddr6,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct BluetoothModuleState {
     controller_powered: bool,
     devices: Vec<BluetoothDevice>,

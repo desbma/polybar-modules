@@ -19,7 +19,7 @@ pub struct ProgressBarServerModule {
     cur_progress: BTreeMap<usize, u32>,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct ProgressBarServerModuleState {
     progress: Vec<u32>,
 }

@@ -26,7 +26,7 @@ pub struct NetworkStatusModule {
     system: Box<System>,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct NetworkStatusModuleState {
     reachable_hosts: Vec<bool>,
     vpn: Vec<String>,

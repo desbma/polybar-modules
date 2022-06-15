@@ -6,7 +6,7 @@ pub struct InternetBandwidthModule {
     env: PolybarModuleEnv,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct InternetBandwidthModuleState {
     mode: RuntimeMode,
 }
