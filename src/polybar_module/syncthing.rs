@@ -245,12 +245,9 @@ impl RenderablePolybarModule for SyncthingModule {
                     log::debug!("{:?}", event);
                     match event.data {
                         syncthing::rest::events::EventData::DownloadProgress(event_data) => {
-                            if event_data.is_empty() {
-                                self.folders_syncing_down.clear();
-                            } else {
-                                for folder in event_data.keys() {
-                                    self.folders_syncing_down.insert(folder.to_owned());
-                                }
+                            self.folders_syncing_down.clear();
+                            for folder in event_data.keys() {
+                                self.folders_syncing_down.insert(folder.to_owned());
                             }
                         }
                         _ => {}
