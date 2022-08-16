@@ -1,17 +1,18 @@
 use std::cmp::max;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
 use std::thread::sleep;
 use std::time::Duration;
 
 use crate::markup;
+use crate::polybar_module::syncthing_rest;
 use crate::polybar_module::RenderablePolybarModule;
 use crate::theme;
 
 pub struct SyncthingModule {
     session: reqwest::blocking::Client,
-    system_config: Option<SyncthingResponseSystemConfig>,
+    system_config: Option<syncthing_rest::SystemConfig>,
     last_event_id: u64,
     folders_syncing_down: HashSet<String>,
 }
@@ -34,76 +35,6 @@ struct SyncthingXmlConfig {
 struct SyncthingXmlConfigGui {
     apikey: String,
 }
-
-#[derive(serde::Deserialize)]
-struct SyncthingResponseSystemConfig {
-    folders: Vec<SyncthingResponseSystemConfigFolder>,
-    devices: Vec<SyncthingResponseSystemConfigDevice>,
-}
-
-#[allow(dead_code)]
-#[derive(serde::Deserialize)]
-struct SyncthingResponseSystemConfigFolder {
-    path: String,
-    id: String,
-}
-
-#[allow(dead_code)]
-#[derive(serde::Deserialize)]
-struct SyncthingResponseSystemConfigDevice {
-    name: String,
-}
-
-#[allow(dead_code)]
-#[derive(serde::Deserialize)]
-struct SyncthingResponseDbCompletion {
-    completion: f32,
-    #[serde(rename = "globalBytes")]
-    global_bytes: u64,
-    #[serde(rename = "needBytes")]
-    need_bytes: u64,
-    #[serde(rename = "globalItems")]
-    global_items: u64,
-    #[serde(rename = "needItems")]
-    need_items: u64,
-    #[serde(rename = "needDeletes")]
-    need_deletes: u64,
-}
-
-#[derive(Debug, serde::Deserialize)]
-pub struct SyncthingDeviceStats {
-    pub address: String,
-    pub at: String,
-    #[serde(rename = "clientVersion")]
-    pub client_version: String,
-    pub connected: bool,
-    pub crypto: String,
-    #[serde(rename = "inBytesTotal")]
-    pub in_bytes_total: u64,
-    #[serde(rename = "outBytesTotal")]
-    pub out_bytes_total: u64,
-    pub paused: bool,
-    #[serde(rename = "type")]
-    pub device_type: String,
-}
-
-#[derive(Debug, serde::Deserialize)]
-pub struct SyncthingDeviceTotalStats {
-    pub at: String,
-    #[serde(rename = "inBytesTotal")]
-    pub in_bytes_total: u64,
-    #[serde(rename = "outBytesTotal")]
-    pub out_bytes_total: u64,
-}
-
-#[derive(Debug, serde::Deserialize)]
-pub struct SyncthingResponseSystemConnections {
-    pub total: SyncthingDeviceTotalStats,
-    pub connections: HashMap<String, SyncthingDeviceStats>,
-}
-
-// Use structs from the syncthing crate, because a nice guy made all the grunt work
-type SyncthingResponseEvent = syncthing::rest::events::Event;
 
 const REST_EVENT_TIMEOUT: Duration = Duration::from_secs(60 * 60);
 const REST_NORMAL_TIMEOUT: Duration = Duration::from_secs(10);
@@ -146,7 +77,7 @@ impl SyncthingModule {
         };
 
         let system_connections_str = self.syncthing_rest_call("system/connections", &[])?;
-        let system_connections: SyncthingResponseSystemConnections =
+        let system_connections: syncthing_rest::SystemConnections =
             serde_json::from_str(&system_connections_str)?;
 
         let mut device_syncing_to_count = 0;
@@ -167,7 +98,7 @@ impl SyncthingModule {
                             anyhow::bail!(e);
                         }
                     };
-                let db_completion: SyncthingResponseDbCompletion =
+                let db_completion: syncthing_rest::DbCompletion =
                     serde_json::from_str(&db_completion_str)?;
                 if (db_completion.need_bytes > 0)
                     || (db_completion.need_items > 0)
@@ -191,7 +122,7 @@ impl SyncthingModule {
         })
     }
 
-    fn syncthing_events(&self, evt_types: &[&str]) -> anyhow::Result<Vec<SyncthingResponseEvent>> {
+    fn syncthing_events(&self, evt_types: &[&str]) -> anyhow::Result<Vec<syncthing_rest::Event>> {
         // See https://docs.syncthing.net/dev/events.html
         let mut url = reqwest::Url::parse("http://127.0.0.1:8384/rest/events")?;
         url.query_pairs_mut()
@@ -206,7 +137,7 @@ impl SyncthingModule {
         log::debug!("GET {:?}", url.to_string());
         let json_str = self.session.get(url).send()?.error_for_status()?.text()?;
         log::trace!("{}", json_str);
-        let events: Vec<SyncthingResponseEvent> = serde_json::from_str(&json_str)?;
+        let events: Vec<syncthing_rest::Event> = serde_json::from_str(&json_str)?;
         Ok(events)
     }
 
@@ -244,7 +175,7 @@ impl RenderablePolybarModule for SyncthingModule {
                 for event in events {
                     log::debug!("{:?}", event);
                     match event.data {
-                        syncthing::rest::events::EventData::DownloadProgress(event_data) => {
+                        syncthing_rest::EventData::DownloadProgress(event_data) => {
                             self.folders_syncing_down.clear();
                             for folder in event_data.keys() {
                                 self.folders_syncing_down.insert(folder.to_owned());

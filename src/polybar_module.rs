@@ -18,6 +18,7 @@ pub mod network_status;
 pub mod progressbar_server;
 pub mod pulseaudio;
 pub mod syncthing;
+mod syncthing_rest;
 pub mod taskwarrior;
 pub mod wttr;
 pub mod xmonad;
