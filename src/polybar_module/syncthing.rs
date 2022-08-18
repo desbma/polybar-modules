@@ -23,7 +23,7 @@ pub struct SyncthingModuleState {
     device_connected_count: usize,
     device_syncing_to_count: usize,
     folders_syncing_down_count: usize,
-    device_total_count: usize,
+    remote_device_count: usize,
 }
 
 #[derive(serde::Deserialize)]
@@ -118,7 +118,7 @@ impl SyncthingModule {
                 .count(),
             device_syncing_to_count,
             folders_syncing_down_count: self.folders_syncing_down.len(),
-            device_total_count: system_config.devices.len(),
+            remote_device_count: system_config.devices.len() - 1, // -1 to account for local device
         })
     }
 
@@ -209,7 +209,7 @@ impl RenderablePolybarModule for SyncthingModule {
                     markup::style("", Some(theme::Color::MainIcon), None, None, None),
                     state.folder_count,
                     state.device_connected_count,
-                    state.device_total_count,
+                    state.remote_device_count,
                     state.folders_syncing_down_count,
                     state.device_syncing_to_count
                 ),
@@ -241,7 +241,7 @@ mod tests {
             device_connected_count: 2,
             device_syncing_to_count: 3,
             folders_syncing_down_count: 4,
-            device_total_count: 5,
+            remote_device_count: 5,
         });
         assert_eq!(
             module.render(&state),
