@@ -3,5 +3,4 @@
 set -o pipefail
 
 cargo build --release --locked
-strip --strip-all target/release/polybar-modules
 sudo install -Dm755 -t /usr/local/bin target/release/polybar-modules

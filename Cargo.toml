@@ -4,6 +4,11 @@ version = "0.1.0"
 authors = ["desbma <desbma@users.noreply.github.com>"]
 edition = "2018"
 
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
+
 [dependencies]
 anyhow = { version = "1.0", features = ["backtrace"] }
 atty = "0.2"
