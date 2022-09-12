@@ -82,7 +82,7 @@ impl NetworkStatusModule {
 
         // Start ping process
         let child = Command::new("ping")
-            .args(&[
+            .args([
                 "-O",
                 "-W",
                 &format!("{}", ping_period_s),
@@ -158,7 +158,7 @@ impl NetworkStatusModule {
             .map(|i| i.0.to_owned())
             .collect();
         let pgrep_status = Command::new("pgrep")
-            .args(&["-x", "openvpn"])
+            .args(["-x", "openvpn"])
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null())

@@ -21,7 +21,7 @@ pub struct AutolockModuleState {
 impl AutolockModule {
     pub fn new() -> anyhow::Result<AutolockModule> {
         let xdg_dirs = xdg::BaseDirectories::new()?;
-        let signals = signal_hook::iterator::Signals::new(&[signal_hook::consts::signal::SIGUSR1])?;
+        let signals = signal_hook::iterator::Signals::new([signal_hook::consts::signal::SIGUSR1])?;
         Ok(AutolockModule { xdg_dirs, signals })
     }
 
@@ -34,7 +34,7 @@ impl AutolockModule {
 
         // Run xidlehook-client
         let output = Command::new("xidlehook-client")
-            .args(&[
+            .args([
                 "--socket",
                 socket_filepath
                     .to_str()

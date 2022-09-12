@@ -51,7 +51,7 @@ impl ArchUpdatesModule {
         let repo_security_update_count = if !repo_updates.is_empty() {
             // Run arch-audit
             let output = Command::new("arch-audit")
-                .args(&[
+                .args([
                     "-u",
                     "-b",
                     db_dir

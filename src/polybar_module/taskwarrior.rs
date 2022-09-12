@@ -29,7 +29,7 @@ impl TaskwarriorModule {
     pub fn new(max_len: Option<usize>) -> anyhow::Result<TaskwarriorModule> {
         // Run task to get data.location
         let output = Command::new("task")
-            .args(&["show", "data.location"])
+            .args(["show", "data.location"])
             .stderr(Stdio::null())
             .output()?;
         if !output.status.success() {
@@ -57,7 +57,7 @@ impl TaskwarriorModule {
 
         // Run task
         let mut args: Vec<&str> = common_task_args.to_vec();
-        args.extend(&["status:pending", "count"]);
+        args.extend(["status:pending", "count"]);
         log::debug!("task {:?}", args);
         let output = Command::new("task")
             .args(args)
@@ -72,7 +72,7 @@ impl TaskwarriorModule {
 
         // Run task
         let mut args: Vec<&str> = common_task_args.to_vec();
-        args.extend(&[
+        args.extend([
             "rc.report.next.columns:urgency,description",
             "rc.report.next.labels:",
             "limit:1",
@@ -102,7 +102,7 @@ impl TaskwarriorModule {
 
         // Run task
         let mut args: Vec<&str> = common_task_args.to_vec();
-        args.extend(&[
+        args.extend([
             "rc.report.next.columns:project",
             "rc.report.next.labels:",
             "limit:1",

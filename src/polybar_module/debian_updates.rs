@@ -21,7 +21,7 @@ impl DebianUpdatesModule {
 
         // Run lsb_release
         let output = Command::new("lsb_release")
-            .args(&["-sc"])
+            .args(["-sc"])
             .stderr(Stdio::null())
             .output()?;
         if !output.status.success() {
@@ -46,7 +46,7 @@ impl DebianUpdatesModule {
     fn try_update(&mut self) -> anyhow::Result<DebianUpdatesModuleState> {
         // Run apt
         let output = Command::new("apt")
-            .args(&["list", "--upgradable"])
+            .args(["list", "--upgradable"])
             .env("LANG", "C")
             .stderr(Stdio::null())
             .output()?;
@@ -69,7 +69,7 @@ impl DebianUpdatesModule {
         let security_update_count = if !updates.is_empty() {
             // Run debsecan
             let output = Command::new("debsecan")
-                .args(&[
+                .args([
                     "--only-fixed",
                     &format!("--suite={}", self.debian_relase_codename),
                     "--format=packages",

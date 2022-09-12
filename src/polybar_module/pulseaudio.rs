@@ -34,7 +34,7 @@ impl PulseAudioModule {
     pub fn new() -> anyhow::Result<PulseAudioModule> {
         // Pactl process to follow events
         let child = Command::new("pactl")
-            .args(&["subscribe"]) // LANG=C has no effect on this one
+            .args(["subscribe"]) // LANG=C has no effect on this one
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::null())
@@ -48,7 +48,7 @@ impl PulseAudioModule {
     fn try_update(&mut self) -> anyhow::Result<PulseAudioModuleState> {
         // Run pactl
         let output = Command::new("pactl")
-            .args(&["list", "sources"])
+            .args(["list", "sources"])
             .env("LANG", "C")
             .stderr(Stdio::null())
             .output()?;
@@ -106,7 +106,7 @@ impl PulseAudioModule {
 
         // Run pactl
         let output = Command::new("pactl")
-            .args(&["list", "sinks"])
+            .args(["list", "sinks"])
             .env("LANG", "C")
             .stderr(Stdio::null())
             .output()?;

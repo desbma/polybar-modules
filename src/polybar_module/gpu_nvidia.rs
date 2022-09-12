@@ -29,7 +29,7 @@ impl GpuNvidiaModule {
     fn try_update(&mut self) -> anyhow::Result<GpuNvidiaModuleState> {
         // Run nvidia-smi
         let output = Command::new("nvidia-smi")
-            .args(&[
+            .args([
                 "--format=csv,noheader,nounits",
                 "--query-gpu=memory.used,memory.total,clocks.current.graphics,clocks.current.memory,clocks_throttle_reasons.hw_slowdown,temperature.gpu,power.draw"
             ])
