@@ -10,27 +10,27 @@ codegen-units = 1
 strip = true
 
 [dependencies]
-anyhow = { version = "1.0", features = ["backtrace"] }
-atty = "0.2"
-bounded-vec-deque = "0.1"
-chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
-glob = "0.3"
-lazy_static = "1.4"
-log = { version = "0.4", features = ["max_level_trace", "release_max_level_info"] }
-macaddr = "1.0"
-mio = { version = "0.7", features = ["os-ext"] }
-notify = "4.0"
-quick-xml = { version = "0.22", features = [ "serialize" ] }
-regex = "1.5"
-reqwest = { version = "0.11", default-features = false, features = ["native-tls", "blocking", "gzip"] }
-serde =  { version = "1.0", features = ["derive"] }
-serde_json = { version = "1.0", default-features = false, features = ["std", "raw_value"] }
-shellexpand = "2.1"
-signal-hook = { version = "0.3", default-features = false, features = ["iterator"] }
-simple_logger = { version = "1.3", default-features = false }
-strip-ansi-escapes = "0.1"
-structopt = "0.3"
-sysinfo = { version = "0.17", default-features = false }
-tempfile = "3.2"
-toml = "0.5"
-xdg = "2.1"
+anyhow = { version = "1.0.66", default-features = false, features = ["backtrace", "std"] }
+atty = { version = "0.2.14", default-features = false }
+bounded-vec-deque = { version = "0.1.1", default-features = false }
+chrono = { version = "0.4.22", default-features = false, features = ["clock", "std"] }
+glob = { version = "0.3.0", default-features = false }
+lazy_static = { version = "1.4.0", default-features = false }
+log = { version = "0.4.17", default-features = false, features = ["max_level_trace", "release_max_level_info"] }
+macaddr = { version = "1.0.1", default-features = false, features = ["std"] }
+mio = { version = "0.7.14", default-features = false, features = ["os-ext"] }
+notify = { version = "4.0.17", default-features = false }
+quick-xml = { version = "0.26.0", default-features = false, features = ["serialize"] }
+regex = { version = "1.6.0", default-features = false, features = ["std"] }
+reqwest = { version = "0.11.1", default-features = false, features = ["native-tls", "blocking", "gzip"] }
+serde =  { version = "1.0.147", default-features = false, features = ["derive"] }
+serde_json = { version = "1.0.87", default-features = false, features = ["std", "raw_value"] }
+shellexpand = { version = "2.1.2", default-features = false }
+signal-hook = { version = "0.3.14", default-features = false, features = ["iterator"] }
+simple_logger = { version = "4.0.0", default-features = false }
+strip-ansi-escapes = { version = "0.1.1", default-features = false }
+structopt = { version = "0.3.26", default-features = false }
+sysinfo = { version = "0.17.5", default-features = false }
+tempfile = { version = "3.3.0", default-features = false }
+toml = { version = "0.5.9", default-features = false }
+xdg = { version = "2.4.1", default-features = false }
