@@ -1,5 +1,5 @@
 use std::fs::File;
-use std::io::{Read, Seek, SeekFrom};
+use std::io::{Read, Seek};
 use std::path::PathBuf;
 use std::thread::sleep;
 use std::time::Duration;
@@ -84,7 +84,7 @@ impl CpuFreqModule {
             .map(|mut f| -> std::io::Result<String> {
                 let mut s = String::new();
                 f.read_to_string(&mut s)?;
-                f.seek(SeekFrom::Start(0))?;
+                f.rewind()?;
                 Ok(s)
             })
             .collect::<Result<Vec<_>, _>>()?
