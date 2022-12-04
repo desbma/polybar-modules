@@ -57,19 +57,7 @@ fn main() -> anyhow::Result<()> {
             polybar_module::internet_bandwidth::InternetBandwidthModule::new(),
         ),
         PolybarModuleName::market => {
-            let market_cfg = cfg
-                .and_then(|c| {
-                    c.module
-                        .ok_or_else(|| anyhow::anyhow!("Missing 'module' config section"))
-                })
-                .and_then(|c| {
-                    c.market
-                        .ok_or_else(|| anyhow::anyhow!("Missing 'market' config section"))
-                })
-                .context("Unable to get market module config from config file")?;
-            polybar_module::PolybarModule::Market(polybar_module::market::MarketModule::new(
-                market_cfg,
-            ))
+            polybar_module::PolybarModule::Market(polybar_module::market::MarketModule::new())
         }
         PolybarModuleName::network_status => {
             let network_status_cfg = cfg

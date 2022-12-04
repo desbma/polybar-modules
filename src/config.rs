@@ -55,13 +55,7 @@ pub struct Config {
 
 #[derive(Debug, serde::Deserialize)]
 pub struct ModuleConfig {
-    pub market: Option<MarketModuleConfig>,
     pub network_status: Option<NetworkStatusModuleConfig>,
-}
-
-#[derive(Debug, serde::Deserialize)]
-pub struct MarketModuleConfig {
-    pub api_token: String,
 }
 
 #[derive(Debug, serde::Deserialize)]
