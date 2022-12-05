@@ -135,7 +135,7 @@ impl RenderablePolybarModule for MarketModule {
         if let Some(prev_state) = prev_state {
             sleep(match prev_state {
                 // Nominal
-                Some(_) => Duration::from_secs(60 * 30),
+                Some(_) => Duration::from_secs(60 * 5),
                 // Error occured
                 None => Duration::from_secs(5),
             });
