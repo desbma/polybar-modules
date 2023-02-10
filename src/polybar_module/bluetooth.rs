@@ -309,7 +309,7 @@ mod tests {
         paths_vec.insert(0, PathBuf::from(dir));
 
         let paths = env::join_paths(paths_vec).unwrap();
-        env::set_var("PATH", &paths);
+        env::set_var("PATH", paths);
 
         path_orig
     }
@@ -378,6 +378,6 @@ mod tests {
             "%{F#eee8d5}%{F-} %{A1:bluetoothctl power off:}%{A} %{A1:bluetoothctl connect 01\\:02\\:03\\:04\\:05\\:06:}D1%{A} %{A1:bluetoothctl disconnect 02\\:01\\:03\\:04\\:05\\:06:}%{u#93a1a1}%{+u}D2%{-u}%{A}"
         );
 
-        env::set_var("PATH", &path_orig);
+        env::set_var("PATH", path_orig);
     }
 }

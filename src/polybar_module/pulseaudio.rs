@@ -292,9 +292,9 @@ mod tests {
 
     #[test]
     fn test_abbrev() {
-        assert_eq!(PulseAudioModule::abbrev(&"111 2222".to_string(), 4), "2222");
-        assert_eq!(PulseAudioModule::abbrev(&"111 2222".to_string(), 3), "22…");
-        assert_eq!(PulseAudioModule::abbrev(&"111 2222".to_string(), 1), "2");
+        assert_eq!(PulseAudioModule::abbrev("111 2222", 4), "2222");
+        assert_eq!(PulseAudioModule::abbrev("111 2222", 3), "22…");
+        assert_eq!(PulseAudioModule::abbrev("111 2222", 1), "2");
     }
 
     #[test]
