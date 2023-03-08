@@ -5,7 +5,7 @@ use anyhow::Context;
 use chrono::Datelike;
 
 use crate::markup;
-use crate::polybar_module::{PolybarModuleEnv, RenderablePolybarModule, RuntimeMode};
+use crate::polybar_module::{NetworkMode, PolybarModuleEnv, RenderablePolybarModule};
 use crate::theme;
 
 pub struct MarketModule {
@@ -141,7 +141,7 @@ impl RenderablePolybarModule for MarketModule {
             });
         }
         loop {
-            let did_wait_mode = self.env.wait_runtime_mode(RuntimeMode::Unrestricted);
+            let did_wait_mode = self.env.wait_network_mode(NetworkMode::Unrestricted);
             match prev_state {
                 Some(None) => break,
                 None => break,

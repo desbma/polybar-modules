@@ -9,7 +9,7 @@ use sysinfo::{NetworksExt, System, SystemExt};
 
 use crate::config;
 use crate::markup;
-use crate::polybar_module::{PolybarModuleEnv, RenderablePolybarModule, RuntimeMode};
+use crate::polybar_module::{NetworkMode, PolybarModuleEnv, RenderablePolybarModule};
 use crate::theme;
 
 const PING_AVG_COUNT: usize = 3;
@@ -208,9 +208,9 @@ impl NetworkStatusModule {
     }
 
     fn get_ping_period(env: &PolybarModuleEnv) -> Duration {
-        match env.get_runtime_mode() {
-            RuntimeMode::LowNetworkBandwith => Duration::from_secs(5),
-            RuntimeMode::Unrestricted => Duration::from_secs(1),
+        match env.network_mode() {
+            NetworkMode::LowBandwith => Duration::from_secs(5),
+            NetworkMode::Unrestricted => Duration::from_secs(1),
         }
     }
 }

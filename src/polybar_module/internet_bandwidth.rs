@@ -1,5 +1,5 @@
 use crate::markup;
-use crate::polybar_module::{PolybarModuleEnv, RenderablePolybarModule, RuntimeMode};
+use crate::polybar_module::{NetworkMode, PolybarModuleEnv, RenderablePolybarModule};
 use crate::theme;
 
 pub struct InternetBandwidthModule {
@@ -8,7 +8,7 @@ pub struct InternetBandwidthModule {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct InternetBandwidthModuleState {
-    mode: RuntimeMode,
+    mode: NetworkMode,
 }
 
 impl InternetBandwidthModule {
@@ -24,29 +24,29 @@ impl RenderablePolybarModule for InternetBandwidthModule {
     fn wait_update(&mut self, prev_state: &Option<Self::State>) {
         if let Some(prev_state) = prev_state {
             let to_wait = match prev_state.mode {
-                RuntimeMode::Unrestricted => RuntimeMode::LowNetworkBandwith,
-                RuntimeMode::LowNetworkBandwith => RuntimeMode::Unrestricted,
+                NetworkMode::Unrestricted => NetworkMode::LowBandwith,
+                NetworkMode::LowBandwith => NetworkMode::Unrestricted,
             };
-            self.env.wait_runtime_mode(to_wait);
+            self.env.wait_network_mode(to_wait);
         }
     }
 
     fn update(&mut self) -> Self::State {
         Self::State {
-            mode: self.env.get_runtime_mode(),
+            mode: self.env.network_mode(),
         }
     }
 
     fn render(&self, state: &Self::State) -> String {
         match state.mode {
-            RuntimeMode::Unrestricted => markup::action(
+            NetworkMode::Unrestricted => markup::action(
                 "",
                 markup::PolybarAction {
                     type_: markup::PolybarActionType::ClickLeft,
                     command: format!("touch {}", self.env.low_bw_filepath.to_str().unwrap()),
                 },
             ),
-            RuntimeMode::LowNetworkBandwith => markup::action(
+            NetworkMode::LowBandwith => markup::action(
                 &markup::style("", None, Some(theme::Color::Notice), None, None),
                 markup::PolybarAction {
                     type_: markup::PolybarActionType::ClickLeft,
@@ -76,7 +76,7 @@ mod tests {
         let module = InternetBandwidthModule::new();
 
         let state = InternetBandwidthModuleState {
-            mode: RuntimeMode::Unrestricted,
+            mode: NetworkMode::Unrestricted,
         };
         assert_eq!(
             module.render(&state),
@@ -87,7 +87,7 @@ mod tests {
         );
 
         let state = InternetBandwidthModuleState {
-            mode: RuntimeMode::LowNetworkBandwith,
+            mode: NetworkMode::LowBandwith,
         };
         assert_eq!(
             module.render(&state),

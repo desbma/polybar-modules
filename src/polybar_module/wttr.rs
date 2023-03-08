@@ -5,7 +5,7 @@ use std::time::Duration;
 use lazy_static::lazy_static;
 
 use crate::markup;
-use crate::polybar_module::{PolybarModuleEnv, RenderablePolybarModule, RuntimeMode};
+use crate::polybar_module::{NetworkMode, PolybarModuleEnv, RenderablePolybarModule};
 use crate::theme;
 
 pub struct WttrModule {
@@ -93,7 +93,7 @@ impl RenderablePolybarModule for WttrModule {
                 None => Duration::from_secs(5),
             });
         }
-        self.env.wait_runtime_mode(RuntimeMode::Unrestricted);
+        self.env.wait_network_mode(NetworkMode::Unrestricted);
     }
 
     fn update(&mut self) -> Self::State {

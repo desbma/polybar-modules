@@ -43,9 +43,9 @@ pub enum PolybarModule {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum RuntimeMode {
+pub enum NetworkMode {
     Unrestricted,
-    LowNetworkBandwith,
+    LowBandwith,
 }
 
 pub trait RenderablePolybarModule {
@@ -60,23 +60,32 @@ pub trait RenderablePolybarModule {
 
 pub struct PolybarModuleEnv {
     pub low_bw_filepath: PathBuf,
+    pub public_screen_filepath: PathBuf,
 }
 
 impl PolybarModuleEnv {
     pub fn new() -> PolybarModuleEnv {
         let xdg_dirs = xdg::BaseDirectories::new().unwrap();
         let low_bw_filepath = xdg_dirs.get_data_home().join("low_internet_bandwidth");
-        PolybarModuleEnv { low_bw_filepath }
-    }
-
-    pub fn get_runtime_mode(&self) -> RuntimeMode {
-        match self.low_bw_filepath.exists() {
-            true => RuntimeMode::LowNetworkBandwith,
-            false => RuntimeMode::Unrestricted,
+        let public_screen_filepath = xdg_dirs.place_runtime_file("public_screen").unwrap();
+        PolybarModuleEnv {
+            low_bw_filepath,
+            public_screen_filepath,
         }
     }
 
-    pub fn wait_runtime_mode(&self, mode: RuntimeMode) -> bool {
+    pub fn network_mode(&self) -> NetworkMode {
+        match self.low_bw_filepath.exists() {
+            true => NetworkMode::LowBandwith,
+            false => NetworkMode::Unrestricted,
+        }
+    }
+
+    pub fn public_screen(&self) -> bool {
+        self.public_screen_filepath.exists()
+    }
+
+    pub fn wait_network_mode(&self, mode: NetworkMode) -> bool {
         let mut did_wait = false;
         let (events_tx, events_rx) = channel();
         let mut watcher = notify::watcher(events_tx, Duration::from_millis(10)).unwrap();
@@ -85,7 +94,24 @@ impl PolybarModuleEnv {
         watcher
             .watch(parent_dir, notify::RecursiveMode::NonRecursive)
             .unwrap();
-        while self.get_runtime_mode() != mode {
+        while self.network_mode() != mode {
+            let evt = events_rx.recv().unwrap();
+            did_wait = true;
+            log::trace!("{:?}", evt);
+        }
+        did_wait
+    }
+
+    pub fn wait_public_screen(&self, public: bool) -> bool {
+        let mut did_wait = false;
+        let (events_tx, events_rx) = channel();
+        let mut watcher = notify::watcher(events_tx, Duration::from_millis(10)).unwrap();
+        let parent_dir = self.public_screen_filepath.parent().unwrap();
+        log::debug!("Watching {:?}", parent_dir);
+        watcher
+            .watch(parent_dir, notify::RecursiveMode::NonRecursive)
+            .unwrap();
+        while self.public_screen() != public {
             let evt = events_rx.recv().unwrap();
             did_wait = true;
             log::trace!("{:?}", evt);
