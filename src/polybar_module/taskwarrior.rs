@@ -314,6 +314,8 @@ mod tests {
 
     #[test]
     fn test_render() {
+        let xdg_dirs = xdg::BaseDirectories::new().unwrap();
+        let runtime_dir = xdg_dirs.get_runtime_directory().unwrap();
         let module = TaskwarriorModule::new(None).unwrap();
 
         let state = Some(TaskwarriorModuleState::Active {
@@ -325,7 +327,10 @@ mod tests {
         });
         assert_eq!(
             module.render(&state),
-            "%{F#eee8d5}%{F-} %{A1:touch /run/user/1000/public_screen:}10 [proj] todo%{A}"
+            format!(
+                "%{{F#eee8d5}}%{{F-}} %{{A1:touch {}/public_screen:}}10 [proj] todo%{{A}}",
+                runtime_dir.to_str().unwrap()
+            )
         );
 
         let state = Some(TaskwarriorModuleState::Active {
@@ -337,7 +342,10 @@ mod tests {
         });
         assert_eq!(
             module.render(&state),
-            "%{F#eee8d5}%{F-} %{A1:touch /run/user/1000/public_screen:}10 todo%{A}"
+            format!(
+                "%{{F#eee8d5}}%{{F-}} %{{A1:touch {}/public_screen:}}10 todo%{{A}}",
+                runtime_dir.to_str().unwrap()
+            )
         );
 
         let state = Some(TaskwarriorModuleState::Active {
@@ -349,7 +357,10 @@ mod tests {
         });
         assert_eq!(
             module.render(&state),
-            "%{F#eee8d5}%{F-} %{A1:touch /run/user/1000/public_screen:}10 %{u#93a1a1}%{+u}[proj] todo%{-u}%{A}"
+            format!(
+                "%{{F#eee8d5}}%{{F-}} %{{A1:touch {}/public_screen:}}10 %{{u#93a1a1}}%{{+u}}[proj] todo%{{-u}}%{{A}}",
+                runtime_dir.to_str().unwrap()
+            )
         );
 
         let state = Some(TaskwarriorModuleState::Active {
@@ -361,7 +372,10 @@ mod tests {
         });
         assert_eq!(
             module.render(&state),
-            "%{F#eee8d5}%{F-} %{A1:touch /run/user/1000/public_screen:}10 %{u#b58900}%{+u}[proj] todo%{-u}%{A}"
+            format!(
+                "%{{F#eee8d5}}%{{F-}} %{{A1:touch {}/public_screen:}}10 %{{u#b58900}}%{{+u}}[proj] todo%{{-u}}%{{A}}",
+                runtime_dir.to_str().unwrap()
+            )
         );
 
         let state = Some(TaskwarriorModuleState::Active {
@@ -373,7 +387,10 @@ mod tests {
         });
         assert_eq!(
             module.render(&state),
-            "%{F#eee8d5}%{F-} %{A1:touch /run/user/1000/public_screen:}10 %{u#cb4b16}%{+u}[proj] todo%{-u}%{A}"
+            format!(
+                "%{{F#eee8d5}}%{{F-}} %{{A1:touch {}/public_screen:}}10 %{{u#cb4b16}}%{{+u}}[proj] todo%{{-u}}%{{A}}",
+                runtime_dir.to_str().unwrap()
+            )
         );
 
         let module = TaskwarriorModule::new(Some(14)).unwrap();
@@ -387,7 +404,10 @@ mod tests {
         });
         assert_eq!(
             module.render(&state),
-            "%{F#eee8d5}%{F-} %{A1:touch /run/user/1000/public_screen:}10 [proj] todo%{A}"
+            format!(
+                "%{{F#eee8d5}}%{{F-}} %{{A1:touch {}/public_screen:}}10 [proj] todo%{{A}}",
+                runtime_dir.to_str().unwrap()
+            )
         );
 
         let state = Some(TaskwarriorModuleState::Active {
@@ -399,7 +419,10 @@ mod tests {
         });
         assert_eq!(
             module.render(&state),
-            "%{F#eee8d5}%{F-} %{A1:touch /run/user/1000/public_screen:}101 [p…] todo%{A}"
+            format!(
+                "%{{F#eee8d5}}%{{F-}} %{{A1:touch {}/public_screen:}}101 [p…] todo%{{A}}",
+                runtime_dir.to_str().unwrap()
+            )
         );
 
         let state = Some(TaskwarriorModuleState::Active {
@@ -411,7 +434,10 @@ mod tests {
         });
         assert_eq!(
             module.render(&state),
-            "%{F#eee8d5}%{F-} %{A1:touch /run/user/1000/public_screen:}1011 [p…] todo%{A}"
+            format!(
+                "%{{F#eee8d5}}%{{F-}} %{{A1:touch {}/public_screen:}}1011 [p…] todo%{{A}}",
+                runtime_dir.to_str().unwrap()
+            )
         );
 
         let state = Some(TaskwarriorModuleState::Active {
@@ -423,7 +449,10 @@ mod tests {
         });
         assert_eq!(
             module.render(&state),
-            "%{F#eee8d5}%{F-} %{A1:touch /run/user/1000/public_screen:}10 [p…] todozz%{A}"
+            format!(
+                "%{{F#eee8d5}}%{{F-}} %{{A1:touch {}/public_screen:}}10 [p…] todozz%{{A}}",
+                runtime_dir.to_str().unwrap()
+            )
         );
 
         let state = Some(TaskwarriorModuleState::Active {
@@ -435,13 +464,19 @@ mod tests {
         });
         assert_eq!(
             module.render(&state),
-            "%{F#eee8d5}%{F-} %{A1:touch /run/user/1000/public_screen:}10 [p…] todoz…%{A}"
+            format!(
+                "%{{F#eee8d5}}%{{F-}} %{{A1:touch {}/public_screen:}}10 [p…] todoz…%{{A}}",
+                runtime_dir.to_str().unwrap()
+            )
         );
 
         let state = Some(TaskwarriorModuleState::Paused);
         assert_eq!(
             module.render(&state),
-            "%{F#eee8d5}%{F-} %{A1:rm /run/user/1000/public_screen:}%{A}"
+            format!(
+                "%{{F#eee8d5}}%{{F-}} %{{A1:rm {}/public_screen:}}%{{A}}",
+                runtime_dir.to_str().unwrap()
+            )
         );
     }
 }
