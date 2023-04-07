@@ -78,11 +78,12 @@ impl ArchUpdatesModule {
         };
 
         // Run arch-audit
-        let output = Command::new("checkupdates-aur")
+        let output = Command::new("yay")
+            .args(["-Qua"])
             .stderr(Stdio::null())
             .output()?;
         if !output.status.success() {
-            anyhow::bail!("checkupdates-aur invocation failed");
+            anyhow::bail!("yay invocation failed");
         }
 
         // Parse output
