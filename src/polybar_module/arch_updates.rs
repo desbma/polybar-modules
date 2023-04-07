@@ -34,7 +34,7 @@ impl ArchUpdatesModule {
             .env("CHECKUPDATES_DB", &db_dir)
             .stderr(Stdio::null())
             .output()?;
-        // checkupdates returns non 0 when no updates is available
+        // checkupdates returns non 0 when no update is available
 
         // Parse output
         let output_str = String::from_utf8_lossy(&output.stdout);
@@ -105,7 +105,7 @@ impl RenderablePolybarModule for ArchUpdatesModule {
         if let Some(prev_state) = prev_state {
             std::thread::sleep(match prev_state {
                 // Nominal
-                Some(_) => std::time::Duration::from_secs(60 * 10),
+                Some(_) => std::time::Duration::from_secs(60 * 30),
                 // Error occured
                 None => std::time::Duration::from_secs(5),
             });
