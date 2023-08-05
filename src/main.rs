@@ -1,4 +1,4 @@
-#![feature(hash_drain_filter)]
+#![feature(hash_extract_if)]
 use anyhow::Context;
 use config::PolybarModuleName;
 use structopt::StructOpt;

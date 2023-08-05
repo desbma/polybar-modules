@@ -134,7 +134,7 @@ impl NetworkStatusModule {
         // Kill processes with no output for too long
         for (i, _ts) in self
             .ping_child_last_output
-            .drain_filter(|_i, ts| now.saturating_duration_since(*ts) > 2 * ping_period)
+            .extract_if(|_i, ts| now.saturating_duration_since(*ts) > 2 * ping_period)
         {
             log::debug!(
                 "ping process for {:?} had no output for a while, killing it",
@@ -193,7 +193,7 @@ impl NetworkStatusModule {
         // Restart new processes if needed
         for (i, _ts) in self
             .ping_child_deaths
-            .drain_filter(|_i, ts| now.saturating_duration_since(*ts) > ping_period)
+            .extract_if(|_i, ts| now.saturating_duration_since(*ts) > ping_period)
         {
             // Setup new child in its place
             self.ping_childs[i] =

@@ -148,7 +148,7 @@ impl TaskwarriorModule {
     }
 
     fn get_max_task_data_file_mtime(&self) -> Option<SystemTime> {
-        vec!["completed.data", "pending.data"]
+        ["completed.data", "pending.data"]
             .iter()
             .map(|f| Path::new(&self.data_dir).join(f))
             .filter_map(|p| metadata(p).ok())
@@ -168,11 +168,10 @@ impl RenderablePolybarModule for TaskwarriorModule {
                     let (events_tx, events_rx) = channel();
                     let mut watcher =
                         notify::watcher(events_tx, Duration::from_millis(10)).unwrap();
-                    let mut to_watch_filepaths: Vec<PathBuf> =
-                        vec!["completed.data", "pending.data"]
-                            .iter()
-                            .map(|f| Path::new(&self.data_dir).join(f))
-                            .collect();
+                    let mut to_watch_filepaths: Vec<PathBuf> = ["completed.data", "pending.data"]
+                        .iter()
+                        .map(|f| Path::new(&self.data_dir).join(f))
+                        .collect();
                     to_watch_filepaths.push(
                         self.env
                             .public_screen_filepath
