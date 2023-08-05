@@ -20,6 +20,7 @@ pub mod pulseaudio;
 pub mod syncthing;
 mod syncthing_rest;
 pub mod taskwarrior;
+pub mod todotxt;
 pub mod wttr;
 pub mod xmonad;
 
@@ -38,6 +39,7 @@ pub enum PolybarModule {
     PulseAudio(pulseaudio::PulseAudioModule),
     Syncthing(syncthing::SyncthingModule),
     Taskwarrior(taskwarrior::TaskwarriorModule),
+    TodoTxt(todotxt::TodoTxtModule),
     Wttr(wttr::WttrModule),
     Xmonad(xmonad::XmonadModule),
 }

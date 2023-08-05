@@ -100,6 +100,10 @@ fn main() -> anyhow::Result<()> {
             polybar_module::taskwarrior::TaskwarriorModule::new(max_len)
                 .context("Failed to initialize Taskwarrior module")?,
         ),
+        PolybarModuleName::todotxt { max_len } => polybar_module::PolybarModule::TodoTxt(
+            polybar_module::todotxt::TodoTxtModule::new(max_len)
+                .context("Failed to initialize Todo.txt module")?,
+        ),
         PolybarModuleName::wttr { location } => {
             polybar_module::PolybarModule::Wttr(polybar_module::wttr::WttrModule::new(location))
         }
@@ -125,6 +129,7 @@ fn main() -> anyhow::Result<()> {
         polybar_module::PolybarModule::PulseAudio(module) => render_loop(module),
         polybar_module::PolybarModule::Syncthing(module) => render_loop(module),
         polybar_module::PolybarModule::Taskwarrior(module) => render_loop(module),
+        polybar_module::PolybarModule::TodoTxt(module) => render_loop(module),
         polybar_module::PolybarModule::Wttr(module) => render_loop(module),
         polybar_module::PolybarModule::Xmonad(module) => render_loop(module),
     };
