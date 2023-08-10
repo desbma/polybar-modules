@@ -64,10 +64,9 @@ impl TodoTxtModule {
                 let last_fs_change = self.get_todotxt_file_mtime();
 
                 // Run todo.txt to get first task
-                let output = Command::new("todo.sh")
-                    .arg("ls")
-                    .stderr(Stdio::null())
-                    .output()?;
+                // Warning: this only works if default action is 'more ls'
+                // and carries our patches to remove relative date additions
+                let output = Command::new("todo.sh").stderr(Stdio::null()).output()?;
                 if !output.status.success() {
                     anyhow::bail!("todo.sh invocation failed");
                 }
@@ -76,7 +75,7 @@ impl TodoTxtModule {
                 let lines = strip_ansi_escapes::strip(output.stdout)?
                     .lines()
                     .collect::<Result<Vec<_>, _>>()?;
-                let task_lines: Vec<_> = lines[0..lines.len() - 2]
+                let task_lines: Vec<_> = lines
                     .iter()
                     .flat_map(|l| l.split_once(' ').map(|t| t.1))
                     .collect();
@@ -87,13 +86,14 @@ impl TodoTxtModule {
                 let now = chrono::Local::now().date_naive();
                 let first_task = todo_lib::todotxt::Task::parse(first_task_line, now);
                 log::trace!("{first_task:?}");
-                let pending_count = lines
-                    .last()
-                    .unwrap()
-                    .split(' ')
-                    .nth(1)
-                    .ok_or_else(|| anyhow::anyhow!("Invalid last line"))?
-                    .parse()?;
+                // let pending_count = lines
+                //     .last()
+                //     .unwrap()
+                //     .split(' ')
+                //     .nth(1)
+                //     .ok_or_else(|| anyhow::anyhow!("Invalid last line"))?
+                //     .parse()?;
+                let pending_count = task_lines.len();
                 Ok(TodoTxtModuleState::Active {
                     pending_count,
                     first_task: Box::new(first_task),
