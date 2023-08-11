@@ -105,9 +105,9 @@ impl RenderablePolybarModule for ArchUpdatesModule {
         if let Some(prev_state) = prev_state {
             std::thread::sleep(match prev_state {
                 // Nominal
-                Some(_) => std::time::Duration::from_secs(60 * 30),
+                Some(_) => std::time::Duration::from_secs(60 * 60),
                 // Error occured
-                None => std::time::Duration::from_secs(5),
+                None => std::time::Duration::from_secs(10),
             });
         }
         self.env.wait_network_mode(NetworkMode::Unrestricted);
