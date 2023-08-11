@@ -37,7 +37,10 @@ impl TodoTxtModule {
         let todotxt_str = match env::var_os("TODO_FILE") {
             None => {
                 let output = Command::new("bash")
-                    .args(["-c", ". ~/.config/todo/config && echo -n ${TODO_FILE}"])
+                    .args([
+                        "-c",
+                        ". ${XDG_CONFIG_DIR:-${HOME}/.config}/todo/config && echo -n ${TODO_FILE}",
+                    ])
                     .stderr(Stdio::null())
                     .output()?;
                 if !output.status.success() {
