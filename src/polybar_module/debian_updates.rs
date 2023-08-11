@@ -1,5 +1,7 @@
 use std::process::{Command, Stdio};
 
+use anyhow::Context;
+
 use crate::markup;
 use crate::polybar_module::{NetworkMode, PolybarModuleEnv, RenderablePolybarModule};
 use crate::theme;
@@ -24,9 +26,10 @@ impl DebianUpdatesModule {
             .args(["-sc"])
             .stderr(Stdio::null())
             .output()?;
-        if !output.status.success() {
-            anyhow::bail!("lsb_release invocation failed");
-        }
+        output
+            .status
+            .exit_ok()
+            .context("lsb_release exited with error")?;
 
         // Parse output
         let mut debian_relase_codename = String::from_utf8_lossy(&output.stdout)
@@ -50,9 +53,7 @@ impl DebianUpdatesModule {
             .env("LANG", "C")
             .stderr(Stdio::null())
             .output()?;
-        if !output.status.success() {
-            anyhow::bail!("apt invocation failed");
-        }
+        output.status.exit_ok().context("apt exited with error")?;
 
         // Parse output
         let output_str = String::from_utf8_lossy(&output.stdout);
@@ -77,9 +78,10 @@ impl DebianUpdatesModule {
                 .env("LANG", "C")
                 .stderr(Stdio::null())
                 .output()?;
-            if !output.status.success() {
-                anyhow::bail!("debsecan invocation failed");
-            }
+            output
+                .status
+                .exit_ok()
+                .context("debsecan exited with error")?;
 
             // Parse output
             String::from_utf8_lossy(&output.stdout)

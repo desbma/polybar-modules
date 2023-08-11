@@ -5,6 +5,7 @@ use std::sync::mpsc::channel;
 use std::thread::sleep;
 use std::time::{Duration, SystemTime};
 
+use anyhow::Context;
 use notify::Watcher;
 
 use crate::markup;
@@ -36,9 +37,7 @@ impl TaskwarriorModule {
             .args(["show", "data.location"])
             .stderr(Stdio::null())
             .output()?;
-        if !output.status.success() {
-            anyhow::bail!("task invocation failed");
-        }
+        output.status.exit_ok().context("task exited with error")?;
 
         // Parse output
         let output_str = String::from_utf8_lossy(&output.stdout);
@@ -75,9 +74,7 @@ impl TaskwarriorModule {
                     .args(args)
                     .stderr(Stdio::null())
                     .output()?;
-                if !output.status.success() {
-                    anyhow::bail!("task invocation failed");
-                }
+                output.status.exit_ok().context("task exited with error")?;
 
                 // Parse output
                 let pending_count = String::from_utf8_lossy(&output.stdout).trim().parse()?;
@@ -95,9 +92,7 @@ impl TaskwarriorModule {
                     .args(args)
                     .stderr(Stdio::null())
                     .output()?;
-                if !output.status.success() {
-                    anyhow::bail!("task invocation failed");
-                }
+                output.status.exit_ok().context("task exited with error")?;
 
                 // Parse output
                 let output = String::from_utf8_lossy(&output.stdout);
@@ -125,9 +120,7 @@ impl TaskwarriorModule {
                     .args(args)
                     .stderr(Stdio::null())
                     .output()?;
-                if !output.status.success() {
-                    anyhow::bail!("task invocation failed");
-                }
+                output.status.exit_ok().context("task exited with error")?;
 
                 // Parse output
                 let next_task_project = match String::from_utf8_lossy(&output.stdout).trim() {

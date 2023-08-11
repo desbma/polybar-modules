@@ -3,6 +3,7 @@ use std::io::Read;
 use std::process::{Child, Command, Stdio};
 use std::str::FromStr;
 
+use anyhow::Context;
 use lazy_static::lazy_static;
 
 use crate::markup;
@@ -53,9 +54,10 @@ impl BluetoothModule {
             .args(args)
             .stderr(Stdio::null())
             .output()?;
-        if !output.status.success() {
-            anyhow::bail!("bluetoothctl invocation failed");
-        }
+        output
+            .status
+            .exit_ok()
+            .context("bluetoothctl exited with error")?;
 
         Ok(String::from_utf8_lossy(&output.stdout).to_string())
     }

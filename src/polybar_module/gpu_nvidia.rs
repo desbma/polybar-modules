@@ -2,6 +2,8 @@ use std::process::{Command, Stdio};
 use std::thread::sleep;
 use std::time::Duration;
 
+use anyhow::Context;
+
 use crate::markup;
 use crate::polybar_module::RenderablePolybarModule;
 use crate::theme;
@@ -35,9 +37,10 @@ impl GpuNvidiaModule {
             ])
             .stderr(Stdio::null())
             .output()?;
-        if !output.status.success() {
-            anyhow::bail!("nvidia-smi invocation failed");
-        }
+        output
+            .status
+            .exit_ok()
+            .context("nvidia-smi invocation exited with error")?;
 
         // Parse output
         let output_str = String::from_utf8_lossy(&output.stdout);

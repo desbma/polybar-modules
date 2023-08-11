@@ -3,6 +3,8 @@ use std::process::{Command, Stdio};
 use std::thread::sleep;
 use std::time::Duration;
 
+use anyhow::Context;
+
 use crate::markup;
 use crate::polybar_module::RenderablePolybarModule;
 use crate::theme;
@@ -43,9 +45,10 @@ impl AutolockModule {
             ])
             .stderr(Stdio::null())
             .output()?;
-        if !output.status.success() {
-            anyhow::bail!("xidlehook-client invocation failed");
-        }
+        output
+            .status
+            .exit_ok()
+            .context("xidlehook-client exited with error")?;
 
         // Parse output
         let output_str = String::from_utf8_lossy(&output.stdout);

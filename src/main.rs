@@ -1,3 +1,4 @@
+#![feature(exit_status_error)]
 #![feature(hash_extract_if)]
 use anyhow::Context;
 use config::PolybarModuleName;

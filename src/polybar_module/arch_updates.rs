@@ -1,6 +1,8 @@
 use std::fmt::Write;
 use std::process::{Command, Stdio};
 
+use anyhow::Context;
+
 use crate::markup;
 use crate::polybar_module::{NetworkMode, PolybarModuleEnv, RenderablePolybarModule};
 use crate::theme;
@@ -63,9 +65,10 @@ impl ArchUpdatesModule {
                 .env("TERM", "xterm") // workaround arch-audit bug
                 .stderr(Stdio::null())
                 .output()?;
-            if !output.status.success() {
-                anyhow::bail!("arch-audit invocation failed");
-            }
+            output
+                .status
+                .exit_ok()
+                .context("arch-audit exited with error")?;
 
             // Parse output
             let output_str = String::from_utf8_lossy(&output.stdout);
@@ -82,9 +85,7 @@ impl ArchUpdatesModule {
             .args(["-Qua"])
             .stderr(Stdio::null())
             .output()?;
-        if !output.status.success() {
-            anyhow::bail!("yay invocation failed");
-        }
+        output.status.exit_ok().context("yay exited with error")?;
 
         // Parse output
         let output_str = String::from_utf8_lossy(&output.stdout);

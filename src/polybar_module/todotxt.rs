@@ -9,6 +9,7 @@ use std::sync::mpsc::channel;
 use std::thread::sleep;
 use std::time::{Duration, SystemTime};
 
+use anyhow::Context;
 use notify::Watcher;
 
 use crate::markup;
@@ -43,9 +44,7 @@ impl TodoTxtModule {
                     ])
                     .stderr(Stdio::null())
                     .output()?;
-                if !output.status.success() {
-                    anyhow::bail!("bash invocation failed");
-                }
+                output.status.exit_ok().context("bash exited with error")?;
                 OsString::from_vec(output.stdout)
             }
             Some(p) => p,
@@ -70,9 +69,10 @@ impl TodoTxtModule {
                 // Warning: this only works if default action is 'more ls'
                 // and carries our patches to remove relative date additions
                 let output = Command::new("todo.sh").stderr(Stdio::null()).output()?;
-                if !output.status.success() {
-                    anyhow::bail!("todo.sh invocation failed");
-                }
+                output
+                    .status
+                    .exit_ok()
+                    .context("todo.sh exited with error")?;
 
                 // Parse first line
                 let lines = strip_ansi_escapes::strip(output.stdout)?

@@ -2,6 +2,8 @@ use std::io::BufRead;
 use std::io::Read;
 use std::process::{Child, Command, Stdio};
 
+use anyhow::Context;
+
 use crate::markup;
 use crate::polybar_module::RenderablePolybarModule;
 use crate::theme;
@@ -52,9 +54,7 @@ impl PulseAudioModule {
             .env("LANG", "C")
             .stderr(Stdio::null())
             .output()?;
-        if !output.status.success() {
-            anyhow::bail!("pactl invocation failed");
-        }
+        output.status.exit_ok().context("pactl exited with error")?;
 
         // Parse output
         let mut output_lines = output
@@ -110,9 +110,7 @@ impl PulseAudioModule {
             .env("LANG", "C")
             .stderr(Stdio::null())
             .output()?;
-        if !output.status.success() {
-            anyhow::bail!("pactl invocation failed");
-        }
+        output.status.exit_ok().context("pactl exited with error")?;
 
         // Parse output
         let mut output_lines = output
