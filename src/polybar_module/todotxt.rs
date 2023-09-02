@@ -65,37 +65,24 @@ impl TodoTxtModule {
             false => {
                 let last_fs_change = self.get_todotxt_file_mtime();
 
-                // Run todo.txt to get first task
-                // Warning: this only works if default action is 'more ls'
-                // and carries our patches to remove relative date additions
-                let output = Command::new("todo.sh").stderr(Stdio::null()).output()?;
-                output
-                    .status
-                    .exit_ok()
-                    .context("todo.sh exited with error")?;
+                // Run todo to get first task
+                let output = Command::new("todo")
+                    .arg("list")
+                    .env("TODO_FILE", &self.todotxt_filepath)
+                    .stderr(Stdio::null())
+                    .output()?;
+                output.status.exit_ok().context("todo exited with error")?;
 
-                // Parse first line
-                let lines = strip_ansi_escapes::strip(output.stdout)?
-                    .lines()
-                    .collect::<Result<Vec<_>, _>>()?;
-                let task_lines: Vec<_> = lines
-                    .iter()
-                    .flat_map(|l| l.split_once(' ').map(|t| t.1))
-                    .collect();
+                // Parse lines
+                let task_lines = output.stdout.lines().collect::<Result<Vec<_>, _>>()?;
                 log::debug!("{task_lines:?}");
                 let first_task_line = task_lines
                     .first()
-                    .ok_or_else(|| anyhow::anyhow!("Invalid task.sh output or no task"))?;
+                    .ok_or_else(|| anyhow::anyhow!("No tasks"))?;
                 let now = chrono::Local::now().date_naive();
                 let first_task = todo_lib::todotxt::Task::parse(first_task_line, now);
                 log::trace!("{first_task:?}");
-                // let pending_count = lines
-                //     .last()
-                //     .unwrap()
-                //     .split(' ')
-                //     .nth(1)
-                //     .ok_or_else(|| anyhow::anyhow!("Invalid last line"))?
-                //     .parse()?;
+                // TODO ignore before threshold
                 let pending_count = task_lines.len();
                 Ok(TodoTxtModuleState::Active {
                     pending_count,
