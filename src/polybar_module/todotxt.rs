@@ -1,10 +1,10 @@
 use std::env;
 use std::ffi::OsString;
 use std::fs::metadata;
-use std::io::BufRead;
 use std::os::unix::ffi::OsStringExt;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
+use std::str;
 use std::sync::mpsc::channel;
 use std::thread::sleep;
 use std::time::{Duration, SystemTime};
@@ -26,7 +26,7 @@ pub struct TodoTxtModule {
 pub enum TodoTxtModuleState {
     Active {
         pending_count: usize,
-        first_task: Box<todo_lib::todotxt::Task>,
+        next_task: Box<todo_lib::todotxt::Task>,
         last_fs_change: Option<SystemTime>,
     },
     Paused,
@@ -67,26 +67,29 @@ impl TodoTxtModule {
 
                 // Run todo to get first task
                 let output = Command::new("todo")
-                    .arg("list")
+                    .args(["next", "-s"])
                     .env("TODO_FILE", &self.todotxt_filepath)
                     .stderr(Stdio::null())
                     .output()?;
                 output.status.exit_ok().context("todo exited with error")?;
 
-                // Parse lines
-                let task_lines = output.stdout.lines().collect::<Result<Vec<_>, _>>()?;
-                log::debug!("{task_lines:?}");
-                let first_task_line = task_lines
-                    .first()
-                    .ok_or_else(|| anyhow::anyhow!("No tasks"))?;
+                // Parse task
                 let now = chrono::Local::now().date_naive();
-                let first_task = todo_lib::todotxt::Task::parse(first_task_line, now);
-                log::trace!("{first_task:?}");
-                // TODO ignore before threshold
-                let pending_count = task_lines.len();
+                let task = todo_lib::todotxt::Task::parse(str::from_utf8(&output.stdout)?, now);
+                log::trace!("{task:?}");
+
+                // Get pending count
+                let output = Command::new("todo")
+                    .arg("pending-count")
+                    .env("TODO_FILE", &self.todotxt_filepath)
+                    .stderr(Stdio::null())
+                    .output()?;
+                output.status.exit_ok().context("todo exited with error")?;
+                let pending_count = str::from_utf8(&output.stdout)?.trim_end().parse()?;
+
                 Ok(TodoTxtModuleState::Active {
                     pending_count,
-                    first_task: Box::new(first_task),
+                    next_task: Box::new(task),
                     last_fs_change,
                 })
             }
@@ -156,7 +159,7 @@ impl RenderablePolybarModule for TodoTxtModule {
         match state {
             Some(TodoTxtModuleState::Active {
                 pending_count,
-                first_task,
+                next_task,
                 ..
             }) => {
                 let s1 = format!(
@@ -165,15 +168,7 @@ impl RenderablePolybarModule for TodoTxtModule {
                 );
                 let s2 = format!("{} ", pending_count);
                 let max_task_len = self.max_len.map(|max_len| max_len - s2.len());
-                let task_str = first_task
-                    .subject
-                    .split(' ')
-                    .filter(|w| {
-                        !w.starts_with('+') && !w.starts_with("t:") && !w.starts_with("due:")
-                    })
-                    .collect::<Vec<_>>()
-                    .join(" ");
-                let s3 = theme::ellipsis(&task_str, max_task_len);
+                let s3 = theme::ellipsis(&next_task.subject, max_task_len);
                 format!(
                     "{}{}",
                     s1,
@@ -184,7 +179,7 @@ impl RenderablePolybarModule for TodoTxtModule {
                             markup::style(
                                 &s3,
                                 None,
-                                match first_task.priority {
+                                match next_task.priority {
                                     0 | 1 => Some(theme::Color::Attention),
                                     2 => Some(theme::Color::Notice),
                                     3 => Some(theme::Color::Foreground),
@@ -239,7 +234,7 @@ mod tests {
 
         let state = Some(TodoTxtModuleState::Active {
             pending_count: 10,
-            first_task: Box::new(Task {
+            next_task: Box::new(Task {
                 subject: "todo".to_string(),
                 ..Task::default()
             }),
@@ -255,7 +250,7 @@ mod tests {
 
         let state = Some(TodoTxtModuleState::Active {
             pending_count: 10,
-            first_task: Box::new(Task {
+            next_task: Box::new(Task {
                 subject: "todo".to_string(),
                 priority: 3,
                 ..Task::default()
@@ -272,7 +267,7 @@ mod tests {
 
         let state = Some(TodoTxtModuleState::Active {
             pending_count: 10,
-            first_task: Box::new(Task {
+            next_task: Box::new(Task {
                 subject: "todo".to_string(),
                 priority: 2,
                 ..Task::default()
@@ -289,7 +284,7 @@ mod tests {
 
         let state = Some(TodoTxtModuleState::Active {
             pending_count: 10,
-            first_task: Box::new(Task {
+            next_task: Box::new(Task {
                 subject: "todo".to_string(),
                 priority: 0,
                 ..Task::default()
@@ -308,7 +303,7 @@ mod tests {
 
         let state = Some(TodoTxtModuleState::Active {
             pending_count: 10,
-            first_task: Box::new(Task {
+            next_task: Box::new(Task {
                 subject: "todo".to_string(),
                 ..Task::default()
             }),
@@ -324,7 +319,7 @@ mod tests {
 
         let state = Some(TodoTxtModuleState::Active {
             pending_count: 101,
-            first_task: Box::new(Task {
+            next_task: Box::new(Task {
                 subject: "todo".to_string(),
                 ..Task::default()
             }),
@@ -340,7 +335,7 @@ mod tests {
 
         let state = Some(TodoTxtModuleState::Active {
             pending_count: 1011,
-            first_task: Box::new(Task {
+            next_task: Box::new(Task {
                 subject: "todo".to_string(),
                 ..Task::default()
             }),
@@ -356,7 +351,7 @@ mod tests {
 
         let state = Some(TodoTxtModuleState::Active {
             pending_count: 10,
-            first_task: Box::new(Task {
+            next_task: Box::new(Task {
                 subject: "todozzz".to_string(),
                 ..Task::default()
             }),
