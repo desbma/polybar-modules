@@ -1,7 +1,5 @@
 use std::env;
-use std::ffi::OsString;
 use std::fs::metadata;
-use std::os::unix::ffi::OsStringExt;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::str::{self, FromStr};
@@ -62,20 +60,8 @@ impl FromStr for Task {
 impl TodoTxtModule {
     pub fn new(max_len: Option<usize>) -> anyhow::Result<TodoTxtModule> {
         // Run bash to get todo.txt path
-        let todotxt_str = match env::var_os("TODO_FILE") {
-            None => {
-                let output = Command::new("bash")
-                    .args([
-                        "-c",
-                        ". ${XDG_CONFIG_DIR:-${HOME}/.config}/todo/config && echo -n ${TODO_FILE}",
-                    ])
-                    .stderr(Stdio::null())
-                    .output()?;
-                output.status.exit_ok().context("bash exited with error")?;
-                OsString::from_vec(output.stdout)
-            }
-            Some(p) => p,
-        };
+        let todotxt_str = env::var_os("TODO_FILE")
+            .ok_or_else(|| anyhow::anyhow!("TODO_FILE environment variable is not set"))?;
         let todotxt_filepath = PathBuf::from(todotxt_str);
         log::debug!("todo.txt path: {todotxt_filepath:?}");
         let env = PolybarModuleEnv::new();
@@ -95,7 +81,6 @@ impl TodoTxtModule {
                 // Run todo to get first task
                 let output = Command::new("todo")
                     .args(["next", "-s"])
-                    .env("TODO_FILE", &self.todotxt_filepath)
                     .stderr(Stdio::null())
                     .output()?;
                 output.status.exit_ok().context("todo exited with error")?;
@@ -112,7 +97,6 @@ impl TodoTxtModule {
                 // Get pending count
                 let output = Command::new("todo")
                     .arg("pending-count")
-                    .env("TODO_FILE", &self.todotxt_filepath)
                     .stderr(Stdio::null())
                     .output()?;
                 output.status.exit_ok().context("todo exited with error")?;
