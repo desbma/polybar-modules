@@ -32,6 +32,7 @@ simple_logger = { version = "4.0.0", default-features = false }
 strip-ansi-escapes = { version = "0.1.1", default-features = false }
 structopt = { version = "0.3.26", default-features = false }
 sysinfo = { version = "0.17.5", default-features = false }
+tasks = { git = "https://github.com/desbma/todo", rev = "35495769f0e858836beafa691070e867f8714a07" }
 tempfile = { version = "3.3.0", default-features = false }
 toml = { version = "0.5.9", default-features = false }
 xdg = { version = "2.4.1", default-features = false }

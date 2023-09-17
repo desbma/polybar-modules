@@ -2,14 +2,14 @@ use std::env;
 use std::fs::metadata;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
-use std::str::{self, FromStr};
+use std::str;
 use std::sync::mpsc::channel;
 use std::thread::sleep;
 use std::time::{Duration, SystemTime};
 
 use anyhow::Context;
-use lazy_static::lazy_static;
 use notify::Watcher;
+use tasks::Task;
 
 use crate::markup;
 use crate::polybar_module::{PolybarModuleEnv, RenderablePolybarModule};
@@ -31,35 +31,8 @@ pub enum TodoTxtModuleState {
     Paused,
 }
 
-#[derive(Debug, PartialEq)]
-pub struct Task {
-    priority: Option<char>,
-    text: String,
-}
-
-impl FromStr for Task {
-    type Err = anyhow::Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        lazy_static! {
-            static ref TASK_SIMPLE_REGEX: regex::Regex =
-                regex::Regex::new(r"^(\((?<priority>.)\) )?(?<text>.*)$").unwrap();
-        }
-        let caps = TASK_SIMPLE_REGEX
-            .captures(s)
-            .ok_or_else(|| anyhow::anyhow!("Invalid task line"))?;
-        Ok(Self {
-            priority: caps
-                .name("priority")
-                .and_then(|c| c.as_str().chars().next()),
-            text: caps.name("text").unwrap().as_str().to_string(),
-        })
-    }
-}
-
 impl TodoTxtModule {
     pub fn new(max_len: Option<usize>) -> anyhow::Result<TodoTxtModule> {
-        // Run bash to get todo.txt path
         let todotxt_str = env::var_os("TODO_FILE")
             .ok_or_else(|| anyhow::anyhow!("TODO_FILE environment variable is not set"))?;
         let todotxt_filepath = PathBuf::from(todotxt_str);
@@ -80,7 +53,7 @@ impl TodoTxtModule {
 
                 // Run todo to get first task
                 let output = Command::new("todo")
-                    .args(["next", "-s"])
+                    .arg("next")
                     .stderr(Stdio::null())
                     .output()?;
                 output.status.exit_ok().context("todo exited with error")?;
@@ -198,11 +171,20 @@ impl RenderablePolybarModule for TodoTxtModule {
                             markup::style(
                                 &s3,
                                 None,
-                                match next_task.as_ref().and_then(|t| t.priority) {
-                                    Some('A') => Some(theme::Color::Attention),
-                                    Some('B') => Some(theme::Color::Notice),
-                                    Some('C') => Some(theme::Color::Foreground),
-                                    _ => None,
+                                if next_task
+                                    .as_ref()
+                                    .and_then(|t| t.due_date())
+                                    .map(|d| d <= chrono::Local::now().date_naive())
+                                    .unwrap_or(false)
+                                {
+                                    Some(theme::Color::Attention)
+                                } else {
+                                    match next_task.as_ref().and_then(|t| t.priority) {
+                                        Some('A') => Some(theme::Color::Attention),
+                                        Some('B') => Some(theme::Color::Notice),
+                                        Some('C') => Some(theme::Color::Foreground),
+                                        _ => None,
+                                    }
                                 },
                                 None,
                                 None
@@ -267,6 +249,7 @@ mod tests {
             next_task: Some(Task {
                 priority: None,
                 text: "todo".to_string(),
+                ..Task::default()
             }),
             last_fs_change: None,
         });
@@ -283,6 +266,7 @@ mod tests {
             next_task: Some(Task {
                 priority: Some('D'),
                 text: "todo".to_string(),
+                ..Task::default()
             }),
             last_fs_change: None,
         });
@@ -297,8 +281,33 @@ mod tests {
         let state = Some(TodoTxtModuleState::Active {
             pending_count: 10,
             next_task: Some(Task {
+                priority: Some('D'),
+                text: "todo".to_string(),
+                attributes: vec![(
+                    "due".to_string(),
+                    chrono::Local::now()
+                        .date_naive()
+                        .format("%Y-%m-%d")
+                        .to_string(),
+                )],
+                ..Task::default()
+            }),
+            last_fs_change: None,
+        });
+        assert_eq!(
+            module.render(&state),
+            format!(
+                "%{{F#eee8d5}}%{{F-}} %{{A1:touch {}/public_screen:}}10 %{{u#cb4b16}}%{{+u}}todo%{{-u}}%{{A}}",
+                runtime_dir.to_str().unwrap()
+            )
+        );
+
+        let state = Some(TodoTxtModuleState::Active {
+            pending_count: 10,
+            next_task: Some(Task {
                 priority: Some('C'),
                 text: "todo".to_string(),
+                ..Task::default()
             }),
             last_fs_change: None,
         });
@@ -315,6 +324,7 @@ mod tests {
             next_task: Some(Task {
                 priority: Some('A'),
                 text: "todo".to_string(),
+                ..Task::default()
             }),
             last_fs_change: None,
         });
@@ -333,6 +343,7 @@ mod tests {
             next_task: Some(Task {
                 priority: None,
                 text: "todo".to_string(),
+                ..Task::default()
             }),
             last_fs_change: None,
         });
@@ -349,6 +360,7 @@ mod tests {
             next_task: Some(Task {
                 priority: None,
                 text: "todo".to_string(),
+                ..Task::default()
             }),
             last_fs_change: None,
         });
@@ -365,6 +377,7 @@ mod tests {
             next_task: Some(Task {
                 priority: None,
                 text: "todo".to_string(),
+                ..Task::default()
             }),
             last_fs_change: None,
         });
@@ -381,6 +394,7 @@ mod tests {
             next_task: Some(Task {
                 priority: None,
                 text: "todozzz".to_string(),
+                ..Task::default()
             }),
             last_fs_change: None,
         });
