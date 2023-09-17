@@ -31,8 +31,6 @@ jobs:
           profile: minimal
           toolchain: nightly
       - run: cargo test --verbose
-        env:
-          TODO_FILE: "/dev/null"
 
   clippy:
     runs-on: ubuntu-latest

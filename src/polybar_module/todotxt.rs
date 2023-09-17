@@ -1,15 +1,12 @@
 use std::env;
 use std::fs::metadata;
 use std::path::PathBuf;
-use std::process::{Command, Stdio};
-use std::str;
 use std::sync::mpsc::channel;
 use std::thread::sleep;
 use std::time::{Duration, SystemTime};
 
-use anyhow::Context;
 use notify::Watcher;
-use tasks::Task;
+use tasks::{Task, TodoFile};
 
 use crate::markup;
 use crate::polybar_module::{PolybarModuleEnv, RenderablePolybarModule};
@@ -18,6 +15,7 @@ use crate::theme;
 pub struct TodoTxtModule {
     max_len: Option<usize>,
     todotxt_filepath: PathBuf,
+    done_filepath: PathBuf,
     env: PolybarModuleEnv,
 }
 
@@ -36,12 +34,15 @@ impl TodoTxtModule {
         let todotxt_str = env::var_os("TODO_FILE")
             .ok_or_else(|| anyhow::anyhow!("TODO_FILE environment variable is not set"))?;
         let todotxt_filepath = PathBuf::from(todotxt_str);
-        log::debug!("todo.txt path: {todotxt_filepath:?}");
+        let done_str = env::var_os("DONE_FILE")
+            .ok_or_else(|| anyhow::anyhow!("DONE_FILE environment variable is not set"))?;
+        let done_filepath = PathBuf::from(done_str);
         let env = PolybarModuleEnv::new();
 
         Ok(TodoTxtModule {
             max_len,
             todotxt_filepath,
+            done_filepath,
             env,
         })
     }
@@ -51,33 +52,16 @@ impl TodoTxtModule {
             false => {
                 let last_fs_change = self.get_todotxt_file_mtime();
 
-                // Run todo to get first task
-                let output = Command::new("todo")
-                    .arg("next")
-                    .stderr(Stdio::null())
-                    .output()?;
-                output.status.exit_ok().context("todo exited with error")?;
+                let today = chrono::Local::now().date_naive();
+                let task_file = TodoFile::new(&self.todotxt_filepath, &self.done_filepath)?;
+                let tasks = task_file.load_tasks()?;
+                let next_task = tasks.iter().filter(|t| t.is_pending(&today)).max().cloned();
 
-                // Parse task
-                let task_str = str::from_utf8(&output.stdout)?.trim_end();
-                let task = if task_str.is_empty() {
-                    None
-                } else {
-                    Some(task_str.parse()?)
-                };
-                log::trace!("{task:?}");
-
-                // Get pending count
-                let output = Command::new("todo")
-                    .arg("pending-count")
-                    .stderr(Stdio::null())
-                    .output()?;
-                output.status.exit_ok().context("todo exited with error")?;
-                let pending_count = str::from_utf8(&output.stdout)?.trim_end().parse()?;
+                let pending_count = tasks.iter().filter(|t| t.is_pending(&today)).count();
 
                 Ok(TodoTxtModuleState::Active {
                     pending_count,
-                    next_task: task,
+                    next_task,
                     last_fs_change,
                 })
             }
@@ -227,6 +211,8 @@ mod tests {
 
     #[test]
     fn test_render() {
+        env::set_var("TODO_FILE", "/dev/null");
+        env::set_var("DONE_FILE", "/dev/null");
         let xdg_dirs = xdg::BaseDirectories::new().unwrap();
         let runtime_dir = xdg_dirs.get_runtime_directory().unwrap();
         let module = TodoTxtModule::new(None).unwrap();
