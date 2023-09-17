@@ -23,6 +23,7 @@ Rewrite of my personal Python [Polybar](https://polybar.github.io/) modules (and
 - [x] Screen autolock status & control
 - [x] Syncthing status
 - [x] Taskwarrior next task
+- [x] Todo.txt next task
 - [x] Xmonad current layout
 - [x] Weather
 
