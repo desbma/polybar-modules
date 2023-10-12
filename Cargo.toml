@@ -12,6 +12,7 @@ strip = true
 [dependencies]
 anyhow = { version = "1.0.66", default-features = false, features = ["backtrace", "std"] }
 atty = { version = "0.2.14", default-features = false }
+backoff = { version = "0.4.0", default-features = false }
 bounded-vec-deque = { version = "0.1.1", default-features = false }
 chrono = { version = "0.4.22", default-features = false, features = ["clock", "std"] }
 glob = { version = "0.3.0", default-features = false }

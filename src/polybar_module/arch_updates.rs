@@ -1,7 +1,10 @@
 use std::fmt::Write;
 use std::process::{Command, Stdio};
+use std::thread::sleep;
+use std::time::Duration;
 
 use anyhow::Context;
+use backoff::backoff::Backoff;
 
 use crate::markup;
 use crate::polybar_module::{NetworkMode, PolybarModuleEnv, RenderablePolybarModule};
@@ -104,12 +107,16 @@ impl RenderablePolybarModule for ArchUpdatesModule {
 
     fn wait_update(&mut self, prev_state: &Option<Self::State>) {
         if let Some(prev_state) = prev_state {
-            std::thread::sleep(match prev_state {
+            let sleep_duration = match prev_state {
                 // Nominal
-                Some(_) => std::time::Duration::from_secs(60 * 60),
+                Some(_) => {
+                    self.env.network_error_backoff.reset();
+                    Duration::from_secs(60 * 60)
+                }
                 // Error occured
-                None => std::time::Duration::from_secs(10),
-            });
+                None => self.env.network_error_backoff.next_backoff().unwrap(),
+            };
+            sleep(sleep_duration);
         }
         self.env.wait_network_mode(NetworkMode::Unrestricted);
     }

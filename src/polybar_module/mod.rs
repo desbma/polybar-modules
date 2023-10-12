@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use std::sync::mpsc::channel;
 use std::time::Duration;
 
+use backoff::{ExponentialBackoff, ExponentialBackoffBuilder};
 use notify::Watcher;
 
 pub mod arch_updates;
@@ -63,6 +64,7 @@ pub trait RenderablePolybarModule {
 pub struct PolybarModuleEnv {
     pub low_bw_filepath: PathBuf,
     pub public_screen_filepath: PathBuf,
+    pub network_error_backoff: ExponentialBackoff,
 }
 
 impl PolybarModuleEnv {
@@ -70,9 +72,16 @@ impl PolybarModuleEnv {
         let xdg_dirs = xdg::BaseDirectories::new().unwrap();
         let low_bw_filepath = xdg_dirs.get_data_home().join("low_internet_bandwidth");
         let public_screen_filepath = xdg_dirs.place_runtime_file("public_screen").unwrap();
+        let network_error_backoff = ExponentialBackoffBuilder::new()
+            .with_initial_interval(Duration::from_secs(5))
+            .with_randomization_factor(0.25)
+            .with_multiplier(1.5)
+            .with_max_interval(Duration::from_secs(60 * 60))
+            .build();
         PolybarModuleEnv {
             low_bw_filepath,
             public_screen_filepath,
+            network_error_backoff,
         }
     }
 

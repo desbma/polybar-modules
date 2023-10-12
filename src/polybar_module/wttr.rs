@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::thread::sleep;
 use std::time::Duration;
 
+use backoff::backoff::Backoff;
 use lazy_static::lazy_static;
 
 use crate::markup;
@@ -86,12 +87,16 @@ impl RenderablePolybarModule for WttrModule {
 
     fn wait_update(&mut self, prev_state: &Option<Self::State>) {
         if let Some(prev_state) = prev_state {
-            sleep(match prev_state {
+            let sleep_duration = match prev_state {
                 // Nominal
-                Some(_) => Duration::from_secs(60),
+                Some(_) => {
+                    self.env.network_error_backoff.reset();
+                    Duration::from_secs(60 * 5)
+                }
                 // Error occured
-                None => Duration::from_secs(5),
-            });
+                None => self.env.network_error_backoff.next_backoff().unwrap(),
+            };
+            sleep(sleep_duration);
         }
         self.env.wait_network_mode(NetworkMode::Unrestricted);
     }

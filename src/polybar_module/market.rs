@@ -2,6 +2,7 @@ use std::thread::sleep;
 use std::time::Duration;
 
 use anyhow::Context;
+use backoff::backoff::Backoff;
 use chrono::Datelike;
 
 use crate::markup;
@@ -133,12 +134,16 @@ impl RenderablePolybarModule for MarketModule {
 
     fn wait_update(&mut self, prev_state: &Option<Self::State>) {
         if let Some(prev_state) = prev_state {
-            sleep(match prev_state {
+            let sleep_duration = match prev_state {
                 // Nominal
-                Some(_) => Duration::from_secs(60 * 5),
+                Some(_) => {
+                    self.env.network_error_backoff.reset();
+                    Duration::from_secs(60 * 30)
+                }
                 // Error occured
-                None => Duration::from_secs(5),
-            });
+                None => self.env.network_error_backoff.next_backoff().unwrap(),
+            };
+            sleep(sleep_duration);
         }
         loop {
             let did_wait_mode = self.env.wait_network_mode(NetworkMode::Unrestricted);
