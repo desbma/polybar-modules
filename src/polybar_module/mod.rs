@@ -77,6 +77,7 @@ impl PolybarModuleEnv {
             .with_randomization_factor(0.25)
             .with_multiplier(1.5)
             .with_max_interval(Duration::from_secs(60 * 60))
+            .with_max_elapsed_time(None)
             .build();
         PolybarModuleEnv {
             low_bw_filepath,
