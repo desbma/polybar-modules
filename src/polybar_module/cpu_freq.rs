@@ -1,4 +1,4 @@
-use std::fs::File;
+use std::fs::{self, File};
 use std::io::{Read, Seek};
 use std::path::PathBuf;
 use std::thread::sleep;
@@ -36,14 +36,7 @@ impl CpuFreqModule {
         let freq_min: u32 = dirs
             .iter()
             .map(|p| p.join("scaling_min_freq"))
-            .map(File::open)
-            .collect::<Result<Vec<_>, _>>()?
-            .into_iter()
-            .map(|mut f| -> std::io::Result<String> {
-                let mut s = String::new();
-                f.read_to_string(&mut s)?;
-                Ok(s)
-            })
+            .map(fs::read_to_string)
             .collect::<Result<Vec<_>, _>>()?
             .into_iter()
             .map(|s| s.trim_end().parse::<u32>())
@@ -54,14 +47,7 @@ impl CpuFreqModule {
         let freq_max: u32 = dirs
             .iter()
             .map(|p| p.join("scaling_max_freq"))
-            .map(File::open)
-            .collect::<Result<Vec<_>, _>>()?
-            .into_iter()
-            .map(|mut f| -> std::io::Result<String> {
-                let mut s = String::new();
-                f.read_to_string(&mut s)?;
-                Ok(s)
-            })
+            .map(fs::read_to_string)
             .collect::<Result<Vec<_>, _>>()?
             .into_iter()
             .map(|s| s.trim_end().parse::<u32>())
@@ -83,6 +69,7 @@ impl CpuFreqModule {
             .iter()
             .map(|mut f| -> std::io::Result<String> {
                 let mut s = String::new();
+                #[allow(clippy::verbose_file_reads)]
                 f.read_to_string(&mut s)?;
                 f.rewind()?;
                 Ok(s)

@@ -37,3 +37,6 @@ tasks = { git = "https://github.com/desbma/todo", rev = "3ce26d63d006435a02e0bf2
 tempfile = { version = "3.3.0", default-features = false }
 toml = { version = "0.5.9", default-features = false }
 xdg = { version = "2.4.1", default-features = false }
+
+[lints.clippy]
+verbose_file_reads = "warn"
