@@ -1,0 +1,40 @@
+# Maintainer: desbma
+pkgname=polybar-modules
+pkgver=2023.10.15
+pkgrel=1
+pkgdesc='Custom modules for Polybar'
+arch=('x86_64')
+url="https://github.com/desbma/${pkgname}"
+license=('GPL')
+depends=('gcc-libs' 'openssl')
+optdepends=('arch-audit: for Arch updates module'
+            'bluez-utils: for Bluetooth module'
+            'libpulse: for PulseAudio module'
+            'nvidia-utils: for Nvidia GPU module'
+            'pacman-contrib: for Arch updates module'
+            'syncthing: for Syncthing module'
+            'task: for Taskwarrior module'
+            'xidlehook: for autolock module'
+            'yay: for Arch updates module')
+makedepends=('cargo')
+source=("git+https://github.com/desbma/${pkgname}")
+sha512sums=('SKIP')
+
+pkgver() {
+    date +%Y.%-m.%-d
+}
+
+build() {
+    cd "${pkgname}"
+    cargo build --release --locked
+}
+
+check() {
+    cd "${pkgname}"
+    cargo test --release --locked
+}
+
+package() {
+    cd "${pkgname}"
+    install -Dm 755 -t "${pkgdir}/usr/bin" ./target/release/${pkgname}
+}
