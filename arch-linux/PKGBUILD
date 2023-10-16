@@ -16,7 +16,7 @@ optdepends=('arch-audit: for Arch updates module'
             'task: for Taskwarrior module'
             'xidlehook: for autolock module'
             'yay: for Arch updates module')
-makedepends=('cargo')
+makedepends=('cargo' 'git')
 source=("git+https://github.com/desbma/${pkgname}")
 sha512sums=('SKIP')
 
