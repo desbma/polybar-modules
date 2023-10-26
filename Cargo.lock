@@ -2008,7 +2008,7 @@ dependencies = [
 [[package]]
 name = "tasks"
 version = "0.1.0"
-source = "git+https://github.com/desbma/todo?rev=3ce26d63d006435a02e0bf2e2dc79cfc5096531d#3ce26d63d006435a02e0bf2e2dc79cfc5096531d"
+source = "git+https://github.com/desbma/todo?rev=0068ecaa577455dc9de6fceebe6b6ce8541b9751#0068ecaa577455dc9de6fceebe6b6ce8541b9751"
 dependencies = [
  "anyhow",
  "chrono",

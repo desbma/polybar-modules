@@ -55,9 +55,13 @@ impl TodoTxtModule {
                 let today = chrono::Local::now().date_naive();
                 let task_file = TodoFile::new(&self.todotxt_filepath, &self.done_filepath)?;
                 let tasks = task_file.load_tasks()?;
-                let next_task = tasks.iter().filter(|t| t.is_pending(&today)).max().cloned();
+                let next_task = tasks
+                    .iter()
+                    .filter(|t| t.is_ready(&today, &tasks))
+                    .max_by(|a, b| a.cmp(b, &tasks))
+                    .cloned();
 
-                let pending_count = tasks.iter().filter(|t| t.is_pending(&today)).count();
+                let pending_count = tasks.iter().filter(|t| t.is_ready(&today, &tasks)).count();
 
                 Ok(TodoTxtModuleState::Active {
                     pending_count,
