@@ -2,7 +2,7 @@
 name = "polybar-modules"
 version = "0.1.0"
 authors = ["desbma <desbma@users.noreply.github.com>"]
-edition = "2018"
+edition = "2021"
 
 [profile.release]
 lto = true
