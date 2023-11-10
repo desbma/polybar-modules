@@ -27,7 +27,7 @@ pub struct MarketModuleState {
 }
 
 impl MarketModule {
-    pub fn new() -> MarketModule {
+    pub fn new() -> Self {
         let url =
             reqwest::Url::parse("https://www.boursorama.com/bourse/indices/cours/1rPCAC/").unwrap();
         // TODO improve selectors?
@@ -40,7 +40,7 @@ impl MarketModule {
         let selector_ma100 =
             scraper::Selector::parse("tr.c-table__row:nth-child(12) > td:nth-child(4)").unwrap();
         let env = PolybarModuleEnv::new();
-        MarketModule {
+        Self {
             url,
             selector_val,
             selector_delta,

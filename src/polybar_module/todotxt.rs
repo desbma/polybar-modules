@@ -30,7 +30,7 @@ pub enum TodoTxtModuleState {
 }
 
 impl TodoTxtModule {
-    pub fn new(max_len: Option<usize>) -> anyhow::Result<TodoTxtModule> {
+    pub fn new(max_len: Option<usize>) -> anyhow::Result<Self> {
         let todotxt_str = env::var_os("TODO_FILE")
             .ok_or_else(|| anyhow::anyhow!("TODO_FILE environment variable is not set"))?;
         let todotxt_filepath = PathBuf::from(todotxt_str);
@@ -39,7 +39,7 @@ impl TodoTxtModule {
         let done_filepath = PathBuf::from(done_str);
         let env = PolybarModuleEnv::new();
 
-        Ok(TodoTxtModule {
+        Ok(Self {
             max_len,
             todotxt_filepath,
             done_filepath,

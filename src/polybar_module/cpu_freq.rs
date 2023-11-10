@@ -21,7 +21,7 @@ pub struct CpuFreqModuleState {
 }
 
 impl CpuFreqModule {
-    pub fn new() -> anyhow::Result<CpuFreqModule> {
+    pub fn new() -> anyhow::Result<Self> {
         let dirs: Vec<PathBuf> =
             glob::glob("/sys/devices/system/cpu/cpu*/cpufreq/")?.collect::<Result<_, _>>()?;
         log::debug!("{} CPUs", dirs.len());
@@ -57,7 +57,7 @@ impl CpuFreqModule {
             .ok_or_else(|| anyhow::anyhow!("Unable to read maximum CPU frequency"))?;
         log::debug!("Frequency range: [{}, {}]", freq_min, freq_max);
 
-        Ok(CpuFreqModule {
+        Ok(Self {
             freq_range: (freq_min, freq_max),
             freq_files,
         })

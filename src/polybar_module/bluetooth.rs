@@ -35,14 +35,14 @@ pub struct BluetoothModuleState {
 }
 
 impl BluetoothModule {
-    pub fn new(device_whitelist_addrs: Vec<macaddr::MacAddr6>) -> anyhow::Result<BluetoothModule> {
+    pub fn new(device_whitelist_addrs: Vec<macaddr::MacAddr6>) -> anyhow::Result<Self> {
         let bluetoothctl_child = Command::new("bluetoothctl")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::null())
             .spawn()?;
 
-        Ok(BluetoothModule {
+        Ok(Self {
             controller: Self::probe_controller()?,
             devices: Self::probe_devices(&device_whitelist_addrs)?,
             bluetoothctl_child,

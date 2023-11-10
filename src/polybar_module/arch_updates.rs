@@ -23,10 +23,10 @@ pub struct ArchUpdatesModuleState {
 }
 
 impl ArchUpdatesModule {
-    pub fn new() -> anyhow::Result<ArchUpdatesModule> {
+    pub fn new() -> anyhow::Result<Self> {
         let xdg_dirs = xdg::BaseDirectories::new()?;
         let env = PolybarModuleEnv::new();
-        Ok(ArchUpdatesModule { xdg_dirs, env })
+        Ok(Self { xdg_dirs, env })
     }
 
     fn try_update(&mut self) -> anyhow::Result<ArchUpdatesModuleState> {

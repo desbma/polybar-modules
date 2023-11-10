@@ -22,9 +22,9 @@ pub struct XmonadModuleState {
 }
 
 impl XmonadModule {
-    pub fn new() -> anyhow::Result<XmonadModule> {
+    pub fn new() -> anyhow::Result<Self> {
         let xdg_dirs = xdg::BaseDirectories::new()?;
-        Ok(XmonadModule {
+        Ok(Self {
             xdg_dirs,
             pipe: None,
             poller: mio::Poll::new()?,

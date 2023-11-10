@@ -33,7 +33,7 @@ pub struct NetworkStatusModuleState {
 }
 
 impl NetworkStatusModule {
-    pub fn new(cfg: config::NetworkStatusModuleConfig) -> anyhow::Result<NetworkStatusModule> {
+    pub fn new(cfg: config::NetworkStatusModuleConfig) -> anyhow::Result<Self> {
         let env = PolybarModuleEnv::new();
         let mut ping_childs = Vec::with_capacity(cfg.hosts.len());
         let poller = mio::Poll::new()?;
@@ -59,7 +59,7 @@ impl NetworkStatusModule {
             sysinfo::RefreshKind::new().with_networks_list(),
         ));
 
-        Ok(NetworkStatusModule {
+        Ok(Self {
             env,
             cfg,
             ping_childs,

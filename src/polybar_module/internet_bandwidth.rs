@@ -12,9 +12,9 @@ pub struct InternetBandwidthModuleState {
 }
 
 impl InternetBandwidthModule {
-    pub fn new() -> InternetBandwidthModule {
+    pub fn new() -> Self {
         let env = PolybarModuleEnv::new();
-        InternetBandwidthModule { env }
+        Self { env }
     }
 }
 

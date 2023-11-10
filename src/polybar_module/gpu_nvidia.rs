@@ -24,8 +24,8 @@ pub struct GpuNvidiaModuleState {
 const OVERHEAT_TEMP_THRESHOLD: u8 = 70;
 
 impl GpuNvidiaModule {
-    pub fn new() -> GpuNvidiaModule {
-        GpuNvidiaModule {}
+    pub fn new() -> Self {
+        Self {}
     }
 
     fn try_update(&mut self) -> anyhow::Result<GpuNvidiaModuleState> {

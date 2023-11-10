@@ -21,10 +21,10 @@ pub struct AutolockModuleState {
 }
 
 impl AutolockModule {
-    pub fn new() -> anyhow::Result<AutolockModule> {
+    pub fn new() -> anyhow::Result<Self> {
         let xdg_dirs = xdg::BaseDirectories::new()?;
         let signals = signal_hook::iterator::Signals::new([signal_hook::consts::signal::SIGUSR1])?;
-        Ok(AutolockModule { xdg_dirs, signals })
+        Ok(Self { xdg_dirs, signals })
     }
 
     fn try_update(&mut self) -> anyhow::Result<AutolockModuleState> {

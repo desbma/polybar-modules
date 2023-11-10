@@ -21,7 +21,7 @@ pub struct DebianUpdatesModuleState {
 }
 
 impl DebianUpdatesModule {
-    pub fn new() -> anyhow::Result<DebianUpdatesModule> {
+    pub fn new() -> anyhow::Result<Self> {
         let env = PolybarModuleEnv::new();
 
         // Run lsb_release
@@ -43,7 +43,7 @@ impl DebianUpdatesModule {
             debian_relase_codename = String::from("sid");
         }
 
-        Ok(DebianUpdatesModule {
+        Ok(Self {
             env,
             debian_relase_codename,
         })

@@ -33,7 +33,7 @@ pub struct PulseAudioModuleState {
 }
 
 impl PulseAudioModule {
-    pub fn new() -> anyhow::Result<PulseAudioModule> {
+    pub fn new() -> anyhow::Result<Self> {
         // Pactl process to follow events
         let child = Command::new("pactl")
             .args(["subscribe"]) // LANG=C has no effect on this one
@@ -42,7 +42,7 @@ impl PulseAudioModule {
             .stderr(Stdio::null())
             .spawn()?;
 
-        Ok(PulseAudioModule {
+        Ok(Self {
             pactl_subscribe_child: child,
         })
     }

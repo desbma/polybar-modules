@@ -68,7 +68,7 @@ pub struct PolybarModuleEnv {
 }
 
 impl PolybarModuleEnv {
-    pub fn new() -> PolybarModuleEnv {
+    pub fn new() -> Self {
         let xdg_dirs = xdg::BaseDirectories::new().unwrap();
         let low_bw_filepath = xdg_dirs.get_data_home().join("low_internet_bandwidth");
         let public_screen_filepath = xdg_dirs.place_runtime_file("public_screen").unwrap();
@@ -79,7 +79,7 @@ impl PolybarModuleEnv {
             .with_max_interval(Duration::from_secs(60 * 60))
             .with_max_elapsed_time(None)
             .build();
-        PolybarModuleEnv {
+        Self {
             low_bw_filepath,
             public_screen_filepath,
             network_error_backoff,

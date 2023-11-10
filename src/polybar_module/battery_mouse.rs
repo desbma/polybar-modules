@@ -15,8 +15,8 @@ pub struct BatteryMouseModuleState {
 }
 
 impl BatteryMouseModule {
-    pub fn new() -> BatteryMouseModule {
-        BatteryMouseModule {}
+    pub fn new() -> Self {
+        Self {}
     }
 
     fn sysfs_capacity_level_to_prct(s: &str) -> Option<u8> {

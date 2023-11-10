@@ -369,7 +369,7 @@ impl TryFrom<RawEvent> for Event {
             data,
         } = raw_event;
         let data = data.get();
-        Ok(Event {
+        Ok(Self {
             id,
             global_id,
             time,

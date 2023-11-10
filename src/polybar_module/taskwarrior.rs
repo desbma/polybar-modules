@@ -31,7 +31,7 @@ pub enum TaskwarriorModuleState {
 }
 
 impl TaskwarriorModule {
-    pub fn new(max_len: Option<usize>) -> anyhow::Result<TaskwarriorModule> {
+    pub fn new(max_len: Option<usize>) -> anyhow::Result<Self> {
         // Run task to get data.location
         let output = Command::new("task")
             .args(["show", "data.location"])
@@ -53,7 +53,7 @@ impl TaskwarriorModule {
         let data_dir = shellexpand::tilde(&data_dir_raw).into_owned();
         let env = PolybarModuleEnv::new();
 
-        Ok(TaskwarriorModule {
+        Ok(Self {
             max_len,
             data_dir,
             env,

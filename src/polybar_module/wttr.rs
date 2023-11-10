@@ -47,9 +47,9 @@ lazy_static! {
 }
 
 impl WttrModule {
-    pub fn new(location: Option<String>) -> WttrModule {
+    pub fn new(location: Option<String>) -> Self {
         let env = PolybarModuleEnv::new();
-        WttrModule { location, env }
+        Self { location, env }
     }
 
     fn try_update(&mut self) -> anyhow::Result<WttrModuleState> {

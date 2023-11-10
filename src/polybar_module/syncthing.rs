@@ -40,7 +40,7 @@ const REST_EVENT_TIMEOUT: Duration = Duration::from_secs(60 * 60);
 const REST_NORMAL_TIMEOUT: Duration = Duration::from_secs(10);
 
 impl SyncthingModule {
-    pub fn new(st_config_filepath: &Path) -> anyhow::Result<SyncthingModule> {
+    pub fn new(st_config_filepath: &Path) -> anyhow::Result<Self> {
         // Read config to get API key
         log::debug!("st_config_filepath = {:?}", st_config_filepath);
         let st_config_xml = fs::read_to_string(st_config_filepath)?;
@@ -58,7 +58,7 @@ impl SyncthingModule {
             .timeout(max(REST_NORMAL_TIMEOUT, REST_EVENT_TIMEOUT))
             .build()?;
 
-        Ok(SyncthingModule {
+        Ok(Self {
             session,
             system_config: None,
             last_event_id: 0,
