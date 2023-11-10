@@ -50,7 +50,11 @@ impl CpuTopModule {
             exe.rsplit('/').next()
         } else {
             // TODO kthread?
-            cmd.split(' ').next()
+            cmd.split(' ')
+                .next()
+                .ok_or_else(|| anyhow::anyhow!("Unexpected ps output"))?
+                .rsplit('/')
+                .next()
         };
         let process_name = process_name_match
             .ok_or_else(|| anyhow::anyhow!("Unexpected ps output"))?
