@@ -34,6 +34,16 @@ pub fn ellipsis(s: &str, max_len: Option<usize>) -> String {
     }
 }
 
+pub fn pad(s: &str, min_len: Option<usize>) -> String {
+    match min_len {
+        Some(min_len) if min_len > s.len() => {
+            let pad_count = min_len - s.len();
+            format!("{}{}", " ".repeat(pad_count), s)
+        }
+        _ => s.to_string(),
+    }
+}
+
 // Shorten device model name (mouse, headset...)
 pub fn shorten_model_name(s: &str) -> String {
     match s.split(&[' ', '-'][..]).find(|w| {

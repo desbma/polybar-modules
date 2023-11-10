@@ -47,6 +47,10 @@ fn main() -> anyhow::Result<()> {
             polybar_module::cpu_freq::CpuFreqModule::new()
                 .context("Failed to initialize CPU frequency module")?,
         ),
+        PolybarModuleName::cpu_top { max_len } => polybar_module::PolybarModule::CpuTop(
+            polybar_module::cpu_top::CpuTopModule::new(max_len)
+                .context("Failed to initialize CPU top module")?,
+        ),
         PolybarModuleName::debian_updates => polybar_module::PolybarModule::DebianUpdates(
             polybar_module::debian_updates::DebianUpdatesModule::new()
                 .context("Failed to initialize Debian updates module")?,
@@ -121,6 +125,7 @@ fn main() -> anyhow::Result<()> {
         polybar_module::PolybarModule::BatteryMouse(module) => render_loop(module),
         polybar_module::PolybarModule::Bluetooth(module) => render_loop(module),
         polybar_module::PolybarModule::CpuFreq(module) => render_loop(module),
+        polybar_module::PolybarModule::CpuTop(module) => render_loop(module),
         polybar_module::PolybarModule::DebianUpdates(module) => render_loop(module),
         polybar_module::PolybarModule::GpuNvidia(module) => render_loop(module),
         polybar_module::PolybarModule::InternetBandwidth(module) => render_loop(module),

@@ -17,6 +17,8 @@ pub enum PolybarModuleName {
     },
     #[structopt(about = "Start CPU frequency module")]
     cpu_freq,
+    #[structopt(about = "Start CPU top process module")]
+    cpu_top { max_len: Option<usize> },
     #[structopt(about = "Start Debian update module")]
     debian_updates,
     #[structopt(about = "Start Nvidia GPU module")]
