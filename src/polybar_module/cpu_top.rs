@@ -27,13 +27,23 @@ impl CpuTopModule {
     fn try_update(&mut self) -> anyhow::Result<CpuTopModuleState> {
         // Run ps
         let output = Command::new("ps")
-            .args(["-e", "--no-headers", "-o", "c,cmd,exe", "--sort", "-%cpu"])
+            .args([
+                "-e",
+                "--no-headers",
+                "-o",
+                "c,cmd:256,exe:256",
+                "--sort",
+                "-%cpu",
+            ])
             .output()?;
         output.status.exit_ok().context("ps exited with error")?;
 
         // Parse output
-        let proc_line = &output
-            .stdout
+        Self::parse_ps_output(&output.stdout)
+    }
+
+    fn parse_ps_output(stdout: &[u8]) -> anyhow::Result<CpuTopModuleState> {
+        let proc_line = stdout
             .lines()
             .map_while(Result::ok)
             .map(|l| l.trim_start().to_owned())
@@ -45,11 +55,13 @@ impl CpuTopModule {
         let cpu_prct = cpu_prct_str.parse()?;
         let (cmd, exe) = rest
             .rsplit_once(' ')
+            .map(|p| (p.0.trim_end(), p.1))
             .ok_or_else(|| anyhow::anyhow!("Unexpected ps output"))?;
         let process_name_match = if exe != "-" {
             exe.rsplit('/').next()
+        } else if cmd.starts_with('[') && cmd.ends_with(']') {
+            Some("[kthread]")
         } else {
-            // TODO kthread?
             cmd.split(' ')
                 .next()
                 .ok_or_else(|| anyhow::anyhow!("Unexpected ps output"))?
@@ -122,6 +134,45 @@ impl RenderablePolybarModule for CpuTopModule {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_parse_ps_output() {
+        let output = " 1 /usr/lib/firefox/firefox -contentproc -childID 6 -isForBrowser -prefsLen 55932 -prefMapSize 253692 -jsInitLen 235336 -parentBuildID 20231106235557 -greomni /usr/lib/firefox/omni.ja -appomni /usr/lib/firefox/browser/omni.ja -appDir /usr/lib/firefox/browser -";
+        assert_eq!(
+            CpuTopModule::parse_ps_output(output.as_bytes()).unwrap(),
+            CpuTopModuleState {
+                cpu_prct: 1,
+                process_name: "firefox".to_string()
+            }
+        );
+
+        let output = " 1 /usr/lib/Xorg :0 -seat seat0 -auth /run/lightdm/root/:0 -nolisten tcp vt7 -novtswitch                                                                                                                                                -";
+        assert_eq!(
+            CpuTopModule::parse_ps_output(output.as_bytes()).unwrap(),
+            CpuTopModuleState {
+                cpu_prct: 1,
+                process_name: "Xorg".to_string()
+            }
+        );
+
+        let output = " 0 polybar-modules network-status                                                                                                                                                /usr/bin/polybar-modules";
+        assert_eq!(
+            CpuTopModule::parse_ps_output(output.as_bytes()).unwrap(),
+            CpuTopModuleState {
+                cpu_prct: 0,
+                process_name: "polybar-modules".to_string()
+            }
+        );
+
+        let output = "99 ps -e --no-headers -o c,cmd:255,exe:255 --sort -%cpu                                                                                                                                                /usr/bin/ps\n 6 /usr/lib/thunderbird/thunderbird                                                                                                                                                -";
+        assert_eq!(
+            CpuTopModule::parse_ps_output(output.as_bytes()).unwrap(),
+            CpuTopModuleState {
+                cpu_prct: 6,
+                process_name: "thunderbird".to_string()
+            }
+        );
+    }
 
     #[test]
     fn test_render() {
