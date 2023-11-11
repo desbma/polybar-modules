@@ -94,31 +94,25 @@ impl RenderablePolybarModule for CpuTopModule {
     fn render(&self, state: &Self::State) -> String {
         let max_proc_len = self.max_len.map(|v| v - 4);
         match state {
-            Some(state) => markup::action(
-                &markup::style(
-                    &format!(
-                        "{: >2}% {}",
-                        state.cpu_prct,
-                        theme::pad(
-                            &theme::ellipsis(&state.process_name, max_proc_len),
-                            max_proc_len
-                        ),
+            Some(state) => markup::style(
+                &format!(
+                    "{: >2}% {}",
+                    state.cpu_prct,
+                    theme::pad(
+                        &theme::ellipsis(&state.process_name, max_proc_len),
+                        max_proc_len
                     ),
-                    if state.cpu_prct >= 90 {
-                        Some(theme::Color::Attention)
-                    } else if state.cpu_prct >= 50 {
-                        Some(theme::Color::Notice)
-                    } else {
-                        None
-                    },
-                    None,
-                    None,
-                    None,
                 ),
-                markup::PolybarAction {
-                    type_: markup::PolybarActionType::ClickLeft,
-                    command: "htop".to_string(),
+                if state.cpu_prct >= 90 {
+                    Some(theme::Color::Attention)
+                } else if state.cpu_prct >= 50 {
+                    Some(theme::Color::Notice)
+                } else {
+                    None
                 },
+                None,
+                None,
+                None,
             ),
             None => markup::style("", Some(theme::Color::Attention), None, None, None),
         }
@@ -137,31 +131,25 @@ mod tests {
             cpu_prct: 1,
             process_name: "bz".to_string(),
         });
-        assert_eq!(module.render(&state), "%{A1:htop:} 1%     bz%{A}");
+        assert_eq!(module.render(&state), " 1%     bz");
 
         let state = Some(CpuTopModuleState {
             cpu_prct: 1,
             process_name: "bzzzzzzzzzzzzzzzz".to_string(),
         });
-        assert_eq!(module.render(&state), "%{A1:htop:} 1% bzzzz…%{A}");
+        assert_eq!(module.render(&state), " 1% bzzzz…");
 
         let state = Some(CpuTopModuleState {
             cpu_prct: 50,
             process_name: "bz".to_string(),
         });
-        assert_eq!(
-            module.render(&state),
-            "%{A1:htop:}%{F#b58900}50%     bz%{F-}%{A}"
-        );
+        assert_eq!(module.render(&state), "%{F#b58900}50%     bz%{F-}");
 
         let state = Some(CpuTopModuleState {
             cpu_prct: 99,
             process_name: "bz".to_string(),
         });
-        assert_eq!(
-            module.render(&state),
-            "%{A1:htop:}%{F#cb4b16}99%     bz%{F-}%{A}"
-        );
+        assert_eq!(module.render(&state), "%{F#cb4b16}99%     bz%{F-}");
 
         let state = None;
         assert_eq!(module.render(&state), "%{F#cb4b16}%{F-}");
