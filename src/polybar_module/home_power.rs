@@ -22,7 +22,6 @@ pub struct HomePowerModuleState {
     pub solar_power: u32,
     pub home_consumption_power: u32,
     pub grid_power: u32,
-    refresh_delay: Duration,
 }
 
 #[derive(Debug, Deserialize)]
@@ -100,7 +99,6 @@ impl HomePowerModule {
             home_consumption_power: (resp.site_current_power_flow.load.current_power * 1000.0)
                 as u32,
             grid_power: (resp.site_current_power_flow.grid.current_power * 1000.0) as u32,
-            refresh_delay: Duration::from_secs(resp.site_current_power_flow.update_refresh_rate),
         })
     }
 }
@@ -112,9 +110,9 @@ impl RenderablePolybarModule for HomePowerModule {
         if let Some(prev_state) = prev_state {
             let sleep_duration = match prev_state {
                 // Nominal
-                Some(prev_state) => {
+                Some(_) => {
                     self.env.network_error_backoff.reset();
-                    prev_state.refresh_delay
+                    Duration::from_secs(20)
                 }
                 // Error occured
                 None => self.env.network_error_backoff.next_backoff().unwrap(),
@@ -171,7 +169,6 @@ mod tests {
             solar_power: 2000,
             home_consumption_power: 600,
             grid_power: 1400,
-            refresh_delay: Duration::from_secs(3),
         });
         assert_eq!(
             module.render(&state),
@@ -182,7 +179,6 @@ mod tests {
             solar_power: 0,
             home_consumption_power: 600,
             grid_power: 1400,
-            refresh_delay: Duration::from_secs(3),
         });
         assert_eq!(
             module.render(&state),
