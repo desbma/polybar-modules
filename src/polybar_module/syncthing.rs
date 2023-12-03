@@ -6,8 +6,7 @@ use std::thread::sleep;
 use std::time::Duration;
 
 use crate::markup;
-use crate::polybar_module::syncthing_rest;
-use crate::polybar_module::RenderablePolybarModule;
+use crate::polybar_module::{syncthing_rest, RenderablePolybarModule, TCP_LOCAL_TIMEOUT};
 use crate::theme;
 
 pub struct SyncthingModule {
@@ -37,7 +36,6 @@ struct SyncthingXmlConfigGui {
 }
 
 const REST_EVENT_TIMEOUT: Duration = Duration::from_secs(60 * 60);
-const REST_NORMAL_TIMEOUT: Duration = Duration::from_secs(10);
 
 impl SyncthingModule {
     pub fn new(st_config_filepath: &Path) -> anyhow::Result<Self> {
@@ -55,7 +53,7 @@ impl SyncthingModule {
             .default_headers(session_headers)
             // Set maximum timeout and override with lower one for non event requests otherwise the timeout only
             // applies for connect
-            .timeout(max(REST_NORMAL_TIMEOUT, REST_EVENT_TIMEOUT))
+            .timeout(max(TCP_LOCAL_TIMEOUT, REST_EVENT_TIMEOUT))
             .build()?;
 
         Ok(Self {
@@ -130,7 +128,7 @@ impl SyncthingModule {
             .append_pair("events", &evt_types.join(","));
         url.query_pairs_mut().append_pair(
             "timeout",
-            &(REST_EVENT_TIMEOUT + REST_NORMAL_TIMEOUT)
+            &(REST_EVENT_TIMEOUT + TCP_LOCAL_TIMEOUT)
                 .as_secs()
                 .to_string(),
         );
@@ -151,7 +149,7 @@ impl SyncthingModule {
         let json_str = self
             .session
             .get(url)
-            .timeout(REST_NORMAL_TIMEOUT)
+            .timeout(TCP_LOCAL_TIMEOUT)
             .send()?
             .error_for_status()?
             .text()?;

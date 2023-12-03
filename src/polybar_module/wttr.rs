@@ -6,11 +6,14 @@ use backoff::backoff::Backoff;
 use lazy_static::lazy_static;
 
 use crate::markup;
-use crate::polybar_module::{NetworkMode, PolybarModuleEnv, RenderablePolybarModule};
+use crate::polybar_module::{
+    NetworkMode, PolybarModuleEnv, RenderablePolybarModule, TCP_REMOTE_TIMEOUT,
+};
 use crate::theme;
 
 pub struct WttrModule {
-    location: Option<String>,
+    client: reqwest::blocking::Client,
+    req: reqwest::blocking::Request,
     env: PolybarModuleEnv,
 }
 
@@ -47,18 +50,25 @@ lazy_static! {
 }
 
 impl WttrModule {
-    pub fn new(location: Option<String>) -> Self {
+    pub fn new(location: Option<String>) -> anyhow::Result<Self> {
         let env = PolybarModuleEnv::new();
-        Self { location, env }
+        let client = reqwest::blocking::Client::builder()
+            .timeout(TCP_REMOTE_TIMEOUT)
+            .build()?;
+        let url = &format!(
+            "https://wttr.in/{}?format=%c/%t",
+            location.as_ref().unwrap_or(&"".to_string())
+        );
+        let req = client.get(url).build()?;
+        Ok(Self { client, req, env })
     }
 
     fn try_update(&mut self) -> anyhow::Result<WttrModuleState> {
-        let url = &format!(
-            "https://wttr.in/{}?format=%c/%t",
-            self.location.as_ref().unwrap_or(&"".to_string())
-        );
-        log::debug!("{}", url);
-        let text = reqwest::blocking::get(url)?.error_for_status()?.text()?;
+        let text = self
+            .client
+            .execute(self.req.try_clone().unwrap())?
+            .error_for_status()?
+            .text()?;
         log::debug!("{:?}", text);
 
         let mut tokens = text.split('/').map(|s| s.trim());
@@ -131,7 +141,7 @@ mod tests {
 
     #[test]
     fn test_render() {
-        let module = WttrModule::new(None);
+        let module = WttrModule::new(None).unwrap();
 
         let state = Some(WttrModuleState {
             sky: "", temp: 15

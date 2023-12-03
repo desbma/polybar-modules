@@ -77,7 +77,7 @@ fn main() -> anyhow::Result<()> {
             polybar_module::internet_bandwidth::InternetBandwidthModule::new(),
         ),
         PolybarModuleName::market => {
-            polybar_module::PolybarModule::Market(polybar_module::market::MarketModule::new())
+            polybar_module::PolybarModule::Market(polybar_module::market::MarketModule::new()?)
         }
         PolybarModuleName::network_status => {
             let network_status_cfg = cfg
@@ -124,9 +124,10 @@ fn main() -> anyhow::Result<()> {
             polybar_module::todotxt::TodoTxtModule::new(max_len)
                 .context("Failed to initialize Todo.txt module")?,
         ),
-        PolybarModuleName::wttr { location } => {
-            polybar_module::PolybarModule::Wttr(polybar_module::wttr::WttrModule::new(location))
-        }
+        PolybarModuleName::wttr { location } => polybar_module::PolybarModule::Wttr(
+            polybar_module::wttr::WttrModule::new(location)
+                .context("Failed to initialize Wttr module")?,
+        ),
         PolybarModuleName::xmonad => polybar_module::PolybarModule::Xmonad(
             polybar_module::xmonad::XmonadModule::new()
                 .context("Failed to initialize Xmonad module")?,

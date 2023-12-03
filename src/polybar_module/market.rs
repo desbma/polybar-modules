@@ -6,11 +6,14 @@ use backoff::backoff::Backoff;
 use chrono::Datelike;
 
 use crate::markup;
-use crate::polybar_module::{NetworkMode, PolybarModuleEnv, RenderablePolybarModule};
+use crate::polybar_module::{
+    NetworkMode, PolybarModuleEnv, RenderablePolybarModule, TCP_REMOTE_TIMEOUT,
+};
 use crate::theme;
 
 pub struct MarketModule {
-    url: reqwest::Url,
+    client: reqwest::blocking::Client,
+    req: reqwest::blocking::Request,
     selector_val: scraper::Selector,
     selector_delta: scraper::Selector,
     selector_ma50: scraper::Selector,
@@ -27,9 +30,13 @@ pub struct MarketModuleState {
 }
 
 impl MarketModule {
-    pub fn new() -> Self {
-        let url =
-            reqwest::Url::parse("https://www.boursorama.com/bourse/indices/cours/1rPCAC/").unwrap();
+    pub fn new() -> anyhow::Result<Self> {
+        let client = reqwest::blocking::Client::builder()
+            .timeout(TCP_REMOTE_TIMEOUT)
+            .build()?;
+        let url = "https://www.boursorama.com/bourse/indices/cours/1rPCAC/";
+        let req = client.get(url).build()?;
+
         // TODO improve selectors?
         let selector_val =
             scraper::Selector::parse(".c-faceplate__price > span:nth-child(1)").unwrap();
@@ -40,14 +47,16 @@ impl MarketModule {
         let selector_ma100 =
             scraper::Selector::parse("tr.c-table__row:nth-child(12) > td:nth-child(4)").unwrap();
         let env = PolybarModuleEnv::new();
-        Self {
-            url,
+
+        Ok(Self {
+            client,
+            req,
             selector_val,
             selector_delta,
             selector_ma50,
             selector_ma100,
             env,
-        }
+        })
     }
 
     fn wait_working_day() -> bool {
@@ -70,8 +79,10 @@ impl MarketModule {
 
     fn try_update(&mut self) -> anyhow::Result<MarketModuleState> {
         // Send request
-        log::debug!("{}", self.url);
-        let response = reqwest::blocking::get(self.url.clone())?.error_for_status()?;
+        let response = self
+            .client
+            .execute(self.req.try_clone().unwrap())?
+            .error_for_status()?;
 
         // Parse response
         let page = scraper::Html::parse_document(&response.text()?);
@@ -216,7 +227,7 @@ mod tests {
 
     #[test]
     fn test_render() {
-        let module = MarketModule::new();
+        let module = MarketModule::new().unwrap();
 
         let state = Some(MarketModuleState {
             val: 5000.6,
