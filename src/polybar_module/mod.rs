@@ -14,6 +14,7 @@ pub mod cpu_freq;
 pub mod cpu_top;
 pub mod debian_updates;
 pub mod gpu_nvidia;
+pub mod home_power;
 pub mod internet_bandwidth;
 pub mod market;
 pub mod network_status;
@@ -35,6 +36,7 @@ pub enum PolybarModule {
     CpuTop(cpu_top::CpuTopModule),
     DebianUpdates(debian_updates::DebianUpdatesModule),
     GpuNvidia(gpu_nvidia::GpuNvidiaModule),
+    HomePower(home_power::HomePowerModule),
     InternetBandwidth(internet_bandwidth::InternetBandwidthModule),
     Market(market::MarketModule),
     NetworkStatus(network_status::NetworkStatusModule),
@@ -52,6 +54,9 @@ pub enum NetworkMode {
     Unrestricted,
     LowBandwith,
 }
+
+const TCP_REMOTE_TIMEOUT: Duration = Duration::from_secs(20);
+const TCP_LOCAL_TIMEOUT: Duration = Duration::from_secs(5);
 
 pub trait RenderablePolybarModule {
     type State: Debug + PartialEq;

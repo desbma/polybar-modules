@@ -58,6 +58,21 @@ fn main() -> anyhow::Result<()> {
         PolybarModuleName::gpu_nvidia => polybar_module::PolybarModule::GpuNvidia(
             polybar_module::gpu_nvidia::GpuNvidiaModule::new(),
         ),
+        PolybarModuleName::home_power => {
+            let home_power_cfg = cfg
+                .and_then(|c| {
+                    c.module
+                        .ok_or_else(|| anyhow::anyhow!("Missing 'module' config section"))
+                })
+                .and_then(|c| {
+                    c.home_power
+                        .ok_or_else(|| anyhow::anyhow!("Missing 'home_power' config section"))
+                })
+                .context("Unable to get home power module config from config file")?;
+            polybar_module::PolybarModule::HomePower(
+                polybar_module::home_power::HomePowerModule::new(home_power_cfg)?,
+            )
+        }
         PolybarModuleName::internet_bandwidth => polybar_module::PolybarModule::InternetBandwidth(
             polybar_module::internet_bandwidth::InternetBandwidthModule::new(),
         ),
@@ -128,6 +143,7 @@ fn main() -> anyhow::Result<()> {
         polybar_module::PolybarModule::CpuTop(module) => render_loop(module),
         polybar_module::PolybarModule::DebianUpdates(module) => render_loop(module),
         polybar_module::PolybarModule::GpuNvidia(module) => render_loop(module),
+        polybar_module::PolybarModule::HomePower(module) => render_loop(module),
         polybar_module::PolybarModule::InternetBandwidth(module) => render_loop(module),
         polybar_module::PolybarModule::Market(module) => render_loop(module),
         polybar_module::PolybarModule::NetworkStatus(module) => render_loop(module),

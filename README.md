@@ -13,6 +13,7 @@ Rewrite of my personal Python [Polybar](https://polybar.github.io/) modules (and
 - [x] CPU top process
 - [x] Debian updates
 - [ ] ~~i3 layout status & control~~ I'm now using Xmonad instead
+- [x] Home power (consumption & solar panel production)
 - [x] Low bandwidth button
 - [x] Market trend
 - [ ] ~~Mount device control~~ I'm now using Udiskie instead

@@ -23,6 +23,8 @@ pub enum PolybarModuleName {
     debian_updates,
     #[structopt(about = "Start Nvidia GPU module")]
     gpu_nvidia,
+    #[structopt(about = "Start home power module")]
+    home_power,
     #[structopt(about = "Start low bandwidth button module")]
     internet_bandwidth,
     #[structopt(about = "Start market trend module")]
@@ -59,7 +61,14 @@ pub struct Config {
 
 #[derive(Debug, serde::Deserialize)]
 pub struct ModuleConfig {
+    pub home_power: Option<HomePowerModuleConfig>,
     pub network_status: Option<NetworkStatusModuleConfig>,
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub struct HomePowerModuleConfig {
+    pub site_id: u64,
+    pub api_key: String,
 }
 
 #[derive(Debug, serde::Deserialize)]
