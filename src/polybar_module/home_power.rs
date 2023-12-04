@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use std::thread::sleep;
 use std::time::Duration;
 
@@ -180,14 +181,15 @@ impl RenderablePolybarModule for HomePowerModule {
         match state {
             Some(state) => {
                 format!(
-                    "{} {:.1}{:.1}{}{:.1}kW",
+                    "{} {:.1}{}{:.1}{}{:.1}kW",
                     markup::style("", Some(theme::Color::MainIcon), None, None, None),
                     state.solar_power as f64 / 1000.0,
+                    if state.solar_power > 0 { '' } else { ' ' },
                     state.home_consumption_power as f64 / 1000.0,
-                    if state.solar_power > state.home_consumption_power {
-                        ""
-                    } else {
-                        ""
+                    match state.solar_power.cmp(&state.home_consumption_power) {
+                        Ordering::Greater => '',
+                        Ordering::Less => '',
+                        Ordering::Equal => ' ',
                     },
                     state.grid_power as f64 / 1000.0,
                 )
@@ -226,7 +228,7 @@ mod tests {
         });
         assert_eq!(
             module.render(&state),
-            "%{F#eee8d5}\u{ea06}%{F-} \u{e9d7}0.0\u{e912}\u{e979}0.6\u{e910}\u{e954}1.4kW"
+            "%{F#eee8d5}\u{ea06}%{F-} \u{e9d7}0.0 \u{e979}0.6\u{e910}\u{e954}1.4kW"
         );
 
         let state = None;
