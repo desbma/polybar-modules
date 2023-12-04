@@ -4,7 +4,7 @@ use std::time::Duration;
 use backoff::backoff::Backoff;
 use serde::Deserialize;
 
-use crate::config::HomePowerModuleConfig;
+use crate::config::{HomePowerAuth, HomePowerModuleConfig};
 use crate::markup;
 use crate::polybar_module::{
     NetworkMode, PolybarModuleEnv, RenderablePolybarModule, TCP_REMOTE_TIMEOUT,
@@ -14,6 +14,8 @@ use crate::theme;
 pub struct HomePowerModule {
     client: reqwest::blocking::Client,
     req: reqwest::blocking::Request,
+    inner_resp_type: bool,
+    wait_delay: Option<Duration>,
     env: PolybarModuleEnv,
 }
 
@@ -36,11 +38,11 @@ struct CurrentPowerFlowResponse {
 struct SiteCurrentPowerFlow {
     update_refresh_rate: u64,
     connections: Vec<PowerConnection>,
-    #[serde(rename(deserialize = "GRID"))]
+    #[serde(alias = "GRID", alias = "grid")]
     grid: PowerState,
-    #[serde(rename(deserialize = "LOAD"))]
+    #[serde(alias = "LOAD", alias = "load")]
     load: PowerState,
-    #[serde(rename(deserialize = "PV"))]
+    #[serde(alias = "PV", alias = "pv")]
     pv: PowerState,
 }
 
@@ -72,16 +74,47 @@ impl HomePowerModule {
         let client = reqwest::blocking::Client::builder()
             .timeout(TCP_REMOTE_TIMEOUT)
             .build()?;
-        let url = reqwest::Url::parse_with_params(
-            &format!(
-                "https://monitoringapi.solaredge.com/site/{}/currentPowerFlow.json",
-                cfg.site_id
-            ),
-            &[("api_key", &cfg.api_key)],
-        )?;
-        let req = client.get(url).build()?;
+        let (req, inner_resp_type) = match cfg.api_auth {
+            HomePowerAuth::ApiKey(api_key) => {
+                // Official API
+                // See https://knowledge-center.solaredge.com/sites/kc/files/se_monitoring_api.pdf
+                // It is heavily rate limited, so nearly unusable for our need
+                let url = reqwest::Url::parse_with_params(
+                    &format!(
+                        "https://monitoringapi.solaredge.com/site/{}/currentPowerFlow.json",
+                        cfg.site_id
+                    ),
+                    &[("api_key", &api_key)],
+                )?;
+                (client.get(url).build()?, false)
+            }
+            HomePowerAuth::Cookie(cookie_val) => {
+                // Web API used by the monitoring web site
+                // Does not seem to be rate limited
+                let url = format!(
+                    "https://monitoring.solaredge.com/services/powerflow/site/{}/latest",
+                    cfg.site_id
+                );
+                (
+                    client
+                        .get(url)
+                        .header(
+                            "Cookie",
+                            format!("SPRING_SECURITY_REMEMBER_ME_COOKIE={cookie_val};"),
+                        )
+                        .build()?,
+                    true,
+                )
+            }
+        };
         let env = PolybarModuleEnv::new();
-        Ok(Self { client, req, env })
+        Ok(Self {
+            client,
+            req,
+            inner_resp_type,
+            wait_delay: None,
+            env,
+        })
     }
 
     fn try_update(&mut self) -> anyhow::Result<HomePowerModuleState> {
@@ -91,14 +124,21 @@ impl HomePowerModule {
             .error_for_status()?
             .text()?;
         log::debug!("{:?}", text);
-        let resp: CurrentPowerFlowResponse = serde_json::from_str(&text)?;
-        log::debug!("{:?}", resp);
+        let site_data = if self.inner_resp_type {
+            let site_data: SiteCurrentPowerFlow = serde_json::from_str(&text)?;
+            // The rate limit is not as aggressive with this API, use the upstream delay typically of 3s
+            self.wait_delay = Some(Duration::from_secs(site_data.update_refresh_rate));
+            site_data
+        } else {
+            let resp: CurrentPowerFlowResponse = serde_json::from_str(&text)?;
+            resp.site_current_power_flow
+        };
+        log::debug!("{:?}", site_data);
 
         Ok(HomePowerModuleState {
-            solar_power: (resp.site_current_power_flow.pv.current_power * 1000.0) as u32,
-            home_consumption_power: (resp.site_current_power_flow.load.current_power * 1000.0)
-                as u32,
-            grid_power: (resp.site_current_power_flow.grid.current_power * 1000.0) as u32,
+            solar_power: (site_data.pv.current_power * 1000.0) as u32,
+            home_consumption_power: (site_data.load.current_power * 1000.0) as u32,
+            grid_power: (site_data.grid.current_power * 1000.0) as u32,
         })
     }
 }
@@ -112,7 +152,11 @@ impl RenderablePolybarModule for HomePowerModule {
                 // Nominal
                 Some(_) => {
                     self.env.network_error_backoff.reset();
-                    Duration::from_secs(20)
+                    if let Some(wait_delay) = self.wait_delay {
+                        wait_delay
+                    } else {
+                        Duration::from_secs(60)
+                    }
                 }
                 // Error occured
                 None => self.env.network_error_backoff.next_backoff().unwrap(),
@@ -161,7 +205,7 @@ mod tests {
     fn test_render() {
         let module = HomePowerModule::new(HomePowerModuleConfig {
             site_id: 0,
-            api_key: "".to_string(),
+            api_auth: HomePowerAuth::ApiKey("".to_string()),
         })
         .unwrap();
 
