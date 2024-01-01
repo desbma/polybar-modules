@@ -5,6 +5,7 @@ use std::time::Duration;
 
 use anyhow::Context;
 use backoff::backoff::Backoff;
+use backoff::{ExponentialBackoff, ExponentialBackoffBuilder};
 
 use crate::markup;
 use crate::polybar_module::{NetworkMode, PolybarModuleEnv, RenderablePolybarModule};
@@ -13,6 +14,7 @@ use crate::theme;
 pub struct ArchUpdatesModule {
     xdg_dirs: xdg::BaseDirectories,
     env: PolybarModuleEnv,
+    server_error_backoff: ExponentialBackoff,
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -26,7 +28,18 @@ impl ArchUpdatesModule {
     pub fn new() -> anyhow::Result<Self> {
         let xdg_dirs = xdg::BaseDirectories::new()?;
         let env = PolybarModuleEnv::new();
-        Ok(Self { xdg_dirs, env })
+        let server_error_backoff = ExponentialBackoffBuilder::new()
+            .with_initial_interval(Duration::from_secs(30 * 60))
+            .with_randomization_factor(0.25)
+            .with_multiplier(3.0)
+            .with_max_interval(Duration::from_secs(12 * 60 * 60))
+            .with_max_elapsed_time(None)
+            .build();
+        Ok(Self {
+            xdg_dirs,
+            env,
+            server_error_backoff,
+        })
     }
 
     fn try_update(&mut self) -> anyhow::Result<ArchUpdatesModuleState> {
@@ -111,10 +124,10 @@ impl RenderablePolybarModule for ArchUpdatesModule {
                 // Nominal
                 Some(_) => {
                     self.env.network_error_backoff.reset();
-                    Duration::from_secs(60 * 60)
+                    Duration::from_secs(3 * 60 * 60)
                 }
                 // Error occured
-                None => self.env.network_error_backoff.next_backoff().unwrap(),
+                None => self.server_error_backoff.next_backoff().unwrap(),
             };
             sleep(sleep_duration);
         }
