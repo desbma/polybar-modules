@@ -101,7 +101,7 @@ impl ArchUpdatesModule {
             .args(["-Qua"])
             .stderr(Stdio::null())
             .output()?;
-        output.status.exit_ok().context("yay exited with error")?;
+        // output.status.exit_ok().context("yay exited with error")?;
 
         // Parse output
         let output_str = String::from_utf8_lossy(&output.stdout);
