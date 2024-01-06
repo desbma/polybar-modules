@@ -68,14 +68,7 @@ pub struct ModuleConfig {
 #[derive(Debug, serde::Deserialize)]
 pub struct HomePowerModuleConfig {
     pub site_id: u64,
-    pub api_auth: HomePowerAuth,
-}
-
-#[derive(Debug, serde::Deserialize)]
-#[serde(tag = "type", content = "val", rename_all = "snake_case")]
-pub enum HomePowerAuth {
-    ApiKey(String),
-    Cookie(String),
+    pub auth_cookie_val: String,
 }
 
 #[derive(Debug, serde::Deserialize)]
