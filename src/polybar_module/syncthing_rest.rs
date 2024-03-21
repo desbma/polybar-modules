@@ -3,7 +3,6 @@
 #![allow(clippy::missing_docs_in_private_items)]
 
 use std::collections::HashMap;
-use std::convert::TryFrom;
 
 use serde::{Deserialize, Serialize};
 
