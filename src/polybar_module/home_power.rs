@@ -1,17 +1,19 @@
-use std::cmp::{max, Ordering};
-use std::thread::sleep;
-use std::time::Duration;
+use std::{
+    cmp::{max, Ordering},
+    thread::sleep,
+    time::Duration,
+};
 
 use backoff::backoff::Backoff;
 use itertools::Itertools;
 use serde::Deserialize;
 
-use crate::config::HomePowerModuleConfig;
-use crate::markup;
-use crate::polybar_module::{
-    NetworkMode, PolybarModuleEnv, RenderablePolybarModule, TCP_REMOTE_TIMEOUT,
+use crate::{
+    config::HomePowerModuleConfig,
+    markup,
+    polybar_module::{NetworkMode, PolybarModuleEnv, RenderablePolybarModule, TCP_REMOTE_TIMEOUT},
+    theme,
 };
-use crate::theme;
 
 pub struct HomePowerModule {
     client: reqwest::blocking::Client,

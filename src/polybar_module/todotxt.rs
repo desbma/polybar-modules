@@ -1,16 +1,20 @@
-use std::env;
-use std::fs::metadata;
-use std::path::PathBuf;
-use std::sync::mpsc::channel;
-use std::thread::sleep;
-use std::time::{Duration, SystemTime};
+use std::{
+    env,
+    fs::metadata,
+    path::PathBuf,
+    sync::mpsc::channel,
+    thread::sleep,
+    time::{Duration, SystemTime},
+};
 
 use notify::Watcher;
 use tasks::{Task, TodoFile};
 
-use crate::markup;
-use crate::polybar_module::{PolybarModuleEnv, RenderablePolybarModule};
-use crate::theme;
+use crate::{
+    markup,
+    polybar_module::{PolybarModuleEnv, RenderablePolybarModule},
+    theme,
+};
 
 pub struct TodoTxtModule {
     max_len: Option<usize>,

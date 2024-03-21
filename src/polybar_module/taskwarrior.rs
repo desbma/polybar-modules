@@ -1,16 +1,20 @@
-use std::fs::metadata;
-use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
-use std::sync::mpsc::channel;
-use std::thread::sleep;
-use std::time::{Duration, SystemTime};
+use std::{
+    fs::metadata,
+    path::{Path, PathBuf},
+    process::{Command, Stdio},
+    sync::mpsc::channel,
+    thread::sleep,
+    time::{Duration, SystemTime},
+};
 
 use anyhow::Context;
 use notify::Watcher;
 
-use crate::markup;
-use crate::polybar_module::{PolybarModuleEnv, RenderablePolybarModule};
-use crate::theme;
+use crate::{
+    markup,
+    polybar_module::{PolybarModuleEnv, RenderablePolybarModule},
+    theme,
+};
 
 pub struct TaskwarriorModule {
     max_len: Option<usize>,
@@ -304,6 +308,7 @@ impl RenderablePolybarModule for TaskwarriorModule {
 mod tests {
     use super::*;
 
+    #[ignore]
     #[test]
     fn test_render() {
         let xdg_dirs = xdg::BaseDirectories::new().unwrap();

@@ -1,15 +1,13 @@
-use std::collections::HashMap;
-use std::thread::sleep;
-use std::time::Duration;
+use std::{collections::HashMap, thread::sleep, time::Duration};
 
 use backoff::backoff::Backoff;
 use lazy_static::lazy_static;
 
-use crate::markup;
-use crate::polybar_module::{
-    NetworkMode, PolybarModuleEnv, RenderablePolybarModule, TCP_REMOTE_TIMEOUT,
+use crate::{
+    markup,
+    polybar_module::{NetworkMode, PolybarModuleEnv, RenderablePolybarModule, TCP_REMOTE_TIMEOUT},
+    theme,
 };
-use crate::theme;
 
 pub struct WttrModule {
     client: reqwest::blocking::Client,

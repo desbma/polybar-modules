@@ -1,15 +1,18 @@
-use std::fmt::Write;
-use std::process::{Command, Stdio};
-use std::thread::sleep;
-use std::time::Duration;
+use std::{
+    fmt::Write,
+    process::{Command, Stdio},
+    thread::sleep,
+    time::Duration,
+};
 
 use anyhow::Context;
-use backoff::backoff::Backoff;
-use backoff::{ExponentialBackoff, ExponentialBackoffBuilder};
+use backoff::{backoff::Backoff, ExponentialBackoff, ExponentialBackoffBuilder};
 
-use crate::markup;
-use crate::polybar_module::{NetworkMode, PolybarModuleEnv, RenderablePolybarModule};
-use crate::theme;
+use crate::{
+    markup,
+    polybar_module::{NetworkMode, PolybarModuleEnv, RenderablePolybarModule},
+    theme,
+};
 
 pub struct ArchUpdatesModule {
     xdg_dirs: xdg::BaseDirectories,

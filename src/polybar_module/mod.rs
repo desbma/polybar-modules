@@ -1,7 +1,4 @@
-use std::fmt::Debug;
-use std::path::PathBuf;
-use std::sync::mpsc::channel;
-use std::time::Duration;
+use std::{fmt::Debug, path::PathBuf, sync::mpsc::channel, time::Duration};
 
 use backoff::{ExponentialBackoff, ExponentialBackoffBuilder};
 use notify::Watcher;

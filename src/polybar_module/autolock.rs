@@ -1,13 +1,13 @@
-use std::path::PathBuf;
-use std::process::{Command, Stdio};
-use std::thread::sleep;
-use std::time::Duration;
+use std::{
+    path::PathBuf,
+    process::{Command, Stdio},
+    thread::sleep,
+    time::Duration,
+};
 
 use anyhow::Context;
 
-use crate::markup;
-use crate::polybar_module::RenderablePolybarModule;
-use crate::theme;
+use crate::{markup, polybar_module::RenderablePolybarModule, theme};
 
 pub struct AutolockModule {
     xdg_dirs: xdg::BaseDirectories,

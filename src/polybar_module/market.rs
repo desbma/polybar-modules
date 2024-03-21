@@ -1,15 +1,14 @@
-use std::thread::sleep;
-use std::time::Duration;
+use std::{thread::sleep, time::Duration};
 
 use anyhow::Context;
 use backoff::backoff::Backoff;
 use chrono::Datelike;
 
-use crate::markup;
-use crate::polybar_module::{
-    NetworkMode, PolybarModuleEnv, RenderablePolybarModule, TCP_REMOTE_TIMEOUT,
+use crate::{
+    markup,
+    polybar_module::{NetworkMode, PolybarModuleEnv, RenderablePolybarModule, TCP_REMOTE_TIMEOUT},
+    theme,
 };
-use crate::theme;
 
 pub struct MarketModule {
     client: reqwest::blocking::Client,

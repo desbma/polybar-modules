@@ -1,13 +1,17 @@
-use std::process::{Command, Stdio};
-use std::thread::sleep;
-use std::time::Duration;
+use std::{
+    process::{Command, Stdio},
+    thread::sleep,
+    time::Duration,
+};
 
 use anyhow::Context;
 use backoff::backoff::Backoff;
 
-use crate::markup;
-use crate::polybar_module::{NetworkMode, PolybarModuleEnv, RenderablePolybarModule};
-use crate::theme;
+use crate::{
+    markup,
+    polybar_module::{NetworkMode, PolybarModuleEnv, RenderablePolybarModule},
+    theme,
+};
 
 pub struct DebianUpdatesModule {
     env: PolybarModuleEnv,

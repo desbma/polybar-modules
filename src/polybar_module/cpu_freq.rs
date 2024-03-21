@@ -1,12 +1,12 @@
-use std::fs::{self, File};
-use std::io::{Read, Seek};
-use std::path::PathBuf;
-use std::thread::sleep;
-use std::time::Duration;
+use std::{
+    fs::{self, File},
+    io::{Read, Seek},
+    path::PathBuf,
+    thread::sleep,
+    time::Duration,
+};
 
-use crate::markup;
-use crate::polybar_module::RenderablePolybarModule;
-use crate::theme;
+use crate::{markup, polybar_module::RenderablePolybarModule, theme};
 
 pub struct CpuFreqModule {
     freq_range: (u32, u32),

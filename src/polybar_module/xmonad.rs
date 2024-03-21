@@ -1,13 +1,13 @@
-use std::fs::File;
-use std::io::{ErrorKind, Read};
-use std::mem;
-use std::os::unix::io::AsRawFd;
-use std::thread::sleep;
-use std::time::Duration;
+use std::{
+    fs::File,
+    io::{ErrorKind, Read},
+    mem,
+    os::unix::io::AsRawFd,
+    thread::sleep,
+    time::Duration,
+};
 
-use crate::markup;
-use crate::polybar_module::RenderablePolybarModule;
-use crate::theme;
+use crate::{markup, polybar_module::RenderablePolybarModule, theme};
 
 pub struct XmonadModule {
     xdg_dirs: xdg::BaseDirectories,

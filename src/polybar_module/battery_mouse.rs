@@ -1,11 +1,6 @@
-use std::error::Error;
-use std::fs;
-use std::thread::sleep;
-use std::time::Duration;
+use std::{error::Error, fs, thread::sleep, time::Duration};
 
-use crate::markup;
-use crate::polybar_module::RenderablePolybarModule;
-use crate::theme;
+use crate::{markup, polybar_module::RenderablePolybarModule, theme};
 
 pub struct BatteryMouseModule {}
 

@@ -1,16 +1,19 @@
-use std::collections::HashMap;
-use std::io::{ErrorKind, Read};
-use std::os::unix::io::AsRawFd;
-use std::process::{Child, Command, Stdio};
-use std::thread::sleep;
-use std::time::{Duration, Instant};
+use std::{
+    collections::HashMap,
+    io::{ErrorKind, Read},
+    os::unix::io::AsRawFd,
+    process::{Child, Command, Stdio},
+    thread::sleep,
+    time::{Duration, Instant},
+};
 
 use sysinfo::{NetworksExt, System, SystemExt};
 
-use crate::config;
-use crate::markup;
-use crate::polybar_module::{NetworkMode, PolybarModuleEnv, RenderablePolybarModule};
-use crate::theme;
+use crate::{
+    config, markup,
+    polybar_module::{NetworkMode, PolybarModuleEnv, RenderablePolybarModule},
+    theme,
+};
 
 const PING_AVG_COUNT: usize = 3;
 

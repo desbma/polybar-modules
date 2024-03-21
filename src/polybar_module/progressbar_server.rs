@@ -1,13 +1,15 @@
-use std::collections::BTreeMap;
-use std::fs;
-use std::io::{ErrorKind, Read};
-use std::os::unix::io::AsRawFd;
-use std::os::unix::net::{UnixListener, UnixStream};
-use std::time::Duration;
+use std::{
+    collections::BTreeMap,
+    fs,
+    io::{ErrorKind, Read},
+    os::unix::{
+        io::AsRawFd,
+        net::{UnixListener, UnixStream},
+    },
+    time::Duration,
+};
 
-use crate::markup;
-use crate::polybar_module::RenderablePolybarModule;
-use crate::theme;
+use crate::{markup, polybar_module::RenderablePolybarModule, theme};
 
 pub struct ProgressBarServerModule {
     max_len: usize,

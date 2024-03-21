@@ -1,14 +1,14 @@
-use std::collections::HashMap;
-use std::io::Read;
-use std::process::{Child, Command, Stdio};
-use std::str::FromStr;
+use std::{
+    collections::HashMap,
+    io::Read,
+    process::{Child, Command, Stdio},
+    str::FromStr,
+};
 
 use anyhow::Context;
 use lazy_static::lazy_static;
 
-use crate::markup;
-use crate::polybar_module::RenderablePolybarModule;
-use crate::theme;
+use crate::{markup, polybar_module::RenderablePolybarModule, theme};
 
 pub struct BluetoothModule {
     controller: BluetoothController,
@@ -296,11 +296,13 @@ impl RenderablePolybarModule for BluetoothModule {
 
 #[cfg(test)]
 mod tests {
-    use std::env;
-    use std::fs::{File, Permissions};
-    use std::io::Write;
-    use std::os::unix::fs::PermissionsExt;
-    use std::path::PathBuf;
+    use std::{
+        env,
+        fs::{File, Permissions},
+        io::Write,
+        os::unix::fs::PermissionsExt,
+        path::PathBuf,
+    };
 
     use super::*;
 

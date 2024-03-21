@@ -1,6 +1,8 @@
-use crate::markup;
-use crate::polybar_module::{NetworkMode, PolybarModuleEnv, RenderablePolybarModule};
-use crate::theme;
+use crate::{
+    markup,
+    polybar_module::{NetworkMode, PolybarModuleEnv, RenderablePolybarModule},
+    theme,
+};
 
 pub struct InternetBandwidthModule {
     env: PolybarModuleEnv,
@@ -67,8 +69,9 @@ impl RenderablePolybarModule for InternetBandwidthModule {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::env;
+
+    use super::*;
 
     #[test]
     fn test_render() {

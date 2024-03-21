@@ -1,13 +1,10 @@
-use std::cmp::max;
-use std::collections::HashSet;
-use std::fs;
-use std::path::Path;
-use std::thread::sleep;
-use std::time::Duration;
+use std::{cmp::max, collections::HashSet, fs, path::Path, thread::sleep, time::Duration};
 
-use crate::markup;
-use crate::polybar_module::{syncthing_rest, RenderablePolybarModule, TCP_LOCAL_TIMEOUT};
-use crate::theme;
+use crate::{
+    markup,
+    polybar_module::{syncthing_rest, RenderablePolybarModule, TCP_LOCAL_TIMEOUT},
+    theme,
+};
 
 pub struct SyncthingModule {
     session: reqwest::blocking::Client,
@@ -223,9 +220,9 @@ impl RenderablePolybarModule for SyncthingModule {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     use std::io::Write;
+
+    use super::*;
 
     #[test]
     fn test_render() {

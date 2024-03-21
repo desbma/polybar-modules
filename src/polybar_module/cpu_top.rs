@@ -1,13 +1,8 @@
-use std::io::BufRead;
-use std::process::Command;
-use std::thread::sleep;
-use std::time::Duration;
+use std::{io::BufRead, process::Command, thread::sleep, time::Duration};
 
 use anyhow::Context;
 
-use crate::markup;
-use crate::polybar_module::RenderablePolybarModule;
-use crate::theme;
+use crate::{markup, polybar_module::RenderablePolybarModule, theme};
 
 pub struct CpuTopModule {
     max_len: Option<usize>,
