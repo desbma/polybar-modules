@@ -55,7 +55,7 @@ struct SiteDevice {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all(deserialize = "camelCase"))]
 struct DeviceStatus {
-    level: u64,
+    level: Option<u64>,
     #[allow(dead_code)]
     active_power_meter: Option<f64>,
 }
@@ -160,9 +160,10 @@ impl HomePowerModule {
             devices: devices_data
                 .devices
                 .into_iter()
+                .filter(|d| d.status.level.is_some())
                 .map(|d| HomeDevice {
                     name: d.name.clone(),
-                    enabled: d.status.level > 0,
+                    enabled: d.status.level.unwrap() > 0,
                     power: 0, //d.status.active_power_meter.unwrap_or(0.0) as u32,
                 })
                 .collect(),
