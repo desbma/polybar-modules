@@ -15,8 +15,14 @@ fn main() -> anyhow::Result<()> {
     // Init logger
     if io::stdout().is_terminal() {
         simple_logger::SimpleLogger::new()
+            .with_level(if cfg!(debug_assertions) {
+                log::LevelFilter::Debug
+            } else {
+                log::LevelFilter::Info
+            })
+            .env()
             .init()
-            .context("Failed to init logger")?;
+            .context("Failed to setup logger")?;
     }
 
     // Parse command line args
