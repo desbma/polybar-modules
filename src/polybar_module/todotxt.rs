@@ -2,9 +2,9 @@ use std::{
     env,
     fs::metadata,
     path::PathBuf,
-    sync::mpsc::channel,
+    sync::mpsc::{channel, RecvTimeoutError},
     thread::sleep,
-    time::{Duration, SystemTime},
+    time::{Duration, Instant, SystemTime},
 };
 
 use notify::Watcher as _;
@@ -105,13 +105,26 @@ impl RenderablePolybarModule for TodoTxtModule {
                             .watch(to_watch_filepath, notify::RecursiveMode::NonRecursive)
                             .unwrap();
                     }
-                    while !self.env.public_screen() {
+                    const MAX_WAIT: Duration = Duration::from_secs(60 * 60);
+                    let wait_start = Instant::now();
+                    while !self.env.public_screen()
+                        && (Instant::now().duration_since(wait_start) < MAX_WAIT)
+                    {
                         let max_mtime = self.get_todotxt_file_mtime();
                         if max_mtime != *last_fs_change {
                             break;
                         }
 
-                        let evt = events_rx.recv().unwrap();
+                        let timeout =
+                            MAX_WAIT.saturating_sub(Instant::now().duration_since(wait_start));
+                        let res = events_rx.recv_timeout(timeout);
+                        let evt = match res {
+                            Ok(evt) => evt,
+                            Err(RecvTimeoutError::Timeout) => {
+                                break;
+                            }
+                            Err(_) => res.unwrap(),
+                        };
                         log::trace!("{:?}", evt);
                     }
                 }
