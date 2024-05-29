@@ -1,7 +1,7 @@
 use std::{fmt::Debug, path::PathBuf, sync::mpsc::channel, time::Duration};
 
 use backoff::{ExponentialBackoff, ExponentialBackoffBuilder};
-use notify::Watcher;
+use notify::Watcher as _;
 
 pub mod arch_updates;
 pub mod autolock;
@@ -104,7 +104,7 @@ impl PolybarModuleEnv {
     pub fn wait_network_mode(&self, mode: NetworkMode) -> bool {
         let mut did_wait = false;
         let (events_tx, events_rx) = channel();
-        let mut watcher = notify::watcher(events_tx, Duration::from_millis(10)).unwrap();
+        let mut watcher = notify::recommended_watcher(events_tx).unwrap();
         let parent_dir = self.low_bw_filepath.parent().unwrap();
         log::debug!("Watching {:?}", parent_dir);
         watcher
@@ -121,7 +121,7 @@ impl PolybarModuleEnv {
     pub fn wait_public_screen(&self, public: bool) -> bool {
         let mut did_wait = false;
         let (events_tx, events_rx) = channel();
-        let mut watcher = notify::watcher(events_tx, Duration::from_millis(10)).unwrap();
+        let mut watcher = notify::recommended_watcher(events_tx).unwrap();
         let parent_dir = self.public_screen_filepath.parent().unwrap();
         log::debug!("Watching {:?}", parent_dir);
         watcher

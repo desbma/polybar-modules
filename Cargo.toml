@@ -11,7 +11,6 @@ strip = true
 
 [dependencies]
 anyhow = { version = "1.0.66", default-features = false, features = ["backtrace", "std"] }
-atty = { version = "0.2.14", default-features = false }
 backoff = { version = "0.4.0", default-features = false }
 bounded-vec-deque = { version = "0.1.1", default-features = false }
 chrono = { version = "0.4.22", default-features = false, features = ["clock", "std"] }
@@ -20,8 +19,8 @@ itertools = { version = "0.12.0", default-features = false, features = ["use_std
 lazy_static = { version = "1.4.0", default-features = false }
 log = { version = "0.4.17", default-features = false, features = ["max_level_trace", "release_max_level_info"] }
 macaddr = { version = "1.0.1", default-features = false, features = ["std"] }
-mio = { version = "0.7.14", default-features = false, features = ["os-ext"] }
-notify = { version = "4.0.17", default-features = false }
+mio = { version = "0.8.11", default-features = false, features = ["os-ext"] }
+notify = { version = "6.1.1", default-features = false }
 quick-xml = { version = "0.26.0", default-features = false, features = ["serialize"] }
 regex = { version = "1.6.0", default-features = false, features = ["std"] }
 reqwest = { version = "0.11.1", default-features = false, features = ["native-tls", "blocking", "gzip"] }
@@ -34,7 +33,7 @@ simple_logger = { version = "4.0.0", default-features = false }
 strip-ansi-escapes = { version = "0.1.1", default-features = false }
 structopt = { version = "0.3.26", default-features = false }
 sysinfo = { version = "0.17.5", default-features = false }
-tasks = { git = "https://github.com/desbma/todo", rev = "975c949e4b284eb9dfd7fb2e9966eff0e5e3c7bc" }
+tasks = { git = "https://github.com/desbma/todo", rev = "6d197a5544845c3919f8259d75c84f34581b74d3" }
 tempfile = { version = "3.3.0", default-features = false }
 toml = { version = "0.5.9", default-features = false }
 xdg = { version = "2.4.1", default-features = false }

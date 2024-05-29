@@ -8,7 +8,7 @@ use std::{
 };
 
 use anyhow::Context;
-use notify::Watcher;
+use notify::Watcher as _;
 
 use crate::{
     markup,
@@ -163,8 +163,7 @@ impl RenderablePolybarModule for TaskwarriorModule {
                 // Nominal
                 Some(TaskwarriorModuleState::Active { last_fs_change, .. }) => {
                     let (events_tx, events_rx) = channel();
-                    let mut watcher =
-                        notify::watcher(events_tx, Duration::from_millis(10)).unwrap();
+                    let mut watcher = notify::recommended_watcher(events_tx).unwrap();
                     let mut to_watch_filepaths: Vec<PathBuf> = ["completed.data", "pending.data"]
                         .iter()
                         .map(|f| Path::new(&self.data_dir).join(f))
@@ -180,7 +179,7 @@ impl RenderablePolybarModule for TaskwarriorModule {
                     log::debug!("Watching {:?}", to_watch_filepaths);
                     for to_watch_filepath in to_watch_filepaths {
                         watcher
-                            .watch(to_watch_filepath, notify::RecursiveMode::NonRecursive)
+                            .watch(&to_watch_filepath, notify::RecursiveMode::NonRecursive)
                             .unwrap();
                     }
                     while !self.env.public_screen() {

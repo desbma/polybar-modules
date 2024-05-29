@@ -1,5 +1,7 @@
 #![feature(exit_status_error)]
 #![feature(hash_extract_if)]
+use std::io::{self, IsTerminal};
+
 use anyhow::Context;
 use config::PolybarModuleName;
 use structopt::StructOpt;
@@ -11,7 +13,7 @@ mod theme;
 
 fn main() -> anyhow::Result<()> {
     // Init logger
-    if atty::is(atty::Stream::Stdout) {
+    if io::stdout().is_terminal() {
         simple_logger::SimpleLogger::new()
             .init()
             .context("Failed to init logger")?;

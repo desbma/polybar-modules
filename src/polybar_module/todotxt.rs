@@ -7,7 +7,7 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-use notify::Watcher;
+use notify::Watcher as _;
 use tasks::{Task, TodoFile};
 
 use crate::{
@@ -93,8 +93,7 @@ impl RenderablePolybarModule for TodoTxtModule {
                 // Nominal
                 Some(TodoTxtModuleState::Active { last_fs_change, .. }) => {
                     let (events_tx, events_rx) = channel();
-                    let mut watcher =
-                        notify::watcher(events_tx, Duration::from_millis(10)).unwrap();
+                    let mut watcher = notify::recommended_watcher(events_tx).unwrap();
                     let to_watch_filepaths = [
                         &self.todotxt_filepath,
                         self.env.public_screen_filepath.parent().unwrap(),
