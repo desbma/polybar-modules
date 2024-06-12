@@ -91,14 +91,14 @@ impl RenderablePolybarModule for AutolockModule {
         match state {
             Some(state) => match state.enabled {
                 true => markup::action(
-                    "",
+                    "󱫗",
                     markup::PolybarAction {
                         type_: markup::PolybarActionType::ClickLeft,
                         command: format!("xidlehook-client --socket {} control --action disable && pkill -USR1 -f '{} autolock$'", state.socket_filepath.to_str().unwrap(), env!("CARGO_PKG_NAME")),
                     },
                 ),
                 false => markup::action(
-                    &markup::style("", None, Some(theme::Color::Notice), None, None),
+                    &markup::style("󱫖", None, Some(theme::Color::Notice), None, None),
                     markup::PolybarAction {
                         type_: markup::PolybarActionType::ClickLeft,
                         command: format!("xidlehook-client --socket {} control --action enable && pkill -USR1 -f '{} autolock$'", state.socket_filepath.to_str().unwrap(), env!("CARGO_PKG_NAME")),
@@ -125,7 +125,7 @@ mod tests {
         });
         assert_eq!(
             module.render(&state),
-            format!("%{{A1:xidlehook-client --socket {}/xidlehook/autolock.socket control --action disable && pkill -USR1 -f \'polybar-modules autolock$\':}}%{{A}}", runtime_dir.to_str().unwrap())
+            format!("%{{A1:xidlehook-client --socket {}/xidlehook/autolock.socket control --action disable && pkill -USR1 -f \'polybar-modules autolock$\':}}\u{f1ad7}%{{A}}", runtime_dir.to_str().unwrap())
         );
 
         let state = Some(AutolockModuleState {
@@ -134,7 +134,7 @@ mod tests {
         });
         assert_eq!(
             module.render(&state),
-            format!("%{{A1:xidlehook-client --socket {}/xidlehook/autolock.socket control --action enable && pkill -USR1 -f \'polybar-modules autolock$\':}}%{{u#b58900}}%{{+u}}%{{-u}}%{{A}}", runtime_dir.to_str().unwrap())
+            format!("%{{A1:xidlehook-client --socket {}/xidlehook/autolock.socket control --action enable && pkill -USR1 -f \'polybar-modules autolock$\':}}%{{u#b58900}}%{{+u}}\u{f1ad6}%{{-u}}%{{A}}", runtime_dir.to_str().unwrap())
         );
 
         let state = None;

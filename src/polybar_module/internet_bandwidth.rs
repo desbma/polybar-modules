@@ -42,14 +42,14 @@ impl RenderablePolybarModule for InternetBandwidthModule {
     fn render(&self, state: &Self::State) -> String {
         match state.mode {
             NetworkMode::Unrestricted => markup::action(
-                "",
+                "\u{f0c9d}",
                 markup::PolybarAction {
                     type_: markup::PolybarActionType::ClickLeft,
                     command: format!("touch {}", self.env.low_bw_filepath.to_str().unwrap()),
                 },
             ),
             NetworkMode::LowBandwith => markup::action(
-                &markup::style("", None, Some(theme::Color::Notice), None, None),
+                &markup::style("\u{f0c5f}", None, Some(theme::Color::Notice), None, None),
                 markup::PolybarAction {
                     type_: markup::PolybarActionType::ClickLeft,
                     command: format!(
@@ -84,7 +84,7 @@ mod tests {
         assert_eq!(
             module.render(&state),
             format!(
-                "%{{A1:touch {}/.local/share/low_internet_bandwidth:}}%{{A}}",
+                "%{{A1:touch {}/.local/share/low_internet_bandwidth:}}\u{f0c9d}%{{A}}",
                 home
             )
         );
@@ -95,7 +95,7 @@ mod tests {
         assert_eq!(
             module.render(&state),
             format!(
-                "%{{A1:rm {}/.local/share/low_internet_bandwidth:}}%{{u#b58900}}%{{+u}}%{{-u}}%{{A}}",
+                "%{{A1:rm {}/.local/share/low_internet_bandwidth:}}%{{u#b58900}}%{{+u}}\u{f0c5f}%{{-u}}%{{A}}",
                 home
             )
         );
