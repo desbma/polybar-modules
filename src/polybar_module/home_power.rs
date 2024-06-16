@@ -208,7 +208,7 @@ impl RenderablePolybarModule for HomePowerModule {
         match state {
             Some(state) => {
                 format!(
-                    "{} {:.1}{}{:.1}{}{:.1}kW{}",
+                    "{} {:.1}{}󱤃{:.1}{}󰴾{:.1}kW{}",
                     markup::style("", Some(theme::Color::MainIcon), None, None, None),
                     state.solar_power as f64 / 1000.0,
                     if state.solar_power > 0 { '' } else { ' ' },
@@ -272,7 +272,7 @@ mod tests {
         });
         assert_eq!(
             module.render(&state),
-            "%{F#eee8d5}\u{ea06}%{F-} \u{e9d7}2.0\u{e912}\u{e979}0.6\u{e912}\u{e954}1.4kW"
+            "%{F#eee8d5}\u{ea06}%{F-} \u{ee81}2.0\u{e912}\u{f1903}0.6\u{e912}\u{f0d3e}1.4kW"
         );
 
         let state = Some(HomePowerModuleState {
@@ -299,7 +299,7 @@ mod tests {
         });
         assert_eq!(
             module.render(&state),
-            "%{F#eee8d5}\u{ea06}%{F-} \u{e9d7}0.0 \u{e979}0.6\u{e910}\u{e954}1.4kW D1 %{u#93a1a1}%{+u}D2%{-u} %{u#b58900}%{+u}D3%{-u}"
+            "%{F#eee8d5}\u{ea06}%{F-} \u{ee81}0.0 \u{f1903}0.6\u{e910}\u{f0d3e}1.4kW D1 %{u#93a1a1}%{+u}D2%{-u} %{u#b58900}%{+u}D3%{-u}"
         );
 
         let state = None;
