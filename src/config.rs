@@ -31,6 +31,8 @@ pub enum PolybarModuleName {
     market,
     #[structopt(about = "Start network status module")]
     network_status,
+    #[structopt(about = "Start player status module")]
+    player { max_len: usize },
     #[structopt(about = "Start progress bar server module")]
     progressbar_server { max_len: usize },
     #[structopt(about = "Start PulseAudio module")]

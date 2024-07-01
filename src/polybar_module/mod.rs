@@ -15,6 +15,7 @@ pub mod home_power;
 pub mod internet_bandwidth;
 pub mod market;
 pub mod network_status;
+pub mod player;
 pub mod progressbar_server;
 pub mod pulseaudio;
 pub mod syncthing;
@@ -37,6 +38,7 @@ pub enum PolybarModule {
     InternetBandwidth(internet_bandwidth::InternetBandwidthModule),
     Market(market::MarketModule),
     NetworkStatus(network_status::NetworkStatusModule),
+    Player(player::PlayerModule),
     ProgressBarServer(progressbar_server::ProgressBarServerModule),
     PulseAudio(pulseaudio::PulseAudioModule),
     Syncthing(syncthing::SyncthingModule),
