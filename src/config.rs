@@ -69,8 +69,21 @@ pub struct ModuleConfig {
 
 #[derive(Debug, serde::Deserialize)]
 pub struct HomePowerModuleConfig {
+    pub se: SolarEdgeConfig,
+    pub shelly_devices: Vec<ShellyDeviceConfig>,
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub struct SolarEdgeConfig {
     pub site_id: u64,
     pub auth_cookie_val: String,
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct ShellyDeviceConfig {
+    pub name: String,
+    pub host: String,
+    pub password: String,
 }
 
 #[derive(Debug, serde::Deserialize)]
