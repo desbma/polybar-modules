@@ -1,6 +1,6 @@
-#[allow(dead_code)]
+#[allow(dead_code, clippy::unreadable_literal)]
 #[derive(Clone)]
-pub enum Color {
+pub(crate) enum Color {
     Foreground = 0x93a1a1,
     MainIcon = 0xeee8d5,
     Focused = 0x2aa198,
@@ -11,69 +11,59 @@ pub enum Color {
     Critical = 0xdc322f,
 }
 
-pub fn ellipsis(s: &str, max_len: Option<usize>) -> String {
+pub(crate) fn ellipsis(s: &str, max_len: Option<usize>) -> String {
     match max_len {
         Some(max_len) => {
             if s.len() > max_len {
-                let mut s2: String = s.trim_end().to_string();
+                let mut s2: String = s.trim_end().to_owned();
                 if s2.len() > max_len {
-                    s2 = s2
-                        .chars()
+                    s2.chars()
                         .take(max_len - 1)
                         .collect::<String>()
                         .trim_end()
-                        .to_string();
+                        .clone_into(&mut s2);
                     s2.push('…');
                 }
                 s2
             } else {
-                s.to_string()
+                s.to_owned()
             }
         }
-        None => s.to_string(),
+        None => s.to_owned(),
     }
 }
 
-pub fn pad(s: &str, min_len: Option<usize>) -> String {
+pub(crate) fn pad(s: &str, min_len: Option<usize>) -> String {
     match min_len {
         Some(min_len) if min_len > s.len() => {
             let pad_count = min_len - s.len();
             format!("{}{}", " ".repeat(pad_count), s)
         }
-        _ => s.to_string(),
+        _ => s.to_owned(),
     }
 }
 
 // Shorten device model name (mouse, headset...)
-pub fn shorten_model_name(s: &str) -> String {
+pub(crate) fn shorten_model_name(s: &str) -> String {
     match s.split(&[' ', '-'][..]).find(|w| {
-        w.chars()
-            .next()
-            .map(|c| c.is_ascii_alphabetic())
-            .unwrap_or(false)
+        w.chars().next().is_some_and(|c| c.is_ascii_alphabetic())
             && w.chars().any(|c| c.is_ascii_digit())
     }) {
-        Some(w) => w.to_string(),
+        Some(w) => w.to_owned(),
         None => s
             .split(&[' ', '-'][..])
             .map(|w| {
                 if w.chars().all(|c| c.is_ascii_uppercase()) {
-                    w.to_string()
-                } else if !w
-                    .chars()
-                    .next()
-                    .map(|c| c.is_ascii_digit())
-                    .unwrap_or(false)
-                {
+                    w.to_owned()
+                } else if !w.chars().next().is_some_and(|c| c.is_ascii_digit()) {
                     let mut w2 = w.to_owned();
                     w2.truncate(1);
                     w2
                 } else {
-                    "".to_string()
+                    String::new()
                 }
             })
-            .collect::<Vec<String>>()
-            .join(""),
+            .collect::<String>(),
     }
 }
 

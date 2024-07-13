@@ -37,10 +37,35 @@ strip-ansi-escapes = { version = "0.1.1", default-features = false }
 structopt = { version = "0.3.26", default-features = false }
 sysinfo = { version = "0.17.5", default-features = false }
 tasks = { git = "https://github.com/desbma/todo", rev = "6d197a5544845c3919f8259d75c84f34581b74d3" }
-tempfile = { version = "3.3.0", default-features = false }
 toml = { version = "0.5.9", default-features = false }
 tungstenite = { version = "0.23.0", default-features = false, features = ["native-tls", "handshake"] }
 xdg = { version = "2.4.1", default-features = false }
 
+[dev-dependencies]
+tempfile = { version = "3.3.0", default-features = false }
+
+[lints.rust]
+unreachable_pub = "warn"
+unsafe_code = "forbid"
+unused_crate_dependencies = "warn"
+
 [lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+# from clippy::restrictions
+clone_on_ref_ptr = "warn"
+dbg_macro = "warn"
+expect_used = "warn"
+format_push_string = "warn"
+if_then_some_else_none = "warn"
+multiple_inherent_impl = "warn"
+panic = "warn"
+redundant_type_annotations = "warn"
+ref_patterns = "warn"
+same_name_method = "warn"
+self_named_module_files = "warn"
+semicolon_inside_block = "warn"
+shadow_unrelated = "warn"
+str_to_string = "warn"
+string_to_string = "warn"
+unneeded_field_pattern = "warn"
 verbose_file_reads = "warn"

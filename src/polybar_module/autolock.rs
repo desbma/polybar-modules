@@ -9,19 +9,19 @@ use anyhow::Context;
 
 use crate::{markup, polybar_module::RenderablePolybarModule, theme};
 
-pub struct AutolockModule {
+pub(crate) struct AutolockModule {
     xdg_dirs: xdg::BaseDirectories,
     signals: signal_hook::iterator::Signals,
 }
 
 #[derive(Debug, Eq, PartialEq)]
-pub struct AutolockModuleState {
+pub(crate) struct AutolockModuleState {
     enabled: bool,
     socket_filepath: PathBuf,
 }
 
 impl AutolockModule {
-    pub fn new() -> anyhow::Result<Self> {
+    pub(crate) fn new() -> anyhow::Result<Self> {
         let xdg_dirs = xdg::BaseDirectories::new()?;
         let signals = signal_hook::iterator::Signals::new([signal_hook::consts::signal::SIGUSR1])?;
         Ok(Self { xdg_dirs, signals })
@@ -89,28 +89,32 @@ impl RenderablePolybarModule for AutolockModule {
 
     fn render(&self, state: &Self::State) -> String {
         match state {
-            Some(state) => match state.enabled {
-                true => markup::action(
-                    "󱫗",
-                    markup::PolybarAction {
-                        type_: markup::PolybarActionType::ClickLeft,
-                        command: format!("xidlehook-client --socket {} control --action disable && pkill -USR1 -f '{} autolock$'", state.socket_filepath.to_str().unwrap(), env!("CARGO_PKG_NAME")),
-                    },
-                ),
-                false => markup::action(
-                    &markup::style("󱫖", None, Some(theme::Color::Notice), None, None),
-                    markup::PolybarAction {
-                        type_: markup::PolybarActionType::ClickLeft,
-                        command: format!("xidlehook-client --socket {} control --action enable && pkill -USR1 -f '{} autolock$'", state.socket_filepath.to_str().unwrap(), env!("CARGO_PKG_NAME")),
-                    },
-                ),
-            },
+            Some(state) => {
+                if state.enabled {
+                    markup::action(
+                        "󱫗",
+                        markup::PolybarAction {
+                            type_: markup::PolybarActionType::ClickLeft,
+                            command: format!("xidlehook-client --socket {} control --action disable && pkill -USR1 -f '{} autolock$'", state.socket_filepath.to_str().unwrap(), env!("CARGO_PKG_NAME")),
+                        },
+                    )
+                } else {
+                    markup::action(
+                        &markup::style("󱫖", None, Some(theme::Color::Notice), None, None),
+                        markup::PolybarAction {
+                            type_: markup::PolybarActionType::ClickLeft,
+                            command: format!("xidlehook-client --socket {} control --action enable && pkill -USR1 -f '{} autolock$'", state.socket_filepath.to_str().unwrap(), env!("CARGO_PKG_NAME")),
+                        },
+                    )
+                }
+            }
             None => markup::style("", Some(theme::Color::Attention), None, None, None),
         }
     }
 }
 
 #[cfg(test)]
+#[allow(clippy::shadow_unrelated)]
 mod tests {
     use super::*;
 

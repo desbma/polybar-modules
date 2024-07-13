@@ -6,14 +6,14 @@ use std::{
 
 use crate::{markup, polybar_module::RenderablePolybarModule, theme};
 
-pub struct PlayerModule {
+pub(crate) struct PlayerModule {
     playerctl: Child,
     poller: mio::Poll,
     max_len: usize,
 }
 
 #[derive(Debug, Eq, PartialEq)]
-pub struct PlayerModuleState {
+pub(crate) struct PlayerModuleState {
     player: String,
     status: String,
     artist: String,
@@ -22,7 +22,7 @@ pub struct PlayerModuleState {
 }
 
 impl PlayerModule {
-    pub fn new(max_len: usize) -> anyhow::Result<Self> {
+    pub(crate) fn new(max_len: usize) -> anyhow::Result<Self> {
         let playerctl = Command::new("playerctl")
             .args([
                 "metadata",
@@ -66,7 +66,7 @@ impl RenderablePolybarModule for PlayerModule {
         log::trace!("Waiting for stdout data");
         loop {
             let poll_res = self.poller.poll(&mut poller_events, None);
-            if let Err(ref e) = poll_res {
+            if let Err(e) = &poll_res {
                 if e.kind() == ErrorKind::Interrupted {
                     // Ignore error, can occur on return from hibernation
                     continue;
@@ -74,7 +74,7 @@ impl RenderablePolybarModule for PlayerModule {
             }
             poll_res.unwrap();
             log::trace!("Poll returned with events {:?}", poller_events);
-            if poller_events.iter().any(|e| e.is_readable()) {
+            if poller_events.iter().any(mio::event::Event::is_readable) {
                 break;
             }
         }
@@ -155,7 +155,7 @@ impl RenderablePolybarModule for PlayerModule {
                 }
                 theme::ellipsis(&s, Some(self.max_len))
             }
-            None => "".to_owned(),
+            None => String::new(),
         }
     }
 }

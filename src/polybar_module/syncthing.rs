@@ -6,7 +6,7 @@ use crate::{
     theme,
 };
 
-pub struct SyncthingModule {
+pub(crate) struct SyncthingModule {
     session: reqwest::blocking::Client,
     system_config: Option<syncthing_rest::SystemConfig>,
     last_event_id: u64,
@@ -14,7 +14,8 @@ pub struct SyncthingModule {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct SyncthingModuleState {
+#[allow(clippy::struct_field_names)]
+pub(crate) struct SyncthingModuleState {
     folder_count: usize,
     device_connected_count: usize,
     device_syncing_to_count: usize,
@@ -35,7 +36,7 @@ struct SyncthingXmlConfigGui {
 const REST_EVENT_TIMEOUT: Duration = Duration::from_secs(60 * 60);
 
 impl SyncthingModule {
-    pub fn new(st_config_filepath: &Path) -> anyhow::Result<Self> {
+    pub(crate) fn new(st_config_filepath: &Path) -> anyhow::Result<Self> {
         // Read config to get API key
         log::debug!("st_config_filepath = {:?}", st_config_filepath);
         let st_config_xml = fs::read_to_string(st_config_filepath)?;
@@ -210,7 +211,7 @@ impl RenderablePolybarModule for SyncthingModule {
                 ),
                 markup::PolybarAction {
                     type_: markup::PolybarActionType::ClickLeft,
-                    command: "firefox --new-tab 'http://127.0.0.1:8384/'".to_string(),
+                    command: "firefox --new-tab 'http://127.0.0.1:8384/'".to_owned(),
                 },
             ),
             None => markup::style("", Some(theme::Color::Attention), None, None, None),
@@ -219,6 +220,7 @@ impl RenderablePolybarModule for SyncthingModule {
 }
 
 #[cfg(test)]
+#[allow(clippy::shadow_unrelated)]
 mod tests {
     use std::io::Write;
 

@@ -8,10 +8,10 @@ use anyhow::Context;
 
 use crate::{markup, polybar_module::RenderablePolybarModule, theme};
 
-pub struct GpuNvidiaModule {}
+pub(crate) struct GpuNvidiaModule {}
 
 #[derive(Debug, Eq, PartialEq)]
-pub struct GpuNvidiaModuleState {
+pub(crate) struct GpuNvidiaModuleState {
     mem_used: u16,
     mem_total: u16,
     freq_graphics: u16,
@@ -24,10 +24,11 @@ pub struct GpuNvidiaModuleState {
 const OVERHEAT_TEMP_THRESHOLD: u8 = 70;
 
 impl GpuNvidiaModule {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {}
     }
 
+    #[allow(clippy::unused_self)]
     fn try_update(&mut self) -> anyhow::Result<GpuNvidiaModuleState> {
         // Run nvidia-smi
         let output = Command::new("nvidia-smi")
@@ -44,7 +45,7 @@ impl GpuNvidiaModule {
 
         // Parse output
         let output_str = String::from_utf8_lossy(&output.stdout);
-        let mut tokens = output_str.trim_end().split(',').map(|s| s.trim_start());
+        let mut tokens = output_str.trim_end().split(',').map(str::trim_start);
         let parse_err_str = "Failed to parse nvidia-smi output";
         let mem_used = tokens
             .next()
@@ -70,6 +71,7 @@ impl GpuNvidiaModule {
             .next()
             .ok_or_else(|| anyhow::anyhow!(parse_err_str))?
             .parse()?;
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
         let power_draw = tokens
             .next()
             .ok_or_else(|| anyhow::anyhow!(parse_err_str))?
@@ -104,7 +106,7 @@ impl GpuNvidiaModule {
         }
         markup::style(
             icons[icons.len() - 1].0,
-            Some(icons[icons.len() - 1].1.to_owned()),
+            Some(icons[icons.len() - 1].1.clone()),
             None,
             None,
             None,
@@ -133,6 +135,7 @@ impl RenderablePolybarModule for GpuNvidiaModule {
 
     fn render(&self, state: &Self::State) -> String {
         match state {
+            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
             Some(state) => {
                 let temp_str = if state.throttle || state.temp >= OVERHEAT_TEMP_THRESHOLD {
                     markup::style(
@@ -145,7 +148,7 @@ impl RenderablePolybarModule for GpuNvidiaModule {
                 } else {
                     format!("{}°C", state.temp)
                 };
-                let mem_prct = 100.0 * state.mem_used as f32 / state.mem_total as f32;
+                let mem_prct = 100.0 * f32::from(state.mem_used) / f32::from(state.mem_total);
                 format!(
                     "{} {:2.0}% {} {:4}+{:4}MHz {} {:3}W",
                     markup::style("", Some(theme::Color::MainIcon), None, None, None),
@@ -163,6 +166,7 @@ impl RenderablePolybarModule for GpuNvidiaModule {
 }
 
 #[cfg(test)]
+#[allow(clippy::shadow_unrelated)]
 mod tests {
     use super::*;
 

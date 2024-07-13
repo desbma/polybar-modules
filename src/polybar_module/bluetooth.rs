@@ -10,7 +10,7 @@ use lazy_static::lazy_static;
 
 use crate::{markup, polybar_module::RenderablePolybarModule, theme};
 
-pub struct BluetoothModule {
+pub(crate) struct BluetoothModule {
     controller: BluetoothController,
     devices: HashMap<macaddr::MacAddr6, BluetoothDevice>,
     bluetoothctl_child: Child,
@@ -29,13 +29,13 @@ struct BluetoothController {
 }
 
 #[derive(Debug, Eq, PartialEq)]
-pub struct BluetoothModuleState {
+pub(crate) struct BluetoothModuleState {
     controller_powered: bool,
     devices: Vec<BluetoothDevice>,
 }
 
 impl BluetoothModule {
-    pub fn new(device_whitelist_addrs: Vec<macaddr::MacAddr6>) -> anyhow::Result<Self> {
+    pub(crate) fn new(device_whitelist_addrs: &[macaddr::MacAddr6]) -> anyhow::Result<Self> {
         let bluetoothctl_child = Command::new("bluetoothctl")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -44,7 +44,7 @@ impl BluetoothModule {
 
         Ok(Self {
             controller: Self::probe_controller()?,
-            devices: Self::probe_devices(&device_whitelist_addrs)?,
+            devices: Self::probe_devices(device_whitelist_addrs)?,
             bluetoothctl_child,
         })
     }
@@ -118,7 +118,7 @@ impl BluetoothModule {
                 );
                 continue;
             }
-            let name = device_match.get(3).unwrap().as_str().to_string();
+            let name = device_match.get(3).unwrap().as_str().to_owned();
             let connected = Self::bluetoothcl_cmd(&["info", addr_str])?
                 .lines()
                 .filter_map(|l| CONNECTED_DEVICE_REGEX.captures(l))
@@ -190,14 +190,14 @@ impl RenderablePolybarModule for BluetoothModule {
                             if status { "ON" } else { "OFF" }
                         );
 
-                        if addr != self.controller.addr {
-                            log::warn!("Power event for unknown controller");
-                        } else {
+                        if addr == self.controller.addr {
                             self.controller.powered = status;
                             if !status {
                                 self.devices.values_mut().for_each(|d| d.connected = false);
                             }
                             need_render = true;
+                        } else {
+                            log::warn!("Power event for unknown controller");
                         }
                     } else if let Some(connect_event_match) = CONNECT_EVENT_REGEX.captures(line) {
                         log::trace!("{:?}", connect_event_match);
@@ -214,12 +214,11 @@ impl RenderablePolybarModule for BluetoothModule {
                             if status { "" } else { "dis" }
                         );
 
-                        match self.devices.get_mut(&addr) {
-                            Some(d) => {
-                                d.connected = status;
-                                need_render = true;
-                            }
-                            None => log::warn!("Ignoring event for unknown device {}", addr),
+                        if let Some(d) = self.devices.get_mut(&addr) {
+                            d.connected = status;
+                            need_render = true;
+                        } else {
+                            log::warn!("Ignoring event for unknown device {}", addr);
                         }
                     } else {
                         log::debug!("Ignored line: {:?}", line);
@@ -235,7 +234,7 @@ impl RenderablePolybarModule for BluetoothModule {
         } else {
             vec![]
         };
-        devices.sort_by_key(|d| d.name.to_owned());
+        devices.sort_by_key(|d| d.name.clone());
         BluetoothModuleState {
             controller_powered: self.controller.powered,
             devices,
@@ -251,7 +250,7 @@ impl RenderablePolybarModule for BluetoothModule {
                     "",
                     markup::PolybarAction {
                         type_: markup::PolybarActionType::ClickLeft,
-                        command: "bluetoothctl power off".to_string(),
+                        command: "bluetoothctl power off".to_owned(),
                     },
                 )
             } else {
@@ -259,7 +258,7 @@ impl RenderablePolybarModule for BluetoothModule {
                     "",
                     markup::PolybarAction {
                         type_: markup::PolybarActionType::ClickLeft,
-                        command: "bluetoothctl power on".to_string(),
+                        command: "bluetoothctl power on".to_owned(),
                     },
                 )
             },
@@ -269,11 +268,7 @@ impl RenderablePolybarModule for BluetoothModule {
             let device_markup = markup::style(
                 &format!("{}{}", if device.connected { "" } else { "" }, name),
                 None,
-                if device.connected {
-                    Some(theme::Color::Foreground)
-                } else {
-                    None
-                },
+                device.connected.then_some(theme::Color::Foreground),
                 None,
                 None,
             );
@@ -295,6 +290,7 @@ impl RenderablePolybarModule for BluetoothModule {
 }
 
 #[cfg(test)]
+#[allow(clippy::shadow_unrelated)]
 mod tests {
     use std::{
         env,
@@ -342,7 +338,7 @@ mod tests {
         drop(fake_bluetoothctl_file);
         let path_orig = update_path(tmp_dir.path().to_str().unwrap());
 
-        let module = BluetoothModule::new(vec![]).unwrap();
+        let module = BluetoothModule::new(&[]).unwrap();
 
         let state = BluetoothModuleState {
             controller_powered: false,
@@ -367,12 +363,12 @@ mod tests {
             devices: vec![
                 BluetoothDevice {
                     connected: false,
-                    name: "D1".to_string(),
+                    name: "D1".to_owned(),
                     addr: macaddr::MacAddr6::from_str("01:02:03:04:05:06").unwrap(),
                 },
                 BluetoothDevice {
                     connected: true,
-                    name: "D2".to_string(),
+                    name: "D2".to_owned(),
                     addr: macaddr::MacAddr6::from_str("02:01:03:04:05:06").unwrap(),
                 },
             ],

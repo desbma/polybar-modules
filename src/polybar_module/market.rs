@@ -10,7 +10,7 @@ use crate::{
     theme,
 };
 
-pub struct MarketModule {
+pub(crate) struct MarketModule {
     client: reqwest::blocking::Client,
     req: reqwest::blocking::Request,
     selector_val: scraper::Selector,
@@ -21,7 +21,7 @@ pub struct MarketModule {
 }
 
 #[derive(Debug, PartialEq)]
-pub struct MarketModuleState {
+pub(crate) struct MarketModuleState {
     val: f64,
     delta_prct: f64,
     ma50: f64,
@@ -29,7 +29,7 @@ pub struct MarketModuleState {
 }
 
 impl MarketModule {
-    pub fn new() -> anyhow::Result<Self> {
+    pub(crate) fn new() -> anyhow::Result<Self> {
         let client = reqwest::blocking::Client::builder()
             .timeout(TCP_REMOTE_TIMEOUT)
             .build()?;
@@ -95,7 +95,7 @@ impl MarketModule {
             .collect::<String>();
         let val = val_str
             .parse()
-            .context(format!("Failed to parse {:?}", val_str))?;
+            .context(format!("Failed to parse {val_str:?}"))?;
         let delta_prct_str = page
             .select(&self.selector_delta)
             .next()
@@ -106,7 +106,7 @@ impl MarketModule {
             .collect::<String>();
         let delta_prct = delta_prct_str
             .parse()
-            .context(format!("Failed to parse {:?}", delta_prct_str))?;
+            .context(format!("Failed to parse {delta_prct_str:?}"))?;
         let ma50_str = page
             .select(&self.selector_ma50)
             .next()
@@ -117,7 +117,7 @@ impl MarketModule {
             .collect::<String>();
         let ma50 = ma50_str
             .parse()
-            .context(format!("Failed to parse {:?}", ma50_str))?;
+            .context(format!("Failed to parse {ma50_str:?}"))?;
         let ma100_str = page
             .select(&self.selector_ma100)
             .next()
@@ -128,7 +128,7 @@ impl MarketModule {
             .collect::<String>();
         let ma100 = ma100_str
             .parse()
-            .context(format!("Failed to parse {:?}", ma100_str))?;
+            .context(format!("Failed to parse {ma100_str:?}"))?;
 
         Ok(MarketModuleState {
             val,
@@ -156,10 +156,9 @@ impl RenderablePolybarModule for MarketModule {
             sleep(sleep_duration);
         }
         loop {
-            let did_wait_mode = self.env.wait_network_mode(NetworkMode::Unrestricted);
+            let did_wait_mode = self.env.wait_network_mode(&NetworkMode::Unrestricted);
             match prev_state {
-                Some(None) => break,
-                None => break,
+                Some(None) | None => break,
                 _ => {}
             }
 
@@ -221,6 +220,7 @@ impl RenderablePolybarModule for MarketModule {
 }
 
 #[cfg(test)]
+#[allow(clippy::shadow_unrelated)]
 mod tests {
     use super::*;
 

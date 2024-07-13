@@ -11,6 +11,7 @@ mod markup;
 mod polybar_module;
 mod theme;
 
+#[allow(clippy::too_many_lines)]
 fn main() -> anyhow::Result<()> {
     // Init logger
     if io::stdout().is_terminal() {
@@ -48,7 +49,7 @@ fn main() -> anyhow::Result<()> {
         PolybarModuleName::bluetooth {
             device_whitelist_addrs,
         } => polybar_module::PolybarModule::Bluetooth(
-            polybar_module::bluetooth::BluetoothModule::new(device_whitelist_addrs)
+            polybar_module::bluetooth::BluetoothModule::new(&device_whitelist_addrs)
                 .context("Failed to initialize bluetooth module")?,
         ),
         PolybarModuleName::cpu_freq => polybar_module::PolybarModule::CpuFreq(
@@ -56,8 +57,7 @@ fn main() -> anyhow::Result<()> {
                 .context("Failed to initialize CPU frequency module")?,
         ),
         PolybarModuleName::cpu_top { max_len } => polybar_module::PolybarModule::CpuTop(
-            polybar_module::cpu_top::CpuTopModule::new(max_len)
-                .context("Failed to initialize CPU top module")?,
+            polybar_module::cpu_top::CpuTopModule::new(max_len),
         ),
         PolybarModuleName::debian_updates => polybar_module::PolybarModule::DebianUpdates(
             polybar_module::debian_updates::DebianUpdatesModule::new()
@@ -78,7 +78,7 @@ fn main() -> anyhow::Result<()> {
                 })
                 .context("Unable to get home power module config from config file")?;
             polybar_module::PolybarModule::HomePower(
-                polybar_module::home_power::HomePowerModule::new(home_power_cfg)?,
+                polybar_module::home_power::HomePowerModule::new(&home_power_cfg)?,
             )
         }
         PolybarModuleName::internet_bandwidth => polybar_module::PolybarModule::InternetBandwidth(
@@ -137,7 +137,7 @@ fn main() -> anyhow::Result<()> {
                 .context("Failed to initialize Todo.txt module")?,
         ),
         PolybarModuleName::wttr { location } => polybar_module::PolybarModule::Wttr(
-            polybar_module::wttr::WttrModule::new(location)
+            polybar_module::wttr::WttrModule::new(&location)
                 .context("Failed to initialize Wttr module")?,
         ),
         PolybarModuleName::xmonad => polybar_module::PolybarModule::Xmonad(
@@ -185,8 +185,8 @@ where
         log::debug!("{:?}", state);
 
         // Render or skip?
-        let do_render = match prev_state {
-            Some(ref prev_state) => prev_state != &state,
+        let do_render = match &prev_state {
+            Some(prev_state) => prev_state != &state,
             None => true,
         };
         if !do_render {
@@ -195,7 +195,7 @@ where
 
         // Render
         let output = module.render(&state);
-        println!("{}", output);
+        println!("{output}");
         prev_state = Some(state);
     }
 }

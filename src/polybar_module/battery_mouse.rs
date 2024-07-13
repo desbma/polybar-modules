@@ -1,16 +1,16 @@
-use std::{error::Error, fs, thread::sleep, time::Duration};
+use std::{error::Error, fs, result::Result, thread::sleep, time::Duration};
 
 use crate::{markup, polybar_module::RenderablePolybarModule, theme};
 
-pub struct BatteryMouseModule {}
+pub(crate) struct BatteryMouseModule {}
 
 #[derive(Debug, Eq, PartialEq)]
-pub struct BatteryMouseModuleState {
+pub(crate) struct BatteryMouseModuleState {
     levels: Vec<(String, Option<u8>)>,
 }
 
 impl BatteryMouseModule {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {}
     }
 
@@ -25,7 +25,7 @@ impl BatteryMouseModule {
             "Low" => Some(30),
             "Critical" => Some(10),
             "Unknown" => None,
-            v => panic!("Unexpected value: {:?}", v),
+            v => unreachable!("Unexpected value: {v:?}"),
         }
     }
 }
@@ -44,24 +44,22 @@ impl RenderablePolybarModule for BatteryMouseModule {
             match glob::glob("/sys/class/power_supply/hidpp_battery_*") {
                 Err(_) => vec![],
                 Ok(g) => g
-                    .filter_map(|e| e.ok())
+                    .filter_map(Result::ok)
                     .map(|p| {
                         // Parse capacity
-                        let mut capacity_filepath = p.to_owned();
+                        let mut capacity_filepath = p.clone();
                         capacity_filepath.push("capacity");
                         log::trace!("{:?}", capacity_filepath);
-                        let capacity = match fs::read_to_string(&capacity_filepath) {
-                            Ok(s) => Some(s.trim_end().parse::<u8>()?),
-                            Err(_) => {
-                                let mut capacity_level_filepath = p.to_owned();
-                                capacity_level_filepath.push("capacity_level");
-                                log::trace!("{:?}", capacity_level_filepath);
-                                let capacity_level_str =
-                                    fs::read_to_string(&capacity_level_filepath)?
-                                        .trim_end()
-                                        .to_string();
-                                Self::sysfs_capacity_level_to_prct(&capacity_level_str)
-                            }
+                        let capacity = if let Ok(s) = fs::read_to_string(&capacity_filepath) {
+                            Some(s.trim_end().parse::<u8>()?)
+                        } else {
+                            let mut capacity_level_filepath = p.clone();
+                            capacity_level_filepath.push("capacity_level");
+                            log::trace!("{:?}", capacity_level_filepath);
+                            let capacity_level_str = fs::read_to_string(&capacity_level_filepath)?
+                                .trim_end()
+                                .to_owned();
+                            Self::sysfs_capacity_level_to_prct(&capacity_level_str)
                         };
 
                         // Parse model name
@@ -93,7 +91,7 @@ impl RenderablePolybarModule for BatteryMouseModule {
             for (name, level) in &state.levels {
                 fragments.push(match level {
                     Some(level) => markup::style(
-                        &format!("{} {}%", name, level),
+                        &format!("{name} {level}%"),
                         if level < &40 {
                             Some(theme::Color::Attention)
                         } else if level < &50 {
@@ -105,7 +103,7 @@ impl RenderablePolybarModule for BatteryMouseModule {
                         None,
                         None,
                     ),
-                    None => format!("{} ?", name),
+                    None => format!("{name} ?"),
                 });
             }
         }
@@ -122,13 +120,13 @@ mod tests {
         let module = BatteryMouseModule::new();
 
         let levels = vec![
-            ("m0".to_string(), Some(100)),
-            ("m1".to_string(), Some(50)),
-            ("m2".to_string(), Some(49)),
-            ("m3".to_string(), Some(30)),
-            ("m4".to_string(), Some(29)),
-            ("m5".to_string(), Some(5)),
-            ("m6".to_string(), None),
+            ("m0".to_owned(), Some(100)),
+            ("m1".to_owned(), Some(50)),
+            ("m2".to_owned(), Some(49)),
+            ("m3".to_owned(), Some(30)),
+            ("m4".to_owned(), Some(29)),
+            ("m5".to_owned(), Some(5)),
+            ("m6".to_owned(), None),
         ];
         let state = BatteryMouseModuleState { levels };
         assert_eq!(

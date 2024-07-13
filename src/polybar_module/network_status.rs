@@ -17,7 +17,7 @@ use crate::{
 
 const PING_AVG_COUNT: usize = 3;
 
-pub struct NetworkStatusModule {
+pub(crate) struct NetworkStatusModule {
     env: PolybarModuleEnv,
     cfg: config::NetworkStatusModuleConfig,
     ping_childs: Vec<Child>,
@@ -30,13 +30,13 @@ pub struct NetworkStatusModule {
 }
 
 #[derive(Debug, Eq, PartialEq)]
-pub struct NetworkStatusModuleState {
+pub(crate) struct NetworkStatusModuleState {
     reachable_hosts: Vec<bool>,
     vpn: Vec<String>,
 }
 
 impl NetworkStatusModule {
-    pub fn new(cfg: config::NetworkStatusModuleConfig) -> anyhow::Result<Self> {
+    pub(crate) fn new(cfg: config::NetworkStatusModuleConfig) -> anyhow::Result<Self> {
         let env = PolybarModuleEnv::new();
         let mut ping_childs = Vec::with_capacity(cfg.hosts.len());
         let poller = mio::Poll::new()?;
@@ -88,9 +88,9 @@ impl NetworkStatusModule {
             .args([
                 "-O",
                 "-W",
-                &format!("{}", ping_period_s),
+                &format!("{ping_period_s}"),
                 "-i",
-                &format!("{}", ping_period_s),
+                &format!("{ping_period_s}"),
                 "-n",
                 host,
             ])
@@ -167,7 +167,7 @@ impl NetworkStatusModule {
             .stderr(Stdio::null())
             .status()?;
         if pgrep_status.success() {
-            vpn.push("ovpn".to_string());
+            vpn.push("ovpn".to_owned());
         }
         vpn.sort();
 
@@ -238,7 +238,7 @@ impl RenderablePolybarModule for NetworkStatusModule {
             let duration = Self::get_ping_period(&self.env);
             log::trace!("Waiting for network events");
             let poll_res = self.poller.poll(&mut self.poller_events, Some(duration));
-            if let Err(ref e) = poll_res {
+            if let Err(e) = &poll_res {
                 if e.kind() == ErrorKind::Interrupted {
                     // Ignore error, and do not retry, can occur on return from hibernation
                     return;
@@ -272,16 +272,9 @@ impl RenderablePolybarModule for NetworkStatusModule {
                 for (reachable, host_info) in state.reachable_hosts.iter().zip(&self.cfg.hosts) {
                     fragments.push(markup::style(
                         &host_info.name,
-                        if !reachable && host_info.warn_unreachable {
-                            Some(theme::Color::Attention)
-                        } else {
-                            None
-                        },
-                        if *reachable {
-                            Some(theme::Color::Foreground)
-                        } else {
-                            None
-                        },
+                        (!reachable && host_info.warn_unreachable)
+                            .then_some(theme::Color::Attention),
+                        (*reachable).then_some(theme::Color::Foreground),
                         None,
                         None,
                     ));
@@ -309,6 +302,7 @@ impl RenderablePolybarModule for NetworkStatusModule {
 }
 
 #[cfg(test)]
+#[allow(clippy::shadow_unrelated)]
 mod tests {
     use super::*;
 
@@ -317,13 +311,13 @@ mod tests {
         let module = NetworkStatusModule::new(config::NetworkStatusModuleConfig {
             hosts: vec![
                 config::NetworkStatusHost {
-                    name: "h1".to_string(),
-                    host: "h1.example.com".to_string(),
+                    name: "h1".to_owned(),
+                    host: "h1.example.com".to_owned(),
                     warn_unreachable: false,
                 },
                 config::NetworkStatusHost {
-                    name: "h2".to_string(),
-                    host: "h2.example.com".to_string(),
+                    name: "h2".to_owned(),
+                    host: "h2.example.com".to_owned(),
                     warn_unreachable: true,
                 },
             ],
@@ -359,7 +353,7 @@ mod tests {
 
         let state = Some(NetworkStatusModuleState {
             reachable_hosts: vec![true, false],
-            vpn: vec!["i1".to_string()],
+            vpn: vec!["i1".to_owned()],
         });
         assert_eq!(
             module.render(&state),

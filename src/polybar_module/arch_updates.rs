@@ -1,4 +1,5 @@
 use std::{
+    borrow::ToOwned,
     fmt::Write,
     process::{Command, Stdio},
     thread::sleep,
@@ -14,21 +15,22 @@ use crate::{
     theme,
 };
 
-pub struct ArchUpdatesModule {
+pub(crate) struct ArchUpdatesModule {
     xdg_dirs: xdg::BaseDirectories,
     env: PolybarModuleEnv,
     server_error_backoff: ExponentialBackoff,
 }
 
 #[derive(Debug, Eq, PartialEq)]
-pub struct ArchUpdatesModuleState {
+#[allow(clippy::struct_field_names)]
+pub(crate) struct ArchUpdatesModuleState {
     repo_update_count: usize,
     repo_security_update_count: usize,
     aur_update_count: usize,
 }
 
 impl ArchUpdatesModule {
-    pub fn new() -> anyhow::Result<Self> {
+    pub(crate) fn new() -> anyhow::Result<Self> {
         let xdg_dirs = xdg::BaseDirectories::new()?;
         let env = PolybarModuleEnv::new();
         let server_error_backoff = ExponentialBackoffBuilder::new()
@@ -51,27 +53,29 @@ impl ArchUpdatesModule {
             .xdg_dirs
             .find_cache_file("checkupdates")
             .ok_or_else(|| anyhow::anyhow!("Unable to find checkupdates database dir"))?;
-        let output = Command::new("checkupdates")
+        let output_cu = Command::new("checkupdates")
             .env("CHECKUPDATES_DB", &db_dir)
             .stderr(Stdio::null())
             .output()?;
         // checkupdates returns non 0 when no update is available
 
         // Parse output
-        let output_str = String::from_utf8_lossy(&output.stdout);
-        let repo_updates: Vec<String> = output_str
+        let output_cu_str = String::from_utf8_lossy(&output_cu.stdout);
+        let repo_updates: Vec<String> = output_cu_str
             .lines()
             .map(|l| {
                 l.split(' ')
                     .next()
                     .ok_or_else(|| anyhow::anyhow!("Failed to parse checkupdates output"))
-                    .map(|s| s.to_string())
+                    .map(ToOwned::to_owned)
             })
             .collect::<Result<Vec<String>, _>>()?;
 
-        let repo_security_update_count = if !repo_updates.is_empty() {
+        let repo_security_update_count = if repo_updates.is_empty() {
+            0
+        } else {
             // Run arch-audit
-            let output = Command::new("arch-audit")
+            let output_audit = Command::new("arch-audit")
                 .args([
                     "-u",
                     "-b",
@@ -84,31 +88,29 @@ impl ArchUpdatesModule {
                 .env("TERM", "xterm") // workaround arch-audit bug
                 .stderr(Stdio::null())
                 .output()?;
-            output
+            output_audit
                 .status
                 .exit_ok()
                 .context("arch-audit exited with error")?;
 
             // Parse output
-            let output_str = String::from_utf8_lossy(&output.stdout);
-            output_str
+            let output_audit_str = String::from_utf8_lossy(&output_audit.stdout);
+            output_audit_str
                 .lines()
-                .filter(|l| repo_updates.contains(&l.to_string()))
+                .filter(|l| repo_updates.contains(&(*l).to_owned()))
                 .count()
-        } else {
-            0
         };
 
         // Run arch-audit
-        let output = Command::new("yay")
+        let output_yay = Command::new("yay")
             .args(["-Qua"])
             .stderr(Stdio::null())
             .output()?;
         // output.status.exit_ok().context("yay exited with error")?;
 
         // Parse output
-        let output_str = String::from_utf8_lossy(&output.stdout);
-        let aur_update_count = output_str.lines().count();
+        let output_yay_str = String::from_utf8_lossy(&output_yay.stdout);
+        let aur_update_count = output_yay_str.lines().count();
 
         Ok(ArchUpdatesModuleState {
             repo_update_count: repo_updates.len(),
@@ -134,7 +136,7 @@ impl RenderablePolybarModule for ArchUpdatesModule {
             };
             sleep(sleep_duration);
         }
-        self.env.wait_network_mode(NetworkMode::Unrestricted);
+        self.env.wait_network_mode(&NetworkMode::Unrestricted);
     }
 
     fn update(&mut self) -> Self::State {
@@ -179,6 +181,7 @@ impl RenderablePolybarModule for ArchUpdatesModule {
 }
 
 #[cfg(test)]
+#[allow(clippy::shadow_unrelated)]
 mod tests {
     use super::*;
 

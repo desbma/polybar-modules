@@ -16,7 +16,7 @@ use crate::{
     theme,
 };
 
-pub struct TodoTxtModule {
+pub(crate) struct TodoTxtModule {
     max_len: Option<usize>,
     todotxt_filepath: PathBuf,
     done_filepath: PathBuf,
@@ -24,7 +24,7 @@ pub struct TodoTxtModule {
 }
 
 #[derive(Debug, PartialEq)]
-pub enum TodoTxtModuleState {
+pub(crate) enum TodoTxtModuleState {
     Active {
         pending_count: usize,
         next_task: Option<Task>,
@@ -34,7 +34,7 @@ pub enum TodoTxtModuleState {
 }
 
 impl TodoTxtModule {
-    pub fn new(max_len: Option<usize>) -> anyhow::Result<Self> {
+    pub(crate) fn new(max_len: Option<usize>) -> anyhow::Result<Self> {
         let todotxt_str = env::var_os("TODO_FILE")
             .ok_or_else(|| anyhow::anyhow!("TODO_FILE environment variable is not set"))?;
         let todotxt_filepath = PathBuf::from(todotxt_str);
@@ -52,28 +52,27 @@ impl TodoTxtModule {
     }
 
     fn try_update(&mut self) -> anyhow::Result<TodoTxtModuleState> {
-        match self.env.public_screen() {
-            false => {
-                let last_fs_change = self.get_todotxt_file_mtime();
+        if self.env.public_screen() {
+            Ok(TodoTxtModuleState::Paused)
+        } else {
+            let last_fs_change = self.get_todotxt_file_mtime();
 
-                let today = chrono::Local::now().date_naive();
-                let task_file = TodoFile::new(&self.todotxt_filepath, &self.done_filepath)?;
-                let tasks = task_file.load_tasks()?;
-                let next_task = tasks
-                    .iter()
-                    .filter(|t| t.is_ready(&today, &tasks))
-                    .max_by(|a, b| a.cmp(b, &tasks))
-                    .cloned();
+            let today = chrono::Local::now().date_naive();
+            let task_file = TodoFile::new(&self.todotxt_filepath, &self.done_filepath)?;
+            let tasks = task_file.load_tasks()?;
+            let next_task = tasks
+                .iter()
+                .filter(|t| t.is_ready(&today, &tasks))
+                .max_by(|a, b| a.cmp(b, &tasks))
+                .cloned();
 
-                let pending_count = tasks.iter().filter(|t| t.is_ready(&today, &tasks)).count();
+            let pending_count = tasks.iter().filter(|t| t.is_ready(&today, &tasks)).count();
 
-                Ok(TodoTxtModuleState::Active {
-                    pending_count,
-                    next_task,
-                    last_fs_change,
-                })
-            }
-            true => Ok(TodoTxtModuleState::Paused),
+            Ok(TodoTxtModuleState::Active {
+                pending_count,
+                next_task,
+                last_fs_change,
+            })
         }
     }
 
@@ -88,6 +87,7 @@ impl RenderablePolybarModule for TodoTxtModule {
     type State = Option<TodoTxtModuleState>;
 
     fn wait_update(&mut self, prev_state: &Option<Self::State>) {
+        const MAX_WAIT: Duration = Duration::from_secs(60 * 60);
         if let Some(prev_state) = prev_state {
             match prev_state {
                 // Nominal
@@ -105,7 +105,6 @@ impl RenderablePolybarModule for TodoTxtModule {
                             .watch(to_watch_filepath, notify::RecursiveMode::NonRecursive)
                             .unwrap();
                     }
-                    const MAX_WAIT: Duration = Duration::from_secs(60 * 60);
                     let wait_start = Instant::now();
                     while !self.env.public_screen()
                         && (Instant::now().duration_since(wait_start) < MAX_WAIT)
@@ -158,12 +157,12 @@ impl RenderablePolybarModule for TodoTxtModule {
                     "{} ",
                     markup::style("", Some(theme::Color::MainIcon), None, None, None)
                 );
-                let s2 = format!("{} ", pending_count);
+                let s2 = format!("{pending_count} ");
                 let max_task_len = self.max_len.map(|max_len| max_len - s2.len());
                 let s3 = if let Some(task) = next_task {
                     theme::ellipsis(&task.text, max_task_len)
                 } else {
-                    "😌".to_string()
+                    "😌".to_owned()
                 };
                 format!(
                     "{}{}",
@@ -177,9 +176,8 @@ impl RenderablePolybarModule for TodoTxtModule {
                                 None,
                                 if next_task
                                     .as_ref()
-                                    .and_then(|t| t.due_date())
-                                    .map(|d| d <= chrono::Local::now().date_naive())
-                                    .unwrap_or(false)
+                                    .and_then(tasks::Task::due_date)
+                                    .is_some_and(|d| d <= chrono::Local::now().date_naive())
                                 {
                                     Some(theme::Color::Attention)
                                 } else {
@@ -226,6 +224,7 @@ impl RenderablePolybarModule for TodoTxtModule {
 }
 
 #[cfg(test)]
+#[allow(clippy::shadow_unrelated, clippy::too_many_lines)]
 mod tests {
     use super::*;
 
@@ -254,7 +253,7 @@ mod tests {
             pending_count: 10,
             next_task: Some(Task {
                 priority: None,
-                text: "todo".to_string(),
+                text: "todo".to_owned(),
                 ..Task::default()
             }),
             last_fs_change: None,
@@ -271,7 +270,7 @@ mod tests {
             pending_count: 10,
             next_task: Some(Task {
                 priority: Some('D'),
-                text: "todo".to_string(),
+                text: "todo".to_owned(),
                 ..Task::default()
             }),
             last_fs_change: None,
@@ -288,9 +287,9 @@ mod tests {
             pending_count: 10,
             next_task: Some(Task {
                 priority: Some('D'),
-                text: "todo".to_string(),
+                text: "todo".to_owned(),
                 attributes: vec![(
-                    "due".to_string(),
+                    "due".to_owned(),
                     chrono::Local::now()
                         .date_naive()
                         .format("%Y-%m-%d")
@@ -312,7 +311,7 @@ mod tests {
             pending_count: 10,
             next_task: Some(Task {
                 priority: Some('C'),
-                text: "todo".to_string(),
+                text: "todo".to_owned(),
                 ..Task::default()
             }),
             last_fs_change: None,
@@ -329,7 +328,7 @@ mod tests {
             pending_count: 10,
             next_task: Some(Task {
                 priority: Some('A'),
-                text: "todo".to_string(),
+                text: "todo".to_owned(),
                 ..Task::default()
             }),
             last_fs_change: None,
@@ -348,7 +347,7 @@ mod tests {
             pending_count: 10,
             next_task: Some(Task {
                 priority: None,
-                text: "todo".to_string(),
+                text: "todo".to_owned(),
                 ..Task::default()
             }),
             last_fs_change: None,
@@ -365,7 +364,7 @@ mod tests {
             pending_count: 101,
             next_task: Some(Task {
                 priority: None,
-                text: "todo".to_string(),
+                text: "todo".to_owned(),
                 ..Task::default()
             }),
             last_fs_change: None,
@@ -382,7 +381,7 @@ mod tests {
             pending_count: 1011,
             next_task: Some(Task {
                 priority: None,
-                text: "todo".to_string(),
+                text: "todo".to_owned(),
                 ..Task::default()
             }),
             last_fs_change: None,
@@ -399,7 +398,7 @@ mod tests {
             pending_count: 10,
             next_task: Some(Task {
                 priority: None,
-                text: "todozzz".to_string(),
+                text: "todozzz".to_owned(),
                 ..Task::default()
             }),
             last_fs_change: None,

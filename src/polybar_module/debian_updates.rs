@@ -13,19 +13,19 @@ use crate::{
     theme,
 };
 
-pub struct DebianUpdatesModule {
+pub(crate) struct DebianUpdatesModule {
     env: PolybarModuleEnv,
     debian_relase_codename: String,
 }
 
 #[derive(Debug, Eq, PartialEq)]
-pub struct DebianUpdatesModuleState {
+pub(crate) struct DebianUpdatesModuleState {
     update_count: usize,
     security_update_count: usize,
 }
 
 impl DebianUpdatesModule {
-    pub fn new() -> anyhow::Result<Self> {
+    pub(crate) fn new() -> anyhow::Result<Self> {
         let env = PolybarModuleEnv::new();
 
         // Run lsb_release
@@ -41,7 +41,7 @@ impl DebianUpdatesModule {
         // Parse output
         let debian_relase_codename = String::from_utf8_lossy(&output.stdout)
             .trim_end()
-            .to_string();
+            .to_owned();
         // if debian_relase_codename == "bullseye" {
         //     // Debian, sigh...
         //     debian_relase_codename = String::from("sid");
@@ -55,16 +55,19 @@ impl DebianUpdatesModule {
 
     fn try_update(&mut self) -> anyhow::Result<DebianUpdatesModuleState> {
         // Run apt
-        let output = Command::new("apt")
+        let output_apt = Command::new("apt")
             .args(["list", "--upgradable"])
             .env("LANG", "C")
             .stderr(Stdio::null())
             .output()?;
-        output.status.exit_ok().context("apt exited with error")?;
+        output_apt
+            .status
+            .exit_ok()
+            .context("apt exited with error")?;
 
         // Parse output
-        let output_str = String::from_utf8_lossy(&output.stdout);
-        let updates: Vec<&str> = output_str
+        let output_apt_str = String::from_utf8_lossy(&output_apt.stdout);
+        let updates: Vec<&str> = output_apt_str
             .lines()
             .filter(|l| l.contains('['))
             .map(|l| {
@@ -74,9 +77,11 @@ impl DebianUpdatesModule {
             })
             .collect::<Result<_, _>>()?;
 
-        let security_update_count = if !updates.is_empty() {
+        let security_update_count = if updates.is_empty() {
+            0
+        } else {
             // Run debsecan
-            let output = Command::new("debsecan")
+            let output_debsecan = Command::new("debsecan")
                 .args([
                     "--only-fixed",
                     &format!("--suite={}", self.debian_relase_codename),
@@ -85,18 +90,16 @@ impl DebianUpdatesModule {
                 .env("LANG", "C")
                 .stderr(Stdio::null())
                 .output()?;
-            output
+            output_debsecan
                 .status
                 .exit_ok()
                 .context("debsecan exited with error")?;
 
             // Parse output
-            String::from_utf8_lossy(&output.stdout)
+            String::from_utf8_lossy(&output_debsecan.stdout)
                 .lines()
                 .filter(|p| updates.contains(p))
                 .count()
-        } else {
-            0
         };
 
         Ok(DebianUpdatesModuleState {
@@ -122,7 +125,7 @@ impl RenderablePolybarModule for DebianUpdatesModule {
             };
             sleep(sleep_duration);
         }
-        self.env.wait_network_mode(NetworkMode::Unrestricted);
+        self.env.wait_network_mode(&NetworkMode::Unrestricted);
     }
 
     fn update(&mut self) -> Self::State {
@@ -164,6 +167,7 @@ impl RenderablePolybarModule for DebianUpdatesModule {
 }
 
 #[cfg(test)]
+#[allow(clippy::shadow_unrelated)]
 mod tests {
     use super::*;
 

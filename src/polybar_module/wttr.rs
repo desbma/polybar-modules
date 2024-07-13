@@ -9,14 +9,14 @@ use crate::{
     theme,
 };
 
-pub struct WttrModule {
+pub(crate) struct WttrModule {
     client: reqwest::blocking::Client,
     req: reqwest::blocking::Request,
     env: PolybarModuleEnv,
 }
 
 #[derive(Debug, Eq, PartialEq)]
-pub struct WttrModuleState {
+pub(crate) struct WttrModuleState {
     sky: &'static str,
     temp: i8,
 }
@@ -48,14 +48,14 @@ lazy_static! {
 }
 
 impl WttrModule {
-    pub fn new(location: Option<String>) -> anyhow::Result<Self> {
+    pub(crate) fn new(location: &Option<String>) -> anyhow::Result<Self> {
         let env = PolybarModuleEnv::new();
         let client = reqwest::blocking::Client::builder()
             .timeout(TCP_REMOTE_TIMEOUT)
             .build()?;
         let url = &format!(
             "https://wttr.in/{}?format=%c/%t",
-            location.as_ref().unwrap_or(&"".to_string())
+            location.as_ref().unwrap_or(&String::new())
         );
         let req = client.get(url).build()?;
         Ok(Self { client, req, env })
@@ -69,7 +69,7 @@ impl WttrModule {
             .text()?;
         log::debug!("{:?}", text);
 
-        let mut tokens = text.split('/').map(|s| s.trim());
+        let mut tokens = text.split('/').map(str::trim);
 
         let sky_str = tokens
             .next()
@@ -106,7 +106,7 @@ impl RenderablePolybarModule for WttrModule {
             };
             sleep(sleep_duration);
         }
-        self.env.wait_network_mode(NetworkMode::Unrestricted);
+        self.env.wait_network_mode(&NetworkMode::Unrestricted);
     }
 
     fn update(&mut self) -> Self::State {
@@ -134,12 +134,13 @@ impl RenderablePolybarModule for WttrModule {
 }
 
 #[cfg(test)]
+#[allow(clippy::shadow_unrelated)]
 mod tests {
     use super::*;
 
     #[test]
     fn test_render() {
-        let module = WttrModule::new(None).unwrap();
+        let module = WttrModule::new(&None).unwrap();
 
         let state = Some(WttrModuleState {
             sky: "", temp: 15

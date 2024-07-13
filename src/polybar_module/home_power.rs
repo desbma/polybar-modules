@@ -18,7 +18,7 @@ use crate::{
     theme,
 };
 
-pub struct HomePowerModule {
+pub(crate) struct HomePowerModule {
     se_client: reqwest::blocking::Client,
     se_req_power_flow: reqwest::blocking::Request,
     se_wait_delay: Option<Duration>,
@@ -27,7 +27,7 @@ pub struct HomePowerModule {
 }
 
 #[derive(Debug, Eq, PartialEq)]
-pub struct HomePowerModuleState {
+pub(crate) struct HomePowerModuleState {
     solar_power: u32,
     home_consumption_power: u32,
     grid_power: u32,
@@ -139,7 +139,7 @@ fn sha256_hex(s: &str) -> String {
     let mut hasher = sha2::Sha256::new();
     hasher.update(s.as_bytes());
     let hash = hasher.finalize();
-    hex::encode(hash).to_string()
+    hex::encode(hash)
 }
 
 impl ShellyPlus {
@@ -161,6 +161,7 @@ impl ShellyPlus {
     }
 
     // Send a request, authenticate if needed, and parse response
+    #[allow(clippy::shadow_unrelated)]
     fn request<P, R>(&mut self, call: &str, params: P) -> anyhow::Result<R>
     where
         P: Serialize,
@@ -206,7 +207,7 @@ impl ShellyPlus {
                 ));
                 let auth_resp = ShellyRpcAuthChallengeResponse {
                     realm: api_auth_params.realm,
-                    username: "admin".to_string(),
+                    username: "admin".to_owned(),
                     nonce: api_auth_params.nonce,
                     cnonce,
                     response,
@@ -259,7 +260,7 @@ impl ShellyPlus {
 }
 
 impl HomePowerModule {
-    pub fn new(cfg: HomePowerModuleConfig) -> anyhow::Result<Self> {
+    pub(crate) fn new(cfg: &HomePowerModuleConfig) -> anyhow::Result<Self> {
         let se_client = reqwest::blocking::Client::builder()
             .timeout(TCP_REMOTE_TIMEOUT)
             .build()?;
@@ -319,7 +320,7 @@ impl HomePowerModule {
                 if let Some(status) = dev.as_mut().and_then(|d| {
                     d.get_switch_status()
                         .inspect_err(|e| {
-                            log::warn!("Getting status of {:?} failed: {}", cfg.host, e)
+                            log::warn!("Getting status of {:?} failed: {}", cfg.host, e);
                         })
                         .ok()
                 }) {
@@ -327,7 +328,8 @@ impl HomePowerModule {
                         name: cfg.name.clone(),
                         status: Some(HomeDeviceStatus {
                             enabled: status.output,
-                            power: status.apower.map(|v| v as u32).unwrap_or(0),
+                            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+                            power: status.apower.map_or(0, |v| v as u32),
                         }),
                     }
                 } else {
@@ -340,6 +342,7 @@ impl HomePowerModule {
             })
             .collect();
 
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
         Ok(HomePowerModuleState {
             solar_power: (site_data.pv.current_power * 1000.0) as u32,
             home_consumption_power: (site_data.load.current_power * 1000.0) as u32,
@@ -369,7 +372,7 @@ impl RenderablePolybarModule for HomePowerModule {
             };
             sleep(sleep_duration);
         }
-        self.env.wait_network_mode(NetworkMode::Unrestricted);
+        self.env.wait_network_mode(&NetworkMode::Unrestricted);
     }
 
     fn update(&mut self) -> Self::State {
@@ -388,17 +391,17 @@ impl RenderablePolybarModule for HomePowerModule {
                 format!(
                     "{} {:.1}{}󱤃{:.1}{}󰴾{:.1}kW{}",
                     markup::style("", Some(theme::Color::MainIcon), None, None, None),
-                    state.solar_power as f64 / 1000.0,
+                    f64::from(state.solar_power) / 1000.0,
                     if state.solar_power > 0 { '' } else { ' ' },
-                    state.home_consumption_power as f64 / 1000.0,
+                    f64::from(state.home_consumption_power) / 1000.0,
                     match state.solar_power.cmp(&state.home_consumption_power) {
                         Ordering::Greater => '',
                         Ordering::Less => '',
                         Ordering::Equal => ' ',
                     },
-                    state.grid_power as f64 / 1000.0,
+                    f64::from(state.grid_power) / 1000.0,
                     if state.devices.is_empty() {
-                        "".to_string()
+                        String::new()
                     } else {
                         format!(
                             " {}",
@@ -408,11 +411,7 @@ impl RenderablePolybarModule for HomePowerModule {
                                 .map(|d| {
                                     markup::style(
                                         &d.name,
-                                        if d.status.is_none() {
-                                            Some(theme::Color::Attention)
-                                        } else {
-                                            None
-                                        },
+                                        d.status.is_none().then_some(theme::Color::Attention),
                                         if d.status
                                             .as_ref()
                                             .is_some_and(|s| s.enabled && s.power > 0)
@@ -438,16 +437,17 @@ impl RenderablePolybarModule for HomePowerModule {
 }
 
 #[cfg(test)]
+#[allow(clippy::shadow_unrelated)]
 mod tests {
     use super::*;
     use crate::config::SolarEdgeConfig;
 
     #[test]
     fn test_render() {
-        let module = HomePowerModule::new(HomePowerModuleConfig {
+        let module = HomePowerModule::new(&HomePowerModuleConfig {
             se: SolarEdgeConfig {
                 site_id: 0,
-                auth_cookie_val: "".to_string(),
+                auth_cookie_val: String::new(),
             },
             shelly_devices: vec![],
         })
@@ -470,28 +470,28 @@ mod tests {
             grid_power: 1400,
             devices: vec![
                 HomeDevice {
-                    name: "D1".to_string(),
+                    name: "D1".to_owned(),
                     status: Some(HomeDeviceStatus {
                         enabled: false,
                         power: 0,
                     }),
                 },
                 HomeDevice {
-                    name: "D2".to_string(),
+                    name: "D2".to_owned(),
                     status: Some(HomeDeviceStatus {
                         enabled: true,
                         power: 0,
                     }),
                 },
                 HomeDevice {
-                    name: "D3".to_string(),
+                    name: "D3".to_owned(),
                     status: Some(HomeDeviceStatus {
                         enabled: true,
                         power: 1500,
                     }),
                 },
                 HomeDevice {
-                    name: "D4".to_string(),
+                    name: "D4".to_owned(),
                     status: None,
                 },
             ],

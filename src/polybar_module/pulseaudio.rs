@@ -10,7 +10,7 @@ use anyhow::Context;
 
 use crate::{markup, polybar_module::RenderablePolybarModule, theme};
 
-pub struct PulseAudioModule {
+pub(crate) struct PulseAudioModule {
     pactl_subscribe_child: Child,
 }
 
@@ -29,13 +29,13 @@ struct PulseAudioSink {
 }
 
 #[derive(Debug, Eq, PartialEq)]
-pub struct PulseAudioModuleState {
+pub(crate) struct PulseAudioModuleState {
     sources: Vec<PulseAudioSource>,
     sinks: Vec<PulseAudioSink>,
 }
 
 impl PulseAudioModule {
-    pub fn new() -> anyhow::Result<Self> {
+    pub(crate) fn new() -> anyhow::Result<Self> {
         // Pactl process to follow events
         let child = Self::subscribe()?;
 
@@ -53,17 +53,21 @@ impl PulseAudioModule {
             .spawn()
     }
 
+    #[allow(clippy::too_many_lines, clippy::unused_self)]
     fn try_update(&mut self) -> anyhow::Result<PulseAudioModuleState> {
         // Run pactl
-        let output = Command::new("pactl")
+        let output_sources = Command::new("pactl")
             .args(["list", "sources"])
             .env("LANG", "C")
             .stderr(Stdio::null())
             .output()?;
-        output.status.exit_ok().context("pactl exited with error")?;
+        output_sources
+            .status
+            .exit_ok()
+            .context("pactl exited with error")?;
 
         // Parse output
-        let mut output_lines = output
+        let mut output_sources_lines = output_sources
             .stdout
             .lines()
             .collect::<Result<Vec<_>, _>>()?
@@ -72,7 +76,7 @@ impl PulseAudioModule {
         let mut sources = Vec::new();
         let parse_err_str = "Failed to parse pactl output";
         loop {
-            match output_lines.find(|l| l.starts_with("Source #")) {
+            match output_sources_lines.find(|l| l.starts_with("Source #")) {
                 None => break,
                 Some(source_line) => {
                     let id = source_line
@@ -80,19 +84,18 @@ impl PulseAudioModule {
                         .next()
                         .ok_or_else(|| anyhow::anyhow!(parse_err_str))?
                         .parse()?;
-                    let running = output_lines
+                    let running = output_sources_lines
                         .find(|l| l.starts_with("State: "))
                         .ok_or_else(|| anyhow::anyhow!(parse_err_str))?
                         .ends_with("RUNNING");
-                    if !output_lines
+                    if !output_sources_lines
                         .find(|l| l.starts_with("device.class = "))
-                        .map(|l| l.ends_with("\"sound\""))
-                        .unwrap_or(false)
+                        .is_some_and(|l| l.ends_with("\"sound\""))
                     {
                         // Not a real device
                         continue;
                     }
-                    let name = output_lines
+                    let name = output_sources_lines
                         .find(|l| {
                             l.starts_with("alsa.card_name = ") || l.starts_with("bluez.alias = ")
                         })
@@ -100,7 +103,7 @@ impl PulseAudioModule {
                         .split('"')
                         .nth(1)
                         .ok_or_else(|| anyhow::anyhow!(parse_err_str))?
-                        .to_string();
+                        .to_owned();
                     sources.push(PulseAudioSource {
                         id,
                         name: Self::abbrev(&name, 1),
@@ -111,15 +114,18 @@ impl PulseAudioModule {
         }
 
         // Run pactl
-        let output = Command::new("pactl")
+        let output_sinks = Command::new("pactl")
             .args(["list", "sinks"])
             .env("LANG", "C")
             .stderr(Stdio::null())
             .output()?;
-        output.status.exit_ok().context("pactl exited with error")?;
+        output_sinks
+            .status
+            .exit_ok()
+            .context("pactl exited with error")?;
 
         // Parse output
-        let mut output_lines = output
+        let mut output_sink_lines = output_sinks
             .stdout
             .lines()
             .collect::<Result<Vec<_>, _>>()?
@@ -127,7 +133,7 @@ impl PulseAudioModule {
             .map(|l| l.trim().to_owned());
         let mut sinks = Vec::new();
         loop {
-            match output_lines.find(|l| l.starts_with("Sink #")) {
+            match output_sink_lines.find(|l| l.starts_with("Sink #")) {
                 None => break,
                 Some(sink_line) => {
                     let id = sink_line
@@ -135,19 +141,18 @@ impl PulseAudioModule {
                         .next()
                         .ok_or_else(|| anyhow::anyhow!(parse_err_str))?
                         .parse()?;
-                    let running = output_lines
+                    let running = output_sink_lines
                         .find(|l| l.starts_with("State: "))
                         .ok_or_else(|| anyhow::anyhow!(parse_err_str))?
                         .ends_with("RUNNING");
-                    if !output_lines
+                    if !output_sink_lines
                         .find(|l| l.starts_with("device.class = "))
-                        .map(|l| l.ends_with("\"sound\""))
-                        .unwrap_or(false)
+                        .is_some_and(|l| l.ends_with("\"sound\""))
                     {
                         // Not a real device
                         continue;
                     }
-                    let name = output_lines
+                    let name = output_sink_lines
                         .find(|l| {
                             l.starts_with("alsa.card_name = ") || l.starts_with("bluez.alias = ")
                         })
@@ -155,7 +160,7 @@ impl PulseAudioModule {
                         .split('"')
                         .nth(1)
                         .ok_or_else(|| anyhow::anyhow!(parse_err_str))?
-                        .to_string();
+                        .to_owned();
                     sinks.push(PulseAudioSink {
                         id,
                         name: Self::abbrev(&name, 1),
@@ -174,7 +179,7 @@ impl PulseAudioModule {
         if longest_word.len() > max_len {
             if max_len > 1 {
                 longest_word.truncate(max_len - 1);
-                format!("{}…", longest_word)
+                format!("{longest_word}…")
             } else {
                 longest_word.truncate(1);
                 longest_word
@@ -261,9 +266,9 @@ impl RenderablePolybarModule for PulseAudioModule {
                             )
                         });
                     }
-                    fragments.push("".to_string());
+                    fragments.push(String::new());
                 } else {
-                    fragments.push(" ".to_string());
+                    fragments.push(" ".to_owned());
                 }
                 if state.sources.len() > 1 {
                     fragments.push(markup::style(
@@ -293,7 +298,7 @@ impl RenderablePolybarModule for PulseAudioModule {
                         });
                     }
                 }
-                fragments.join(" ").trim_end().to_string()
+                fragments.join(" ").trim_end().to_owned()
             }
             None => markup::style("", Some(theme::Color::Attention), None, None, None),
         }
@@ -301,6 +306,7 @@ impl RenderablePolybarModule for PulseAudioModule {
 }
 
 #[cfg(test)]
+#[allow(clippy::shadow_unrelated)]
 mod tests {
     use super::*;
 
@@ -319,24 +325,24 @@ mod tests {
             sources: vec![
                 PulseAudioSource {
                     id: 1,
-                    name: "so1".to_string(),
+                    name: "so1".to_owned(),
                     running: false,
                 },
                 PulseAudioSource {
                     id: 2,
-                    name: "so2".to_string(),
+                    name: "so2".to_owned(),
                     running: true,
                 },
             ],
             sinks: vec![
                 PulseAudioSink {
                     id: 1,
-                    name: "si1".to_string(),
+                    name: "si1".to_owned(),
                     running: false,
                 },
                 PulseAudioSink {
                     id: 2,
-                    name: "si2".to_string(),
+                    name: "si2".to_owned(),
                     running: true,
                 },
             ],
@@ -350,12 +356,12 @@ mod tests {
             sources: vec![
                 PulseAudioSource {
                     id: 1,
-                    name: "so1".to_string(),
+                    name: "so1".to_owned(),
                     running: false,
                 },
                 PulseAudioSource {
                     id: 2,
-                    name: "so2".to_string(),
+                    name: "so2".to_owned(),
                     running: true,
                 },
             ],
@@ -371,12 +377,12 @@ mod tests {
             sinks: vec![
                 PulseAudioSink {
                     id: 1,
-                    name: "si1".to_string(),
+                    name: "si1".to_owned(),
                     running: false,
                 },
                 PulseAudioSink {
                     id: 2,
-                    name: "si2".to_string(),
+                    name: "si2".to_owned(),
                     running: true,
                 },
             ],
@@ -389,12 +395,12 @@ mod tests {
         let state = Some(PulseAudioModuleState {
             sources: vec![PulseAudioSource {
                 id: 1,
-                name: "so1".to_string(),
+                name: "so1".to_owned(),
                 running: false,
             }],
             sinks: vec![PulseAudioSink {
                 id: 1,
-                name: "si1".to_string(),
+                name: "si1".to_owned(),
                 running: false,
             }],
         });

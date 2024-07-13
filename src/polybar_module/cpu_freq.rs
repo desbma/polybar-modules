@@ -8,20 +8,21 @@ use std::{
 
 use crate::{markup, polybar_module::RenderablePolybarModule, theme};
 
-pub struct CpuFreqModule {
+pub(crate) struct CpuFreqModule {
     freq_range: (u32, u32),
     freq_files: Vec<File>,
 }
 
 #[derive(Debug, Eq, PartialEq)]
-pub struct CpuFreqModuleState {
+#[allow(clippy::struct_field_names)]
+pub(crate) struct CpuFreqModuleState {
     min_freq: u32,
     max_freq: u32,
     avg_freq: u32,
 }
 
 impl CpuFreqModule {
-    pub fn new() -> anyhow::Result<Self> {
+    pub(crate) fn new() -> anyhow::Result<Self> {
         let dirs: Vec<PathBuf> =
             glob::glob("/sys/devices/system/cpu/cpu*/cpufreq/")?.collect::<Result<_, _>>()?;
         log::debug!("{} CPUs", dirs.len());
@@ -85,6 +86,7 @@ impl CpuFreqModule {
             .min()
             .ok_or_else(|| anyhow::anyhow!("Unable to read current CPU frequency"))?;
         let max_freq: u32 = *freqs.iter().max().unwrap();
+        #[allow(clippy::cast_possible_truncation)]
         let avg_freq: u32 = freqs.iter().sum::<u32>() / freqs.len() as u32;
         Ok(CpuFreqModuleState {
             min_freq,
@@ -116,15 +118,15 @@ impl RenderablePolybarModule for CpuFreqModule {
     fn render(&self, state: &Self::State) -> String {
         match state {
             Some(state) => {
-                let freq_load = (100 * (state.avg_freq - self.freq_range.0)) as f64
-                    / ((self.freq_range.1 - self.freq_range.0) as f64);
+                let freq_load = f64::from(100 * (state.avg_freq - self.freq_range.0))
+                    / f64::from(self.freq_range.1 - self.freq_range.0);
                 log::debug!("freq_load={}", freq_load);
                 markup::style(
                     &format!(
                         "{:.1}/{:.1}/{:.1} GHz",
-                        state.min_freq as f64 / 1000000.0,
-                        state.avg_freq as f64 / 1000000.0,
-                        state.max_freq as f64 / 1000000.0
+                        f64::from(state.min_freq) / 1_000_000.0,
+                        f64::from(state.avg_freq) / 1_000_000.0,
+                        f64::from(state.max_freq) / 1_000_000.0
                     ),
                     if freq_load > 100.0 {
                         Some(theme::Color::Attention)
@@ -146,41 +148,42 @@ impl RenderablePolybarModule for CpuFreqModule {
 }
 
 #[cfg(test)]
+#[allow(clippy::shadow_unrelated)]
 mod tests {
     use super::*;
 
     #[test]
     fn test_render() {
         let module = CpuFreqModule {
-            freq_range: (1000000, 4000000),
+            freq_range: (1_000_000, 4_000_000),
             freq_files: vec![],
         };
 
         let state = Some(CpuFreqModuleState {
-            min_freq: 1000000,
-            max_freq: 4000000,
-            avg_freq: 2000000,
+            min_freq: 1_000_000,
+            max_freq: 4_000_000,
+            avg_freq: 2_000_000,
         });
         assert_eq!(module.render(&state), "%{F#859900}1.0/2.0/4.0 GHz%{F-}");
 
         let state = Some(CpuFreqModuleState {
-            min_freq: 1000000,
-            max_freq: 4000000,
-            avg_freq: 3000000,
+            min_freq: 1_000_000,
+            max_freq: 4_000_000,
+            avg_freq: 3_000_000,
         });
         assert_eq!(module.render(&state), "1.0/3.0/4.0 GHz");
 
         let state = Some(CpuFreqModuleState {
-            min_freq: 1000000,
-            max_freq: 4000000,
-            avg_freq: 3500000,
+            min_freq: 1_000_000,
+            max_freq: 4_000_000,
+            avg_freq: 3_500_000,
         });
         assert_eq!(module.render(&state), "%{F#b58900}1.0/3.5/4.0 GHz%{F-}");
 
         let state = Some(CpuFreqModuleState {
-            min_freq: 1000000,
-            max_freq: 4000000,
-            avg_freq: 4500000,
+            min_freq: 1_000_000,
+            max_freq: 4_000_000,
+            avg_freq: 4_500_000,
         });
         assert_eq!(module.render(&state), "%{F#cb4b16}1.0/4.5/4.0 GHz%{F-}");
     }

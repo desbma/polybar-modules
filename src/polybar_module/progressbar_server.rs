@@ -11,7 +11,7 @@ use std::{
 
 use crate::{markup, polybar_module::RenderablePolybarModule, theme};
 
-pub struct ProgressBarServerModule {
+pub(crate) struct ProgressBarServerModule {
     max_len: usize,
     listener: UnixListener,
     clients: BTreeMap<usize, UnixStream>,
@@ -22,14 +22,14 @@ pub struct ProgressBarServerModule {
 }
 
 #[derive(Debug, Eq, PartialEq)]
-pub struct ProgressBarServerModuleState {
+pub(crate) struct ProgressBarServerModuleState {
     progress: Vec<u32>,
 }
 
 const RAMP_ICONS: [&str; 8] = ["▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"];
 
 impl ProgressBarServerModule {
-    pub fn new(max_len: usize) -> anyhow::Result<Self> {
+    pub(crate) fn new(max_len: usize) -> anyhow::Result<Self> {
         let binary_name = env!("CARGO_PKG_NAME");
         let xdg_dirs = xdg::BaseDirectories::with_prefix(binary_name)?;
         let socket_filepath = match xdg_dirs.find_runtime_file("progressbar_server.socket") {
@@ -60,7 +60,7 @@ impl ProgressBarServerModule {
 
     fn try_update(&mut self) -> anyhow::Result<ProgressBarServerModuleState> {
         let poller_registry = self.poller.registry();
-        for event in self.poller_events.iter() {
+        for event in &self.poller_events {
             let token = usize::from(event.token());
             if token == 0 {
                 // Server socket event
@@ -90,7 +90,7 @@ impl ProgressBarServerModule {
                     let mut buffer = [0; 4096];
                     let read_count = client_stream.read(&mut buffer)?;
                     if read_count > 0 {
-                        let progress = buffer[read_count - 1] as u32;
+                        let progress = u32::from(buffer[read_count - 1]);
                         if progress <= 100 {
                             self.cur_progress.insert(token, progress);
                         } else {
@@ -126,7 +126,7 @@ impl ProgressBarServerModule {
         assert!(len >= 1);
         assert!(progress <= 100);
         if len == 1 {
-            RAMP_ICONS[progress as usize / (100 / (RAMP_ICONS.len() - 1))].to_string()
+            RAMP_ICONS[progress as usize / (100 / (RAMP_ICONS.len() - 1))].to_owned()
         } else {
             let progress_chars = len * progress as usize / 100;
             let remaining_chars = len - progress_chars;
@@ -145,7 +145,7 @@ impl RenderablePolybarModule for ProgressBarServerModule {
     fn wait_update(&mut self, _prev_state: &Option<Self::State>) {
         loop {
             let poll_res = self.poller.poll(&mut self.poller_events, None);
-            if let Err(ref e) = poll_res {
+            if let Err(e) = &poll_res {
                 if e.kind() == ErrorKind::Interrupted {
                     continue;
                 }
@@ -167,9 +167,10 @@ impl RenderablePolybarModule for ProgressBarServerModule {
 
     fn render(&self, state: &Self::State) -> String {
         match state {
+            #[allow(clippy::cast_possible_truncation)]
             Some(state) => {
                 if state.progress.is_empty() {
-                    "".to_string()
+                    String::new()
                 } else if state.progress.len() == 1 {
                     format!(
                         "{} {} {}",
@@ -208,6 +209,7 @@ impl RenderablePolybarModule for ProgressBarServerModule {
 }
 
 #[cfg(test)]
+#[allow(clippy::shadow_unrelated)]
 mod tests {
     use super::*;
 

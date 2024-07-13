@@ -9,7 +9,7 @@ use std::{
 
 use crate::{markup, polybar_module::RenderablePolybarModule, theme};
 
-pub struct XmonadModule {
+pub(crate) struct XmonadModule {
     xdg_dirs: xdg::BaseDirectories,
     pipe: Option<File>,
     poller: mio::Poll,
@@ -17,12 +17,12 @@ pub struct XmonadModule {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct XmonadModuleState {
+pub(crate) struct XmonadModuleState {
     layout: String,
 }
 
 impl XmonadModule {
-    pub fn new() -> anyhow::Result<Self> {
+    pub(crate) fn new() -> anyhow::Result<Self> {
         let xdg_dirs = xdg::BaseDirectories::new()?;
         Ok(Self {
             xdg_dirs,
@@ -57,7 +57,7 @@ impl RenderablePolybarModule for XmonadModule {
     type State = Option<XmonadModuleState>;
 
     fn wait_update(&mut self, prev_state: &Option<Self::State>) {
-        let prev_state_err = prev_state.as_ref().map(|ps| ps.is_none()).unwrap_or(false);
+        let prev_state_err = prev_state.as_ref().is_some_and(Option::is_none);
         if self.pipe.is_none() || prev_state_err {
             if prev_state_err {
                 sleep(Duration::from_secs(1));
@@ -72,7 +72,7 @@ impl RenderablePolybarModule for XmonadModule {
         log::trace!("Waiting for pipe data");
         loop {
             let poll_res = self.poller.poll(&mut poller_events, None);
-            if let Err(ref e) = poll_res {
+            if let Err(e) = &poll_res {
                 if e.kind() == ErrorKind::Interrupted {
                     // Ignore error, can occur on return from hibernation
                     continue;
@@ -80,7 +80,7 @@ impl RenderablePolybarModule for XmonadModule {
             }
             poll_res.unwrap();
             log::trace!("Poll returned with events {:?}", poller_events);
-            if poller_events.iter().any(|e| e.is_readable()) {
+            if poller_events.iter().any(mio::event::Event::is_readable) {
                 self.pipe
                     .as_ref()
                     .unwrap()
@@ -110,7 +110,7 @@ impl RenderablePolybarModule for XmonadModule {
                 .layout
                 .split(' ')
                 .map(|t| {
-                    let mut s = t.to_string();
+                    let mut s = t.to_owned();
                     s.truncate(4);
                     s
                 })
@@ -123,6 +123,7 @@ impl RenderablePolybarModule for XmonadModule {
 }
 
 #[cfg(test)]
+#[allow(clippy::shadow_unrelated)]
 mod tests {
     use super::*;
 
@@ -131,12 +132,12 @@ mod tests {
         let module = XmonadModule::new().unwrap();
 
         let state = Some(XmonadModuleState {
-            layout: "Spacing Tall".to_string(),
+            layout: "Spacing Tall".to_owned(),
         });
         assert_eq!(module.render(&state), "Spac Tall");
 
         let state = Some(XmonadModuleState {
-            layout: "Tabbed Simplest".to_string(),
+            layout: "Tabbed Simplest".to_owned(),
         });
         assert_eq!(module.render(&state), "Tabb Simp");
 

@@ -4,17 +4,17 @@ use crate::{
     theme,
 };
 
-pub struct InternetBandwidthModule {
+pub(crate) struct InternetBandwidthModule {
     env: PolybarModuleEnv,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct InternetBandwidthModuleState {
+pub(crate) struct InternetBandwidthModuleState {
     mode: NetworkMode,
 }
 
 impl InternetBandwidthModule {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         let env = PolybarModuleEnv::new();
         Self { env }
     }
@@ -29,7 +29,7 @@ impl RenderablePolybarModule for InternetBandwidthModule {
                 NetworkMode::Unrestricted => NetworkMode::LowBandwith,
                 NetworkMode::LowBandwith => NetworkMode::Unrestricted,
             };
-            self.env.wait_network_mode(to_wait);
+            self.env.wait_network_mode(&to_wait);
         }
     }
 
@@ -68,6 +68,7 @@ impl RenderablePolybarModule for InternetBandwidthModule {
 }
 
 #[cfg(test)]
+#[allow(clippy::shadow_unrelated)]
 mod tests {
     use std::env;
 
@@ -83,10 +84,7 @@ mod tests {
         };
         assert_eq!(
             module.render(&state),
-            format!(
-                "%{{A1:touch {}/.local/share/low_internet_bandwidth:}}\u{f0c9d}%{{A}}",
-                home
-            )
+            format!("%{{A1:touch {home}/.local/share/low_internet_bandwidth:}}\u{f0c9d}%{{A}}")
         );
 
         let state = InternetBandwidthModuleState {
@@ -95,8 +93,7 @@ mod tests {
         assert_eq!(
             module.render(&state),
             format!(
-                "%{{A1:rm {}/.local/share/low_internet_bandwidth:}}%{{u#b58900}}%{{+u}}\u{f0c5f}%{{-u}}%{{A}}",
-                home
+                "%{{A1:rm {home}/.local/share/low_internet_bandwidth:}}%{{u#b58900}}%{{+u}}\u{f0c5f}%{{-u}}%{{A}}"
             )
         );
     }

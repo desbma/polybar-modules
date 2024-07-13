@@ -16,14 +16,14 @@ use crate::{
     theme,
 };
 
-pub struct TaskwarriorModule {
+pub(crate) struct TaskwarriorModule {
     max_len: Option<usize>,
     data_dir: String,
     env: PolybarModuleEnv,
 }
 
 #[derive(Debug, PartialEq)]
-pub enum TaskwarriorModuleState {
+pub(crate) enum TaskwarriorModuleState {
     Active {
         pending_count: usize,
         next_task: String,
@@ -35,7 +35,7 @@ pub enum TaskwarriorModuleState {
 }
 
 impl TaskwarriorModule {
-    pub fn new(max_len: Option<usize>) -> anyhow::Result<Self> {
+    pub(crate) fn new(max_len: Option<usize>) -> anyhow::Result<Self> {
         // Run task to get data.location
         let output = Command::new("task")
             .args(["show", "data.location"])
@@ -65,82 +65,81 @@ impl TaskwarriorModule {
     }
 
     fn try_update(&mut self) -> anyhow::Result<TaskwarriorModuleState> {
-        match self.env.public_screen() {
-            false => {
-                let last_fs_change = self.get_max_task_data_file_mtime();
-                let common_task_args = &["rc.verbose:nothing", "rc.gc:off", "recurrence.limit=0"];
+        if self.env.public_screen() {
+            Ok(TaskwarriorModuleState::Paused)
+        } else {
+            let last_fs_change = self.get_max_task_data_file_mtime();
+            let common_task_args = &["rc.verbose:nothing", "rc.gc:off", "recurrence.limit=0"];
 
-                // Run task
-                let mut args: Vec<&str> = common_task_args.to_vec();
-                args.extend(["status:pending", "count"]);
-                log::debug!("task {:?}", args);
-                let output = Command::new("task")
-                    .args(args)
-                    .stderr(Stdio::null())
-                    .output()?;
-                output.status.exit_ok().context("task exited with error")?;
+            // Run task
+            let mut args: Vec<&str> = common_task_args.to_vec();
+            args.extend(["status:pending", "count"]);
+            log::debug!("task {:?}", args);
+            let output = Command::new("task")
+                .args(args)
+                .stderr(Stdio::null())
+                .output()?;
+            output.status.exit_ok().context("task exited with error")?;
 
-                // Parse output
-                let pending_count = String::from_utf8_lossy(&output.stdout).trim().parse()?;
+            // Parse output
+            let pending_count = String::from_utf8_lossy(&output.stdout).trim().parse()?;
 
-                // Run task
-                let mut args: Vec<&str> = common_task_args.to_vec();
-                args.extend([
-                    "rc.report.next.columns:urgency,description",
-                    "rc.report.next.labels:",
-                    "limit:1",
-                    "next",
-                ]);
-                log::debug!("task {:?}", args);
-                let output = Command::new("task")
-                    .args(args)
-                    .stderr(Stdio::null())
-                    .output()?;
-                output.status.exit_ok().context("task exited with error")?;
+            // Run task
+            let mut args: Vec<&str> = common_task_args.to_vec();
+            args.extend([
+                "rc.report.next.columns:urgency,description",
+                "rc.report.next.labels:",
+                "limit:1",
+                "next",
+            ]);
+            log::debug!("task {:?}", args);
+            let output = Command::new("task")
+                .args(args)
+                .stderr(Stdio::null())
+                .output()?;
+            output.status.exit_ok().context("task exited with error")?;
 
-                // Parse output
-                let output = String::from_utf8_lossy(&output.stdout);
-                let mut output_tokens = output.trim().splitn(2, ' ');
-                let parse_err_str = "Failed to parse task output";
-                let next_task_urgency = output_tokens
-                    .next()
-                    .ok_or_else(|| anyhow::anyhow!(parse_err_str))?
-                    .parse()?;
-                let next_task = output_tokens
-                    .next()
-                    .ok_or_else(|| anyhow::anyhow!(parse_err_str))?
-                    .parse()?;
+            // Parse output
+            let output = String::from_utf8_lossy(&output.stdout);
+            let mut output_tokens = output.trim().splitn(2, ' ');
+            let parse_err_str = "Failed to parse task output";
+            let next_task_urgency = output_tokens
+                .next()
+                .ok_or_else(|| anyhow::anyhow!(parse_err_str))?
+                .parse()?;
+            let next_task = output_tokens
+                .next()
+                .ok_or_else(|| anyhow::anyhow!(parse_err_str))?
+                .parse()?;
 
-                // Run task
-                let mut args: Vec<&str> = common_task_args.to_vec();
-                args.extend([
-                    "rc.report.next.columns:project",
-                    "rc.report.next.labels:",
-                    "limit:1",
-                    "next",
-                ]);
-                log::debug!("task {:?}", args);
-                let output = Command::new("task")
-                    .args(args)
-                    .stderr(Stdio::null())
-                    .output()?;
-                output.status.exit_ok().context("task exited with error")?;
+            // Run task
+            let mut args: Vec<&str> = common_task_args.to_vec();
+            args.extend([
+                "rc.report.next.columns:project",
+                "rc.report.next.labels:",
+                "limit:1",
+                "next",
+            ]);
+            log::debug!("task {:?}", args);
+            let output = Command::new("task")
+                .args(args)
+                .stderr(Stdio::null())
+                .output()?;
+            output.status.exit_ok().context("task exited with error")?;
 
-                // Parse output
-                let next_task_project = match String::from_utf8_lossy(&output.stdout).trim() {
-                    "" => None,
-                    s => Some(s.to_string()),
-                };
+            // Parse output
+            let next_task_project = match String::from_utf8_lossy(&output.stdout).trim() {
+                "" => None,
+                s => Some(s.to_owned()),
+            };
 
-                Ok(TaskwarriorModuleState::Active {
-                    pending_count,
-                    next_task,
-                    next_task_project,
-                    next_task_urgency,
-                    last_fs_change,
-                })
-            }
-            true => Ok(TaskwarriorModuleState::Paused),
+            Ok(TaskwarriorModuleState::Active {
+                pending_count,
+                next_task,
+                next_task_project,
+                next_task_urgency,
+                last_fs_change,
+            })
         }
     }
 
@@ -224,7 +223,7 @@ impl RenderablePolybarModule for TaskwarriorModule {
                     "{} ",
                     markup::style("", Some(theme::Color::MainIcon), None, None, None)
                 );
-                let s2 = format!("{} ", pending_count);
+                let s2 = format!("{pending_count} ");
                 let max_project_len = match self.max_len {
                     None => None,
                     Some(max_len) => {
@@ -257,7 +256,7 @@ impl RenderablePolybarModule for TaskwarriorModule {
                             "{}{}",
                             s2,
                             markup::style(
-                                &format!("{}{}", s3, s4),
+                                &format!("{s3}{s4}"),
                                 None,
                                 if *next_task_urgency > 9.5 {
                                     Some(theme::Color::Attention)
@@ -304,6 +303,7 @@ impl RenderablePolybarModule for TaskwarriorModule {
 }
 
 #[cfg(test)]
+#[allow(clippy::shadow_unrelated, clippy::too_many_lines)]
 mod tests {
     use super::*;
 
@@ -316,8 +316,8 @@ mod tests {
 
         let state = Some(TaskwarriorModuleState::Active {
             pending_count: 10,
-            next_task: "todo".to_string(),
-            next_task_project: Some("proj".to_string()),
+            next_task: "todo".to_owned(),
+            next_task_project: Some("proj".to_owned()),
             next_task_urgency: 1.5,
             last_fs_change: None,
         });
@@ -331,7 +331,7 @@ mod tests {
 
         let state = Some(TaskwarriorModuleState::Active {
             pending_count: 10,
-            next_task: "todo".to_string(),
+            next_task: "todo".to_owned(),
             next_task_project: None,
             next_task_urgency: 1.5,
             last_fs_change: None,
@@ -346,8 +346,8 @@ mod tests {
 
         let state = Some(TaskwarriorModuleState::Active {
             pending_count: 10,
-            next_task: "todo".to_string(),
-            next_task_project: Some("proj".to_string()),
+            next_task: "todo".to_owned(),
+            next_task_project: Some("proj".to_owned()),
             next_task_urgency: 7.51,
             last_fs_change: None,
         });
@@ -361,8 +361,8 @@ mod tests {
 
         let state = Some(TaskwarriorModuleState::Active {
             pending_count: 10,
-            next_task: "todo".to_string(),
-            next_task_project: Some("proj".to_string()),
+            next_task: "todo".to_owned(),
+            next_task_project: Some("proj".to_owned()),
             next_task_urgency: 8.51,
             last_fs_change: None,
         });
@@ -376,8 +376,8 @@ mod tests {
 
         let state = Some(TaskwarriorModuleState::Active {
             pending_count: 10,
-            next_task: "todo".to_string(),
-            next_task_project: Some("proj".to_string()),
+            next_task: "todo".to_owned(),
+            next_task_project: Some("proj".to_owned()),
             next_task_urgency: 9.51,
             last_fs_change: None,
         });
@@ -393,8 +393,8 @@ mod tests {
 
         let state = Some(TaskwarriorModuleState::Active {
             pending_count: 10,
-            next_task: "todo".to_string(),
-            next_task_project: Some("proj".to_string()),
+            next_task: "todo".to_owned(),
+            next_task_project: Some("proj".to_owned()),
             next_task_urgency: 1.5,
             last_fs_change: None,
         });
@@ -408,8 +408,8 @@ mod tests {
 
         let state = Some(TaskwarriorModuleState::Active {
             pending_count: 101,
-            next_task: "todo".to_string(),
-            next_task_project: Some("proj".to_string()),
+            next_task: "todo".to_owned(),
+            next_task_project: Some("proj".to_owned()),
             next_task_urgency: 1.5,
             last_fs_change: None,
         });
@@ -423,8 +423,8 @@ mod tests {
 
         let state = Some(TaskwarriorModuleState::Active {
             pending_count: 1011,
-            next_task: "todo".to_string(),
-            next_task_project: Some("proj".to_string()),
+            next_task: "todo".to_owned(),
+            next_task_project: Some("proj".to_owned()),
             next_task_urgency: 1.5,
             last_fs_change: None,
         });
@@ -438,8 +438,8 @@ mod tests {
 
         let state = Some(TaskwarriorModuleState::Active {
             pending_count: 10,
-            next_task: "todozz".to_string(),
-            next_task_project: Some("proj".to_string()),
+            next_task: "todozz".to_owned(),
+            next_task_project: Some("proj".to_owned()),
             next_task_urgency: 1.5,
             last_fs_change: None,
         });
@@ -453,8 +453,8 @@ mod tests {
 
         let state = Some(TaskwarriorModuleState::Active {
             pending_count: 10,
-            next_task: "todozzz".to_string(),
-            next_task_project: Some("proj".to_string()),
+            next_task: "todozzz".to_owned(),
+            next_task_project: Some("proj".to_owned()),
             next_task_urgency: 1.5,
             last_fs_change: None,
         });

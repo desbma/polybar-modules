@@ -1,6 +1,6 @@
 use crate::theme;
 
-pub fn style(
+pub(crate) fn style(
     inner: &str,
     foreground_color: Option<theme::Color>,
     underline_color: Option<theme::Color>,
@@ -9,25 +9,25 @@ pub fn style(
 ) -> String {
     let mut r = inner.to_owned();
     if let Some(foreground_color) = foreground_color {
-        r = color_markup(r, 'F', foreground_color);
+        r = color_markup(&r, 'F', foreground_color);
     }
     if let Some(underline_color) = underline_color {
-        r = color_markup2(r, 'u', underline_color);
+        r = color_markup2(&r, 'u', underline_color);
     }
     if let Some(overline_color) = overline_color {
-        r = color_markup2(r, 'o', overline_color);
+        r = color_markup2(&r, 'o', overline_color);
     }
     if let Some(background_color) = background_color {
-        r = color_markup(r, 'b', background_color);
+        r = color_markup(&r, 'b', background_color);
     }
     r
 }
 
-fn color_markup(s: String, letter: char, color: theme::Color) -> String {
+fn color_markup(s: &str, letter: char, color: theme::Color) -> String {
     format!("%{{{}#{:6x}}}{}%{{{}-}}", letter, color as u32, s, letter)
 }
 
-fn color_markup2(s: String, letter: char, color: theme::Color) -> String {
+fn color_markup2(s: &str, letter: char, color: theme::Color) -> String {
     format!(
         "%{{{}#{:06x}}}%{{+{}}}{}%{{-{}}}",
         letter, color as u32, letter, s, letter
@@ -35,7 +35,7 @@ fn color_markup2(s: String, letter: char, color: theme::Color) -> String {
 }
 
 #[allow(dead_code)]
-pub enum PolybarActionType {
+pub(crate) enum PolybarActionType {
     ClickLeft = 1,
     ClickMiddle = 2,
     ClickRight = 3,
@@ -46,12 +46,12 @@ pub enum PolybarActionType {
     DoubleClickRight = 8,
 }
 
-pub struct PolybarAction {
+pub(crate) struct PolybarAction {
     pub type_: PolybarActionType,
     pub command: String,
 }
 
-pub fn action(inner: &str, action: PolybarAction) -> String {
+pub(crate) fn action(inner: &str, action: PolybarAction) -> String {
     let cmd = action.command.replace(':', "\\:");
     format!("%{{A{}:{}:}}{}%{{A}}", action.type_ as u8, cmd, inner)
 }
@@ -75,7 +75,7 @@ mod tests {
                 ":)",
                 PolybarAction {
                     type_: PolybarActionType::ClickRight,
-                    command: "this contains a : and ; and \\".to_string()
+                    command: "this contains a : and ; and \\".to_owned()
                 }
             ),
             "%{A3:this contains a \\: and ; and \\:}:)%{A}"

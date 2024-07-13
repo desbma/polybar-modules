@@ -4,21 +4,22 @@ use anyhow::Context;
 
 use crate::{markup, polybar_module::RenderablePolybarModule, theme};
 
-pub struct CpuTopModule {
+pub(crate) struct CpuTopModule {
     max_len: Option<usize>,
 }
 
 #[derive(Debug, Eq, PartialEq)]
-pub struct CpuTopModuleState {
+pub(crate) struct CpuTopModuleState {
     cpu_prct: u32,
     process_name: String,
 }
 
 impl CpuTopModule {
-    pub fn new(max_len: Option<usize>) -> anyhow::Result<Self> {
-        Ok(Self { max_len })
+    pub(crate) fn new(max_len: Option<usize>) -> Self {
+        Self { max_len }
     }
 
+    #[allow(clippy::unused_self)]
     fn try_update(&mut self) -> anyhow::Result<CpuTopModuleState> {
         // Run ps
         let output = Command::new("ps")
@@ -65,7 +66,7 @@ impl CpuTopModule {
         };
         let process_name = process_name_match
             .ok_or_else(|| anyhow::anyhow!("Unexpected ps output"))?
-            .to_string();
+            .to_owned();
 
         Ok(CpuTopModuleState {
             cpu_prct,
@@ -127,6 +128,7 @@ impl RenderablePolybarModule for CpuTopModule {
 }
 
 #[cfg(test)]
+#[allow(clippy::shadow_unrelated)]
 mod tests {
     use super::*;
 
@@ -137,7 +139,7 @@ mod tests {
             CpuTopModule::parse_ps_output(output.as_bytes()).unwrap(),
             CpuTopModuleState {
                 cpu_prct: 1,
-                process_name: "firefox".to_string()
+                process_name: "firefox".to_owned()
             }
         );
 
@@ -146,7 +148,7 @@ mod tests {
             CpuTopModule::parse_ps_output(output.as_bytes()).unwrap(),
             CpuTopModuleState {
                 cpu_prct: 1,
-                process_name: "Xorg".to_string()
+                process_name: "Xorg".to_owned()
             }
         );
 
@@ -155,7 +157,7 @@ mod tests {
             CpuTopModule::parse_ps_output(output.as_bytes()).unwrap(),
             CpuTopModuleState {
                 cpu_prct: 0,
-                process_name: "polybar-modules".to_string()
+                process_name: "polybar-modules".to_owned()
             }
         );
 
@@ -164,36 +166,36 @@ mod tests {
             CpuTopModule::parse_ps_output(output.as_bytes()).unwrap(),
             CpuTopModuleState {
                 cpu_prct: 6,
-                process_name: "thunderbird".to_string()
+                process_name: "thunderbird".to_owned()
             }
         );
     }
 
     #[test]
     fn test_render() {
-        let module = CpuTopModule::new(Some(10)).unwrap();
+        let module = CpuTopModule::new(Some(10));
 
         let state = Some(CpuTopModuleState {
             cpu_prct: 1,
-            process_name: "bz".to_string(),
+            process_name: "bz".to_owned(),
         });
         assert_eq!(module.render(&state), " 1%     bz");
 
         let state = Some(CpuTopModuleState {
             cpu_prct: 1,
-            process_name: "bzzzzzzzzzzzzzzzz".to_string(),
+            process_name: "bzzzzzzzzzzzzzzzz".to_owned(),
         });
         assert_eq!(module.render(&state), " 1% bzzzz…");
 
         let state = Some(CpuTopModuleState {
             cpu_prct: 50,
-            process_name: "bz".to_string(),
+            process_name: "bz".to_owned(),
         });
         assert_eq!(module.render(&state), "%{F#b58900}50%     bz%{F-}");
 
         let state = Some(CpuTopModuleState {
             cpu_prct: 99,
-            process_name: "bz".to_string(),
+            process_name: "bz".to_owned(),
         });
         assert_eq!(module.render(&state), "%{F#cb4b16}99%     bz%{F-}");
 

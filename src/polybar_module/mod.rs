@@ -3,29 +3,29 @@ use std::{fmt::Debug, path::PathBuf, sync::mpsc::channel, time::Duration};
 use backoff::{ExponentialBackoff, ExponentialBackoffBuilder};
 use notify::Watcher as _;
 
-pub mod arch_updates;
-pub mod autolock;
-pub mod battery_mouse;
-pub mod bluetooth;
-pub mod cpu_freq;
-pub mod cpu_top;
-pub mod debian_updates;
-pub mod gpu_nvidia;
-pub mod home_power;
-pub mod internet_bandwidth;
-pub mod market;
-pub mod network_status;
-pub mod player;
-pub mod progressbar_server;
-pub mod pulseaudio;
-pub mod syncthing;
+pub(crate) mod arch_updates;
+pub(crate) mod autolock;
+pub(crate) mod battery_mouse;
+pub(crate) mod bluetooth;
+pub(crate) mod cpu_freq;
+pub(crate) mod cpu_top;
+pub(crate) mod debian_updates;
+pub(crate) mod gpu_nvidia;
+pub(crate) mod home_power;
+pub(crate) mod internet_bandwidth;
+pub(crate) mod market;
+pub(crate) mod network_status;
+pub(crate) mod player;
+pub(crate) mod progressbar_server;
+pub(crate) mod pulseaudio;
+pub(crate) mod syncthing;
 mod syncthing_rest;
-pub mod taskwarrior;
-pub mod todotxt;
-pub mod wttr;
-pub mod xmonad;
+pub(crate) mod taskwarrior;
+pub(crate) mod todotxt;
+pub(crate) mod wttr;
+pub(crate) mod xmonad;
 
-pub enum PolybarModule {
+pub(crate) enum PolybarModule {
     ArchUpdates(arch_updates::ArchUpdatesModule),
     Autolock(autolock::AutolockModule),
     BatteryMouse(battery_mouse::BatteryMouseModule),
@@ -49,7 +49,7 @@ pub enum PolybarModule {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum NetworkMode {
+pub(crate) enum NetworkMode {
     Unrestricted,
     LowBandwith,
 }
@@ -57,7 +57,7 @@ pub enum NetworkMode {
 const TCP_REMOTE_TIMEOUT: Duration = Duration::from_secs(20);
 const TCP_LOCAL_TIMEOUT: Duration = Duration::from_secs(5);
 
-pub trait RenderablePolybarModule {
+pub(crate) trait RenderablePolybarModule {
     type State: Debug + PartialEq;
 
     fn wait_update(&mut self, prev_state: &Option<Self::State>);
@@ -67,14 +67,14 @@ pub trait RenderablePolybarModule {
     fn render(&self, state: &Self::State) -> String;
 }
 
-pub struct PolybarModuleEnv {
+pub(crate) struct PolybarModuleEnv {
     pub low_bw_filepath: PathBuf,
     pub public_screen_filepath: PathBuf,
     pub network_error_backoff: ExponentialBackoff,
 }
 
 impl PolybarModuleEnv {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         let xdg_dirs = xdg::BaseDirectories::new().unwrap();
         let low_bw_filepath = xdg_dirs.get_data_home().join("low_internet_bandwidth");
         let public_screen_filepath = xdg_dirs.place_runtime_file("public_screen").unwrap();
@@ -92,18 +92,19 @@ impl PolybarModuleEnv {
         }
     }
 
-    pub fn network_mode(&self) -> NetworkMode {
-        match self.low_bw_filepath.exists() {
-            true => NetworkMode::LowBandwith,
-            false => NetworkMode::Unrestricted,
+    pub(crate) fn network_mode(&self) -> NetworkMode {
+        if self.low_bw_filepath.exists() {
+            NetworkMode::LowBandwith
+        } else {
+            NetworkMode::Unrestricted
         }
     }
 
-    pub fn public_screen(&self) -> bool {
+    pub(crate) fn public_screen(&self) -> bool {
         self.public_screen_filepath.exists()
     }
 
-    pub fn wait_network_mode(&self, mode: NetworkMode) -> bool {
+    pub(crate) fn wait_network_mode(&self, mode: &NetworkMode) -> bool {
         let mut did_wait = false;
         let (events_tx, events_rx) = channel();
         let mut watcher = notify::recommended_watcher(events_tx).unwrap();
@@ -112,7 +113,7 @@ impl PolybarModuleEnv {
         watcher
             .watch(parent_dir, notify::RecursiveMode::NonRecursive)
             .unwrap();
-        while self.network_mode() != mode {
+        while self.network_mode() != *mode {
             let evt = events_rx.recv().unwrap();
             did_wait = true;
             log::trace!("{:?}", evt);
@@ -120,7 +121,7 @@ impl PolybarModuleEnv {
         did_wait
     }
 
-    pub fn wait_public_screen(&self, public: bool) -> bool {
+    pub(crate) fn wait_public_screen(&self, public: bool) -> bool {
         let mut did_wait = false;
         let (events_tx, events_rx) = channel();
         let mut watcher = notify::recommended_watcher(events_tx).unwrap();

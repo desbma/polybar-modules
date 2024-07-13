@@ -4,7 +4,7 @@ use structopt::StructOpt;
 
 #[derive(Clone, Debug, StructOpt)]
 #[allow(non_camel_case_types)]
-pub enum PolybarModuleName {
+pub(crate) enum PolybarModuleName {
     #[structopt(about = "Start Arch Linux update module")]
     arch_updates,
     #[structopt(about = "Start screen autolock module")]
@@ -51,43 +51,43 @@ pub enum PolybarModuleName {
 
 #[derive(Debug, StructOpt)]
 #[structopt(version=env!("CARGO_PKG_VERSION"), about="Polybar modules.")]
-pub struct CommandLineOpts {
+pub(crate) struct CommandLineOpts {
     #[structopt(subcommand, about = "Polybar module to start")]
     pub module: PolybarModuleName,
 }
 
 #[derive(Debug, serde::Deserialize)]
-pub struct Config {
+pub(crate) struct Config {
     pub module: Option<ModuleConfig>,
 }
 
 #[derive(Debug, serde::Deserialize)]
-pub struct ModuleConfig {
+pub(crate) struct ModuleConfig {
     pub home_power: Option<HomePowerModuleConfig>,
     pub network_status: Option<NetworkStatusModuleConfig>,
 }
 
 #[derive(Debug, serde::Deserialize)]
-pub struct HomePowerModuleConfig {
+pub(crate) struct HomePowerModuleConfig {
     pub se: SolarEdgeConfig,
     pub shelly_devices: Vec<ShellyDeviceConfig>,
 }
 
 #[derive(Debug, serde::Deserialize)]
-pub struct SolarEdgeConfig {
+pub(crate) struct SolarEdgeConfig {
     pub site_id: u64,
     pub auth_cookie_val: String,
 }
 
 #[derive(Debug, Clone, serde::Deserialize)]
-pub struct ShellyDeviceConfig {
+pub(crate) struct ShellyDeviceConfig {
     pub name: String,
     pub host: String,
     pub password: String,
 }
 
 #[derive(Debug, serde::Deserialize)]
-pub struct NetworkStatusHost {
+pub(crate) struct NetworkStatusHost {
     pub name: String,
     pub host: String,
     #[serde(default)]
@@ -95,11 +95,11 @@ pub struct NetworkStatusHost {
 }
 
 #[derive(Debug, serde::Deserialize)]
-pub struct NetworkStatusModuleConfig {
+pub(crate) struct NetworkStatusModuleConfig {
     pub hosts: Vec<NetworkStatusHost>,
 }
 
-pub fn parse_config_file() -> anyhow::Result<Config> {
+pub(crate) fn parse_config_file() -> anyhow::Result<Config> {
     let binary_name = env!("CARGO_PKG_NAME");
     let xdg_dirs = xdg::BaseDirectories::with_prefix(binary_name)?;
     let config_filepath = xdg_dirs
