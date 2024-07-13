@@ -39,8 +39,6 @@ pub(crate) enum PolybarModuleName {
     pulseaudio,
     #[structopt(about = "Start Syncthing module")]
     syncthing,
-    #[structopt(about = "Start Taskwarrior module")]
-    taskwarrior { max_len: Option<usize> },
     #[structopt(about = "Start Todo.txt module")]
     todotxt { max_len: Option<usize> },
     #[structopt(about = "Start weather module")]

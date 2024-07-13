@@ -25,7 +25,7 @@ Rewrite of my personal Python [Polybar](https://polybar.github.io/) modules (and
 - [x] Pulse audio input/output device status & control
 - [x] Screen autolock status & control
 - [x] Syncthing status
-- [x] Taskwarrior next task
+- [ ] ~~Taskwarrior next task~~ Replaced by Todo.txt module
 - [x] Todo.txt next task
 - [x] Xmonad current layout
 - [x] Weather

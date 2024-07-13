@@ -20,7 +20,6 @@ pub(crate) mod progressbar_server;
 pub(crate) mod pulseaudio;
 pub(crate) mod syncthing;
 mod syncthing_rest;
-pub(crate) mod taskwarrior;
 pub(crate) mod todotxt;
 pub(crate) mod wttr;
 pub(crate) mod xmonad;
@@ -42,7 +41,6 @@ pub(crate) enum PolybarModule {
     ProgressBarServer(progressbar_server::ProgressBarServerModule),
     PulseAudio(pulseaudio::PulseAudioModule),
     Syncthing(syncthing::SyncthingModule),
-    Taskwarrior(taskwarrior::TaskwarriorModule),
     TodoTxt(todotxt::TodoTxtModule),
     Wttr(wttr::WttrModule),
     Xmonad(xmonad::XmonadModule),
