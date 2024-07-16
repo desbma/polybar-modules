@@ -1,7 +1,7 @@
 # Maintainer: desbma
 # shellcheck disable=SC2034,SC2148,SC2154,SC2164
 pkgname=polybar-modules
-pkgver=2024.7.13
+pkgver=2024.7.16
 pkgrel=1
 pkgdesc='Custom modules for Polybar'
 arch=('x86_64')
@@ -13,8 +13,8 @@ optdepends=('arch-audit: for Arch updates module'
             'libpulse: for PulseAudio module'
             'nvidia-utils: for Nvidia GPU module'
             'pacman-contrib: for Arch updates module'
+            'playerctl: for player module'
             'syncthing: for Syncthing module'
-            'task: for Taskwarrior module'
             'xidlehook: for autolock module'
             'yay: for Arch updates module')
 makedepends=('cargo' 'git')
