@@ -266,7 +266,7 @@ impl RenderablePolybarModule for BluetoothModule {
         for device in &state.devices {
             let name = theme::ellipsis(&theme::shorten_model_name(&device.name), Some(4));
             let device_markup = markup::style(
-                &format!("{}{}", if device.connected { "" } else { "" }, name),
+                &name,
                 None,
                 device.connected.then_some(theme::Color::Foreground),
                 None,
@@ -375,7 +375,7 @@ mod tests {
         };
         assert_eq!(
             module.render(&state),
-            "%{F#eee8d5}%{F-} %{A1:bluetoothctl power off:}\u{f205}%{A} %{A1:bluetoothctl connect 01\\:02\\:03\\:04\\:05\\:06:}\u{e640}D1%{A} %{A1:bluetoothctl disconnect 02\\:01\\:03\\:04\\:05\\:06:}%{u#93a1a1}%{+u}\u{f046}D2%{-u}%{A}"
+            "%{F#eee8d5}%{F-} %{A1:bluetoothctl power off:}\u{f205}%{A} %{A1:bluetoothctl connect 01\\:02\\:03\\:04\\:05\\:06:}D1%{A} %{A1:bluetoothctl disconnect 02\\:01\\:03\\:04\\:05\\:06:}%{u#93a1a1}%{+u}D2%{-u}%{A}"
         );
 
         env::set_var("PATH", path_orig);
