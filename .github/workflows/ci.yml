@@ -21,11 +21,10 @@ jobs:
       XDG_CONFIG_HOME: /tmp/config
     steps:
       - uses: actions/checkout@v2
-      - run: sudo apt-get install pulseaudio-utils taskwarrior
+      - run: sudo apt-get install pulseaudio-utils
       - run: |
           mkdir -pv ${XDG_RUNTIME_DIR}
           chmod -Rc 700 ${XDG_RUNTIME_DIR}
-      - run: "yes | task || true"
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal

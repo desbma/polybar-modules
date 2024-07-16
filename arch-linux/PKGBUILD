@@ -37,7 +37,7 @@ build() {
 
 check() {
     cd "${pkgname}"
-    cargo test --frozen -- --skip taskwarrior
+    cargo test --frozen
 }
 
 package() {
