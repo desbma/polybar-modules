@@ -261,7 +261,7 @@ impl RenderablePolybarModule for PulseAudioModule {
                                 &sink.name,
                                 markup::PolybarAction {
                                     type_: markup::PolybarActionType::ClickLeft,
-                                    command: format!("pacmd set-default-sink {}", sink.id),
+                                    command: format!("pactl set-default-sink {}", sink.id),
                                 },
                             )
                         });
@@ -292,7 +292,7 @@ impl RenderablePolybarModule for PulseAudioModule {
                                 &source.name,
                                 markup::PolybarAction {
                                     type_: markup::PolybarActionType::ClickLeft,
-                                    command: format!("pacmd set-default-source {}", source.id),
+                                    command: format!("pactl set-default-source {}", source.id),
                                 },
                             )
                         });
@@ -349,7 +349,7 @@ mod tests {
         });
         assert_eq!(
             module.render(&state),
-            "%{A1:pacmd set-default-sink 1:}si1%{A} %{u#93a1a1}%{+u}si2%{-u}  %{F#eee8d5}%{F-} %{A1:pacmd set-default-source 1:}so1%{A} %{u#93a1a1}%{+u}so2%{-u}"
+            "%{A1:pactl set-default-sink 1:}si1%{A} %{u#93a1a1}%{+u}si2%{-u}  %{F#eee8d5}%{F-} %{A1:pactl set-default-source 1:}so1%{A} %{u#93a1a1}%{+u}so2%{-u}"
         );
 
         let state = Some(PulseAudioModuleState {
@@ -369,7 +369,7 @@ mod tests {
         });
         assert_eq!(
             module.render(&state),
-            "  %{F#eee8d5}%{F-} %{A1:pacmd set-default-source 1:}so1%{A} %{u#93a1a1}%{+u}so2%{-u}"
+            "  %{F#eee8d5}%{F-} %{A1:pactl set-default-source 1:}so1%{A} %{u#93a1a1}%{+u}so2%{-u}"
         );
 
         let state = Some(PulseAudioModuleState {
@@ -389,7 +389,7 @@ mod tests {
         });
         assert_eq!(
             module.render(&state),
-            "%{A1:pacmd set-default-sink 1:}si1%{A} %{u#93a1a1}%{+u}si2%{-u}"
+            "%{A1:pactl set-default-sink 1:}si1%{A} %{u#93a1a1}%{+u}si2%{-u}"
         );
 
         let state = Some(PulseAudioModuleState {
