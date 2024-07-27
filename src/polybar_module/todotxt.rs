@@ -62,11 +62,11 @@ impl TodoTxtModule {
             let tasks = task_file.load_tasks()?;
             let next_task = tasks
                 .iter()
-                .filter(|t| t.is_ready(&today, &tasks))
+                .filter(|t| t.is_ready(today, &tasks))
                 .max_by(|a, b| a.cmp(b, &tasks))
                 .cloned();
 
-            let pending_count = tasks.iter().filter(|t| t.is_ready(&today, &tasks)).count();
+            let pending_count = tasks.iter().filter(|t| t.is_ready(today, &tasks)).count();
 
             Ok(TodoTxtModuleState::Active {
                 pending_count,
