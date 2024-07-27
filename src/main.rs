@@ -164,11 +164,9 @@ fn main() -> anyhow::Result<()> {
         polybar_module::PolybarModule::Wttr(module) => render_loop(module),
         polybar_module::PolybarModule::Xmonad(module) => render_loop(module),
     };
-
-    Ok(())
 }
 
-fn render_loop<T>(mut module: T)
+fn render_loop<T>(mut module: T) -> !
 where
     T: polybar_module::RenderablePolybarModule,
 {

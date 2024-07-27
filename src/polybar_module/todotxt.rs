@@ -176,7 +176,7 @@ impl RenderablePolybarModule for TodoTxtModule {
                                 None,
                                 if next_task
                                     .as_ref()
-                                    .and_then(tasks::Task::due_date)
+                                    .and_then(Task::due_date)
                                     .is_some_and(|d| d <= chrono::Local::now().date_naive())
                                 {
                                     Some(theme::Color::Attention)
