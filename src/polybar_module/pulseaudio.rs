@@ -76,28 +76,38 @@ impl PulseAudioModule {
         let mut sources = Vec::new();
         let parse_err_str = "Failed to parse pactl output";
         loop {
-            match output_sources_lines.find(|l| l.starts_with("Source #")) {
+            let source_lines: Vec<_> = output_sources_lines
+                .by_ref()
+                .skip_while(|l| !l.starts_with("Source #"))
+                .take_while(|l| !l.is_empty())
+                .collect();
+            match source_lines.iter().find(|l| l.starts_with("Source #")) {
                 None => break,
-                Some(source_line) => {
-                    let id = source_line
+                Some(source_id_line) => {
+                    let id = source_id_line
                         .rsplit('#')
                         .next()
                         .ok_or_else(|| anyhow::anyhow!(parse_err_str))?
                         .parse()?;
-                    let running = output_sources_lines
+                    let running = source_lines
+                        .iter()
                         .find(|l| l.starts_with("State: "))
                         .ok_or_else(|| anyhow::anyhow!(parse_err_str))?
                         .ends_with("RUNNING");
-                    if !output_sources_lines
-                        .find(|l| l.starts_with("device.class = "))
-                        .is_some_and(|l| l.ends_with("\"sound\""))
+                    if !source_lines
+                        .iter()
+                        .find(|l| l.starts_with("media.class = "))
+                        .is_some_and(|l| l.ends_with("\"Audio/Source\""))
                     {
                         // Not a real device
                         continue;
                     }
-                    let name = output_sources_lines
+                    let name = source_lines
+                        .iter()
                         .find(|l| {
-                            l.starts_with("alsa.card_name = ") || l.starts_with("bluez.alias = ")
+                            l.starts_with("alsa.card_name = ")
+                                || l.starts_with("bluez.alias = ")
+                                || l.starts_with("device.alias = ")
                         })
                         .ok_or_else(|| anyhow::anyhow!(parse_err_str))?
                         .split('"')
@@ -133,28 +143,38 @@ impl PulseAudioModule {
             .map(|l| l.trim().to_owned());
         let mut sinks = Vec::new();
         loop {
-            match output_sink_lines.find(|l| l.starts_with("Sink #")) {
+            let sink_lines: Vec<_> = output_sink_lines
+                .by_ref()
+                .skip_while(|l| !l.starts_with("Sink #"))
+                .take_while(|l| !l.is_empty())
+                .collect();
+            match sink_lines.iter().find(|l| l.starts_with("Sink #")) {
                 None => break,
-                Some(sink_line) => {
-                    let id = sink_line
+                Some(sink_id_line) => {
+                    let id = sink_id_line
                         .rsplit('#')
                         .next()
                         .ok_or_else(|| anyhow::anyhow!(parse_err_str))?
                         .parse()?;
-                    let running = output_sink_lines
+                    let running = sink_lines
+                        .iter()
                         .find(|l| l.starts_with("State: "))
                         .ok_or_else(|| anyhow::anyhow!(parse_err_str))?
                         .ends_with("RUNNING");
-                    if !output_sink_lines
-                        .find(|l| l.starts_with("device.class = "))
-                        .is_some_and(|l| l.ends_with("\"sound\""))
+                    if !sink_lines
+                        .iter()
+                        .find(|l| l.starts_with("media.class = "))
+                        .is_some_and(|l| l.ends_with("\"Audio/Sink\""))
                     {
                         // Not a real device
                         continue;
                     }
-                    let name = output_sink_lines
+                    let name = sink_lines
+                        .iter()
                         .find(|l| {
-                            l.starts_with("alsa.card_name = ") || l.starts_with("bluez.alias = ")
+                            l.starts_with("alsa.card_name = ")
+                                || l.starts_with("bluez.alias = ")
+                                || l.starts_with("device.alias = ")
                         })
                         .ok_or_else(|| anyhow::anyhow!(parse_err_str))?
                         .split('"')
