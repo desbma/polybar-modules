@@ -96,8 +96,12 @@ impl PulseAudioModule {
                         .ends_with("RUNNING");
                     if !source_lines
                         .iter()
-                        .find(|l| l.starts_with("media.class = "))
-                        .is_some_and(|l| l.ends_with("\"Audio/Source\""))
+                        .find(|l| l.starts_with("device.class = "))
+                        .is_some_and(|l| l.ends_with("\"sound\""))
+                        && !source_lines
+                            .iter()
+                            .find(|l| l.starts_with("media.class = "))
+                            .is_some_and(|l| l.ends_with("\"Audio/Source\""))
                     {
                         // Not a real device
                         continue;
@@ -163,8 +167,12 @@ impl PulseAudioModule {
                         .ends_with("RUNNING");
                     if !sink_lines
                         .iter()
-                        .find(|l| l.starts_with("media.class = "))
-                        .is_some_and(|l| l.ends_with("\"Audio/Sink\""))
+                        .find(|l| l.starts_with("device.class = "))
+                        .is_some_and(|l| l.ends_with("\"sound\""))
+                        && !sink_lines
+                            .iter()
+                            .find(|l| l.starts_with("media.class = "))
+                            .is_some_and(|l| l.ends_with("\"Audio/Sink\""))
                     {
                         // Not a real device
                         continue;
