@@ -411,7 +411,7 @@ impl RenderablePolybarModule for HomePowerModule {
                                 .map(|d| {
                                     markup::style(
                                         &d.name,
-                                        d.status.is_none().then_some(theme::Color::Attention),
+                                        d.status.is_none().then_some(theme::Color::Unfocused),
                                         if d.status
                                             .as_ref()
                                             .is_some_and(|s| s.enabled && s.power > 0)
@@ -498,7 +498,7 @@ mod tests {
         });
         assert_eq!(
             module.render(&state),
-            "%{F#eee8d5}\u{ea06}%{F-} \u{ee81}0.0 \u{f1903}0.6\u{e910}\u{f0d3e}1.4kW D1 %{u#93a1a1}%{+u}D2%{-u} %{u#b58900}%{+u}D3%{-u} %{F#cb4b16}D4%{F-}"
+            "%{F#eee8d5}\u{ea06}%{F-} \u{ee81}0.0 \u{f1903}0.6\u{e910}\u{f0d3e}1.4kW D1 %{u#93a1a1}%{+u}D2%{-u} %{u#b58900}%{+u}D3%{-u} %{F#657b83}D4%{F-}"
         );
 
         let state = None;
