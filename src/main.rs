@@ -64,7 +64,8 @@ fn main() -> anyhow::Result<()> {
                 .context("Failed to initialize Debian updates module")?,
         ),
         PolybarModuleName::gpu_nvidia => polybar_module::PolybarModule::GpuNvidia(
-            polybar_module::gpu_nvidia::GpuNvidiaModule::new(),
+            polybar_module::gpu_nvidia::GpuNvidiaModule::new()
+                .context("Failed to initialize Nvidia GPU module")?,
         ),
         PolybarModuleName::home_power => {
             let home_power_cfg = cfg

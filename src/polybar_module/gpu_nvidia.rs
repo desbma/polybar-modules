@@ -1,14 +1,18 @@
 use std::{
-    process::{Command, Stdio},
+    io::{BufRead as _, BufReader, ErrorKind},
+    os::fd::AsRawFd as _,
+    process::{Child, ChildStdout, Command, Stdio},
     thread::sleep,
     time::Duration,
 };
 
-use anyhow::Context;
-
 use crate::{markup, polybar_module::RenderablePolybarModule, theme};
 
-pub(crate) struct GpuNvidiaModule {}
+pub(crate) struct GpuNvidiaModule {
+    _proc: Child,
+    poller: mio::Poll,
+    proc_output: BufReader<ChildStdout>,
+}
 
 #[derive(Debug, Eq, PartialEq)]
 pub(crate) struct GpuNvidiaModuleState {
@@ -24,28 +28,45 @@ pub(crate) struct GpuNvidiaModuleState {
 const OVERHEAT_TEMP_THRESHOLD: u8 = 70;
 
 impl GpuNvidiaModule {
-    pub(crate) fn new() -> Self {
-        Self {}
+    pub(crate) fn new() -> anyhow::Result<Self> {
+        let mut proc = Command::new("nvidia-smi")
+            .args([
+                "-l", "1",
+                "--format=csv,noheader,nounits",
+                "--query-gpu=memory.used,memory.total,clocks.current.graphics,clocks.current.memory,clocks_throttle_reasons.hw_slowdown,temperature.gpu,power.draw"
+            ])
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()?;
+
+        let poller = mio::Poll::new()?;
+
+        let stdout = proc.stdout.take().unwrap();
+        poller.registry().register(
+            &mut mio::unix::SourceFd(&stdout.as_raw_fd()),
+            mio::Token(0),
+            mio::Interest::READABLE,
+        )?;
+
+        let proc_output = BufReader::new(stdout);
+
+        Ok(Self {
+            _proc: proc,
+            poller,
+            proc_output,
+        })
     }
 
     #[allow(clippy::unused_self)]
     fn try_update(&mut self) -> anyhow::Result<GpuNvidiaModuleState> {
-        // Run nvidia-smi
-        let output = Command::new("nvidia-smi")
-            .args([
-                "--format=csv,noheader,nounits",
-                "--query-gpu=memory.used,memory.total,clocks.current.graphics,clocks.current.memory,clocks_throttle_reasons.hw_slowdown,temperature.gpu,power.draw"
-            ])
-            .stderr(Stdio::null())
-            .output()?;
-        output
-            .status
-            .exit_ok()
-            .context("nvidia-smi invocation exited with error")?;
+        // Get output
+        let mut output = String::new();
+        let count = self.proc_output.read_line(&mut output)?;
+        anyhow::ensure!(count > 0, "process exited");
 
         // Parse output
-        let output_str = String::from_utf8_lossy(&output.stdout);
-        let mut tokens = output_str.trim_end().split(',').map(str::trim_start);
+        let mut tokens = output.trim_end().split(',').map(str::trim_start);
         let parse_err_str = "Failed to parse nvidia-smi output";
         let mem_used = tokens
             .next()
@@ -118,8 +139,25 @@ impl RenderablePolybarModule for GpuNvidiaModule {
     type State = Option<GpuNvidiaModuleState>;
 
     fn wait_update(&mut self, prev_state: &Option<Self::State>) {
-        if prev_state.is_some() {
+        if prev_state.is_none() {
             sleep(Duration::from_secs(1));
+        } else {
+            let mut poller_events = mio::Events::with_capacity(1);
+            log::trace!("Waiting for stdout data");
+            loop {
+                let poll_res = self.poller.poll(&mut poller_events, None);
+                if let Err(e) = &poll_res {
+                    if e.kind() == ErrorKind::Interrupted {
+                        // Ignore error, can occur on return from hibernation
+                        continue;
+                    }
+                }
+                poll_res.unwrap();
+                log::trace!("Poll returned with events {:?}", poller_events);
+                if poller_events.iter().any(mio::event::Event::is_readable) {
+                    break;
+                }
+            }
         }
     }
 
@@ -172,7 +210,7 @@ mod tests {
 
     #[test]
     fn test_render() {
-        let module = GpuNvidiaModule::new();
+        let module = GpuNvidiaModule::new().unwrap();
 
         let state = Some(GpuNvidiaModuleState {
             mem_used: 200,
