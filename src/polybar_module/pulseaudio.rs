@@ -228,7 +228,7 @@ impl Drop for PulseAudioModule {
 impl RenderablePolybarModule for PulseAudioModule {
     type State = Option<PulseAudioModuleState>;
 
-    fn wait_update(&mut self, prev_state: &Option<Self::State>) {
+    fn wait_update(&mut self, prev_state: Option<&Self::State>) {
         if prev_state.is_some() {
             let mut buffer = [0; 65536];
             loop {

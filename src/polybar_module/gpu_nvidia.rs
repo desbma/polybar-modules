@@ -138,7 +138,7 @@ impl GpuNvidiaModule {
 impl RenderablePolybarModule for GpuNvidiaModule {
     type State = Option<GpuNvidiaModuleState>;
 
-    fn wait_update(&mut self, prev_state: &Option<Self::State>) {
+    fn wait_update(&mut self, prev_state: Option<&Self::State>) {
         if prev_state.is_none() {
             sleep(Duration::from_secs(1));
         } else {

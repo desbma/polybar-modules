@@ -78,7 +78,7 @@ impl CpuTopModule {
 impl RenderablePolybarModule for CpuTopModule {
     type State = Option<CpuTopModuleState>;
 
-    fn wait_update(&mut self, prev_state: &Option<Self::State>) {
+    fn wait_update(&mut self, prev_state: Option<&Self::State>) {
         // TODO increase sleep delay if on battery?
         if let Some(prev_state) = prev_state {
             let sleep_duration = match prev_state {

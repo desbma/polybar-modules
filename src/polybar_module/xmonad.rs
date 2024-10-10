@@ -56,8 +56,8 @@ impl XmonadModule {
 impl RenderablePolybarModule for XmonadModule {
     type State = Option<XmonadModuleState>;
 
-    fn wait_update(&mut self, prev_state: &Option<Self::State>) {
-        let prev_state_err = prev_state.as_ref().is_some_and(Option::is_none);
+    fn wait_update(&mut self, prev_state: Option<&Self::State>) {
+        let prev_state_err = prev_state.as_ref().is_some_and(|o| o.is_none());
         if self.pipe.is_none() || prev_state_err {
             if prev_state_err {
                 sleep(Duration::from_secs(1));

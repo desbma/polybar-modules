@@ -64,7 +64,7 @@ impl AutolockModule {
 impl RenderablePolybarModule for AutolockModule {
     type State = Option<AutolockModuleState>;
 
-    fn wait_update(&mut self, prev_state: &Option<Self::State>) {
+    fn wait_update(&mut self, prev_state: Option<&Self::State>) {
         if let Some(prev_state) = prev_state {
             match prev_state {
                 // Nominal

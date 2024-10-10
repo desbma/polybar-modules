@@ -48,14 +48,14 @@ lazy_static! {
 }
 
 impl WttrModule {
-    pub(crate) fn new(location: &Option<String>) -> anyhow::Result<Self> {
+    pub(crate) fn new(location: Option<&String>) -> anyhow::Result<Self> {
         let env = PolybarModuleEnv::new();
         let client = reqwest::blocking::Client::builder()
             .timeout(TCP_REMOTE_TIMEOUT)
             .build()?;
         let url = &format!(
             "https://wttr.in/{}?format=%c/%t",
-            location.as_ref().unwrap_or(&String::new())
+            location.as_ref().unwrap_or(&&String::new())
         );
         let req = client.get(url).build()?;
         Ok(Self { client, req, env })
@@ -93,7 +93,7 @@ impl WttrModule {
 impl RenderablePolybarModule for WttrModule {
     type State = Option<WttrModuleState>;
 
-    fn wait_update(&mut self, prev_state: &Option<Self::State>) {
+    fn wait_update(&mut self, prev_state: Option<&Self::State>) {
         if let Some(prev_state) = prev_state {
             let sleep_duration = match prev_state {
                 // Nominal
@@ -140,7 +140,7 @@ mod tests {
 
     #[test]
     fn test_render() {
-        let module = WttrModule::new(&None).unwrap();
+        let module = WttrModule::new(None).unwrap();
 
         let state = Some(WttrModuleState {
             sky: "", temp: 15

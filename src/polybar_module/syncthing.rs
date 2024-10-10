@@ -160,7 +160,7 @@ impl SyncthingModule {
 impl RenderablePolybarModule for SyncthingModule {
     type State = Option<SyncthingModuleState>;
 
-    fn wait_update(&mut self, prev_state: &Option<Self::State>) {
+    fn wait_update(&mut self, prev_state: Option<&Self::State>) {
         if prev_state.is_some() {
             if let Ok(events) = self.syncthing_events(&[
                 "DeviceConnected",

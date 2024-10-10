@@ -134,7 +134,7 @@ fn main() -> anyhow::Result<()> {
                 .context("Failed to initialize Todo.txt module")?,
         ),
         PolybarModuleName::wttr { location } => polybar_module::PolybarModule::Wttr(
-            polybar_module::wttr::WttrModule::new(&location)
+            polybar_module::wttr::WttrModule::new(location.as_ref())
                 .context("Failed to initialize Wttr module")?,
         ),
         PolybarModuleName::xmonad => polybar_module::PolybarModule::Xmonad(
@@ -174,7 +174,7 @@ where
     let mut prev_state: Option<T::State> = None;
     loop {
         // Update
-        module.wait_update(&prev_state);
+        module.wait_update(prev_state.as_ref());
         let state = module.update();
         log::debug!("{:?}", state);
 

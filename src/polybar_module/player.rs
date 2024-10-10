@@ -61,7 +61,7 @@ impl Drop for PlayerModule {
 impl RenderablePolybarModule for PlayerModule {
     type State = Option<PlayerModuleState>;
 
-    fn wait_update(&mut self, _prev_state: &Option<Self::State>) {
+    fn wait_update(&mut self, _prev_state: Option<&Self::State>) {
         let mut poller_events = mio::Events::with_capacity(1);
         log::trace!("Waiting for stdout data");
         loop {

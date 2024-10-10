@@ -142,7 +142,7 @@ impl MarketModule {
 impl RenderablePolybarModule for MarketModule {
     type State = Option<MarketModuleState>;
 
-    fn wait_update(&mut self, prev_state: &Option<Self::State>) {
+    fn wait_update(&mut self, prev_state: Option<&Self::State>) {
         if let Some(prev_state) = prev_state {
             let sleep_duration = match prev_state {
                 // Nominal

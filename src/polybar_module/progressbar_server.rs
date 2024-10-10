@@ -142,7 +142,7 @@ impl ProgressBarServerModule {
 impl RenderablePolybarModule for ProgressBarServerModule {
     type State = Option<ProgressBarServerModuleState>;
 
-    fn wait_update(&mut self, _prev_state: &Option<Self::State>) {
+    fn wait_update(&mut self, _prev_state: Option<&Self::State>) {
         loop {
             let poll_res = self.poller.poll(&mut self.poller_events, None);
             if let Err(e) = &poll_res {

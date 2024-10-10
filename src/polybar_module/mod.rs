@@ -58,7 +58,7 @@ const TCP_LOCAL_TIMEOUT: Duration = Duration::from_secs(5);
 pub(crate) trait RenderablePolybarModule {
     type State: Debug + PartialEq;
 
-    fn wait_update(&mut self, prev_state: &Option<Self::State>);
+    fn wait_update(&mut self, prev_state: Option<&Self::State>);
 
     fn update(&mut self) -> Self::State;
 

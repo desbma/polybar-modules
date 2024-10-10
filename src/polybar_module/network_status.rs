@@ -230,7 +230,7 @@ impl Drop for NetworkStatusModule {
 impl RenderablePolybarModule for NetworkStatusModule {
     type State = Option<NetworkStatusModuleState>;
 
-    fn wait_update(&mut self, prev_state: &Option<Self::State>) {
+    fn wait_update(&mut self, prev_state: Option<&Self::State>) {
         if prev_state.is_some() {
             // Micro sleep to aggregate several ping events
             sleep(Duration::from_millis(100));
