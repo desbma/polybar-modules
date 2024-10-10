@@ -163,7 +163,7 @@ impl RenderablePolybarModule for BluetoothModule {
                     .unwrap()
                     .read(&mut buffer)
                     .unwrap();
-                let read_buf = &strip_ansi_escapes::strip(&buffer[0..read_count]).unwrap();
+                let read_buf = &strip_ansi_escapes::strip(&buffer[0..read_count]);
                 let read_str = String::from_utf8_lossy(read_buf);
                 log::trace!("{} bytes read: {:?}", read_count, read_str);
 
