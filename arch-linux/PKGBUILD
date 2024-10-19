@@ -2,7 +2,7 @@
 # shellcheck disable=SC2034,SC2148,SC2154,SC2164
 pkgname=polybar-modules
 pkgver=2024.10.19
-pkgrel=3
+pkgrel=4
 pkgdesc='Custom modules for Polybar'
 arch=('x86_64')
 url="https://github.com/desbma/${pkgname}"
@@ -18,7 +18,6 @@ optdepends=('arch-audit: for Arch updates module'
             'xidlehook: for autolock module'
             'yay: for Arch updates module')
 makedepends=('cargo' 'git')
-install="${pkgname}.install"
 source=("git+https://github.com/desbma/${pkgname}")
 sha512sums=('SKIP')
 
@@ -44,4 +43,5 @@ check() {
 package() {
     cd "${pkgname}"
     install -Dm 755 -t "${pkgdir}/usr/bin" ./target/release/${pkgname}
+    install -Dm 644 arch-linux/${pkgname}.hook "${pkgdir}/usr/share/libalpm/hooks/zz40-${pkgname}.hook"
 }

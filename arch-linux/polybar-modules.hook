@@ -1,0 +1,9 @@
+[Trigger]
+Operation=Upgrade
+Type=Package
+Target=polybar-modules
+
+[Action]
+Description=Restarting polybar instances...
+When=PostTransaction
+Exec=/usr/bin/bash -euc "for uid in $(getent passwd $(ls /home) | cut -d ':' -f 3); do XDG_RUNTIME_DIR=/run/user/${uid} systemctl --user try-restart 'polybar@*.service' || true; done"
