@@ -37,10 +37,14 @@ impl MarketModule {
         let req = client.get(url).build()?;
 
         // TODO improve selectors?
-        let selector_val =
-            scraper::Selector::parse(".c-faceplate__price > span:nth-child(1)").unwrap();
-        let selector_delta =
-            scraper::Selector::parse("span.u-color-stream-down > span:nth-child(1)").unwrap();
+        let selector_val = scraper::Selector::parse(
+            ".l-quotepage__header .c-faceplate__price > span:nth-child(1)",
+        )
+        .unwrap();
+        let selector_delta = scraper::Selector::parse(
+            ".l-quotepage__header .c-faceplate__fluctuation .c-instrument--variation",
+        )
+        .unwrap();
         let selector_ma50 =
             scraper::Selector::parse("tr.c-table__row:nth-child(11) > td:nth-child(4)").unwrap();
         let selector_ma100 =
@@ -76,6 +80,25 @@ impl MarketModule {
         did_wait
     }
 
+    fn extract_float(page: &scraper::Html, sel: &scraper::Selector) -> anyhow::Result<f64> {
+        let mut val_str = page
+            .select(sel)
+            .next()
+            .ok_or_else(|| anyhow::anyhow!("Failed to find value in HTML"))?
+            .inner_html()
+            .replace(',', ".")
+            .chars()
+            .filter(|c| !c.is_whitespace())
+            .collect::<String>();
+        if let Some(new_val_str) = val_str.strip_suffix('%') {
+            val_str = new_val_str.to_owned();
+        }
+        let val = val_str
+            .parse()
+            .context(format!("Failed to parse {val_str:?}"))?;
+        Ok(val)
+    }
+
     fn try_update(&mut self) -> anyhow::Result<MarketModuleState> {
         // Send request
         let response = self
@@ -85,50 +108,14 @@ impl MarketModule {
 
         // Parse response
         let page = scraper::Html::parse_document(&response.text()?);
-        let val_str = page
-            .select(&self.selector_val)
-            .next()
-            .ok_or_else(|| anyhow::anyhow!("Failed to find value"))?
-            .inner_html()
-            .chars()
-            .filter(|c| !c.is_whitespace())
-            .collect::<String>();
-        let val = val_str
-            .parse()
-            .context(format!("Failed to parse {val_str:?}"))?;
-        let delta_prct_str = page
-            .select(&self.selector_delta)
-            .next()
-            .ok_or_else(|| anyhow::anyhow!("Failed to find delta"))?
-            .inner_html()
-            .chars()
-            .filter(|c| !c.is_whitespace() && *c != '%')
-            .collect::<String>();
-        let delta_prct = delta_prct_str
-            .parse()
-            .context(format!("Failed to parse {delta_prct_str:?}"))?;
-        let ma50_str = page
-            .select(&self.selector_ma50)
-            .next()
-            .ok_or_else(|| anyhow::anyhow!("Failed to find MA50"))?
-            .inner_html()
-            .chars()
-            .filter(|c| !c.is_whitespace())
-            .collect::<String>();
-        let ma50 = ma50_str
-            .parse()
-            .context(format!("Failed to parse {ma50_str:?}"))?;
-        let ma100_str = page
-            .select(&self.selector_ma100)
-            .next()
-            .ok_or_else(|| anyhow::anyhow!("Failed to find MA100"))?
-            .inner_html()
-            .chars()
-            .filter(|c| !c.is_whitespace())
-            .collect::<String>();
-        let ma100 = ma100_str
-            .parse()
-            .context(format!("Failed to parse {ma100_str:?}"))?;
+        let val =
+            Self::extract_float(&page, &self.selector_val).context("Failed to extract value")?;
+        let delta_prct =
+            Self::extract_float(&page, &self.selector_delta).context("Failed to extract delta")?;
+        let ma50 =
+            Self::extract_float(&page, &self.selector_ma50).context("Failed to extract MA50")?;
+        let ma100 =
+            Self::extract_float(&page, &self.selector_ma100).context("Failed to extract MA100")?;
 
         Ok(MarketModuleState {
             val,
