@@ -2,7 +2,7 @@
 # shellcheck disable=SC2034,SC2148,SC2154,SC2164
 pkgname=polybar-modules
 pkgver=2024.10.19
-pkgrel=4
+pkgrel=6
 pkgdesc='Custom modules for Polybar'
 arch=('x86_64')
 url="https://github.com/desbma/${pkgname}"
