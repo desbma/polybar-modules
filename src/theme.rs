@@ -1,4 +1,4 @@
-#[allow(dead_code, clippy::unreadable_literal)]
+#[expect(dead_code, clippy::unreadable_literal)]
 #[derive(Clone)]
 pub(crate) enum Color {
     Foreground = 0x93a1a1,

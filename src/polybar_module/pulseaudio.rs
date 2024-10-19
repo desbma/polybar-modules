@@ -53,7 +53,7 @@ impl PulseAudioModule {
             .spawn()
     }
 
-    #[allow(clippy::too_many_lines, clippy::unused_self)]
+    #[expect(clippy::too_many_lines, clippy::unused_self)]
     fn try_update(&mut self) -> anyhow::Result<PulseAudioModuleState> {
         // Run pactl
         let output_sources = Command::new("pactl")
@@ -219,9 +219,8 @@ impl PulseAudioModule {
 }
 
 impl Drop for PulseAudioModule {
-    #[allow(unused_must_use)]
     fn drop(&mut self) {
-        self.pactl_subscribe_child.kill();
+        let _ = self.pactl_subscribe_child.kill();
     }
 }
 
@@ -334,7 +333,7 @@ impl RenderablePolybarModule for PulseAudioModule {
 }
 
 #[cfg(test)]
-#[allow(clippy::shadow_unrelated)]
+#[expect(clippy::shadow_unrelated)]
 mod tests {
     use super::*;
 

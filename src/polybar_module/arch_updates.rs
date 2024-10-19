@@ -22,7 +22,7 @@ pub(crate) struct ArchUpdatesModule {
 }
 
 #[derive(Debug, Eq, PartialEq)]
-#[allow(clippy::struct_field_names)]
+#[expect(clippy::struct_field_names)]
 pub(crate) struct ArchUpdatesModuleState {
     repo_update_count: usize,
     repo_security_update_count: usize,
@@ -181,7 +181,7 @@ impl RenderablePolybarModule for ArchUpdatesModule {
 }
 
 #[cfg(test)]
-#[allow(clippy::shadow_unrelated)]
+#[expect(clippy::shadow_unrelated)]
 mod tests {
     use super::*;
 

@@ -1,5 +1,8 @@
+//! Polybar modules
+
 #![feature(exit_status_error)]
 #![feature(hash_extract_if)]
+
 use std::io::{self, IsTerminal};
 
 use anyhow::Context;
@@ -11,7 +14,7 @@ mod markup;
 mod polybar_module;
 mod theme;
 
-#[allow(clippy::too_many_lines)]
+#[expect(clippy::too_many_lines)]
 fn main() -> anyhow::Result<()> {
     // Init logger
     if io::stdout().is_terminal() {

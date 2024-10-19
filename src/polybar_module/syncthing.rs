@@ -14,7 +14,7 @@ pub(crate) struct SyncthingModule {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-#[allow(clippy::struct_field_names)]
+#[expect(clippy::struct_field_names)]
 pub(crate) struct SyncthingModuleState {
     folder_count: usize,
     device_connected_count: usize,
@@ -156,7 +156,7 @@ impl SyncthingModule {
     }
 }
 
-#[allow(clippy::single_match)]
+#[expect(clippy::single_match)]
 impl RenderablePolybarModule for SyncthingModule {
     type State = Option<SyncthingModuleState>;
 
@@ -220,7 +220,7 @@ impl RenderablePolybarModule for SyncthingModule {
 }
 
 #[cfg(test)]
-#[allow(clippy::shadow_unrelated)]
+#[expect(clippy::shadow_unrelated)]
 mod tests {
     use std::io::Write;
 

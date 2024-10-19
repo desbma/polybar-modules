@@ -141,7 +141,7 @@ impl BluetoothModule {
 }
 
 impl Drop for BluetoothModule {
-    #[allow(unused_must_use)]
+    #[expect(unused_must_use)]
     fn drop(&mut self) {
         self.bluetoothctl_child.kill();
     }
@@ -290,7 +290,7 @@ impl RenderablePolybarModule for BluetoothModule {
 }
 
 #[cfg(test)]
-#[allow(clippy::shadow_unrelated)]
+#[expect(clippy::shadow_unrelated)]
 mod tests {
     use std::{
         env,

@@ -58,7 +58,6 @@ impl GpuNvidiaModule {
         })
     }
 
-    #[allow(clippy::unused_self)]
     fn try_update(&mut self) -> anyhow::Result<GpuNvidiaModuleState> {
         // Get output
         let mut output = String::new();
@@ -92,7 +91,7 @@ impl GpuNvidiaModule {
             .next()
             .ok_or_else(|| anyhow::anyhow!(parse_err_str))?
             .parse()?;
-        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        #[expect(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
         let power_draw = tokens
             .next()
             .ok_or_else(|| anyhow::anyhow!(parse_err_str))?
@@ -173,7 +172,7 @@ impl RenderablePolybarModule for GpuNvidiaModule {
 
     fn render(&self, state: &Self::State) -> String {
         match state {
-            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+            #[expect(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
             Some(state) => {
                 let temp_str = if state.throttle || state.temp >= OVERHEAT_TEMP_THRESHOLD {
                     markup::style(
@@ -204,7 +203,7 @@ impl RenderablePolybarModule for GpuNvidiaModule {
 }
 
 #[cfg(test)]
-#[allow(clippy::shadow_unrelated)]
+#[expect(clippy::shadow_unrelated)]
 mod tests {
     use super::*;
 

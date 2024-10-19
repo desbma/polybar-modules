@@ -14,7 +14,7 @@ pub(crate) struct CpuFreqModule {
 }
 
 #[derive(Debug, Eq, PartialEq)]
-#[allow(clippy::struct_field_names)]
+#[expect(clippy::struct_field_names)]
 pub(crate) struct CpuFreqModuleState {
     min_freq: u32,
     max_freq: u32,
@@ -70,7 +70,7 @@ impl CpuFreqModule {
             .iter()
             .map(|mut f| -> std::io::Result<String> {
                 let mut s = String::new();
-                #[allow(clippy::verbose_file_reads)]
+                #[expect(clippy::verbose_file_reads)]
                 f.read_to_string(&mut s)?;
                 f.rewind()?;
                 Ok(s)
@@ -86,7 +86,7 @@ impl CpuFreqModule {
             .min()
             .ok_or_else(|| anyhow::anyhow!("Unable to read current CPU frequency"))?;
         let max_freq: u32 = *freqs.iter().max().unwrap();
-        #[allow(clippy::cast_possible_truncation)]
+        #[expect(clippy::cast_possible_truncation)]
         let avg_freq: u32 = freqs.iter().sum::<u32>() / freqs.len() as u32;
         Ok(CpuFreqModuleState {
             min_freq,
@@ -148,7 +148,7 @@ impl RenderablePolybarModule for CpuFreqModule {
 }
 
 #[cfg(test)]
-#[allow(clippy::shadow_unrelated)]
+#[expect(clippy::shadow_unrelated)]
 mod tests {
     use super::*;
 

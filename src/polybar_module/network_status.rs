@@ -219,10 +219,9 @@ impl NetworkStatusModule {
 }
 
 impl Drop for NetworkStatusModule {
-    #[allow(unused_must_use)]
     fn drop(&mut self) {
         for ping_child in &mut self.ping_childs {
-            ping_child.kill();
+            let _ = ping_child.kill();
         }
     }
 }
@@ -302,7 +301,7 @@ impl RenderablePolybarModule for NetworkStatusModule {
 }
 
 #[cfg(test)]
-#[allow(clippy::shadow_unrelated)]
+#[expect(clippy::shadow_unrelated)]
 mod tests {
     use super::*;
 

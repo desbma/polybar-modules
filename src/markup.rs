@@ -34,7 +34,7 @@ fn color_markup2(s: &str, letter: char, color: theme::Color) -> String {
     )
 }
 
-#[allow(dead_code)]
+#[expect(dead_code)]
 pub(crate) enum PolybarActionType {
     ClickLeft = 1,
     ClickMiddle = 2,

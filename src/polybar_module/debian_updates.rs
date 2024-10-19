@@ -167,7 +167,7 @@ impl RenderablePolybarModule for DebianUpdatesModule {
 }
 
 #[cfg(test)]
-#[allow(clippy::shadow_unrelated)]
+#[expect(clippy::shadow_unrelated)]
 mod tests {
     use super::*;
 

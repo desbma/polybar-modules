@@ -161,7 +161,7 @@ impl ShellyPlus {
     }
 
     // Send a request, authenticate if needed, and parse response
-    #[allow(clippy::shadow_unrelated)]
+    #[expect(clippy::shadow_unrelated)]
     fn request<P, R>(&mut self, call: &str, params: P) -> anyhow::Result<R>
     where
         P: Serialize,
@@ -328,7 +328,7 @@ impl HomePowerModule {
                         name: cfg.name.clone(),
                         status: Some(HomeDeviceStatus {
                             enabled: status.output,
-                            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+                            #[expect(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
                             power: status.apower.map_or(0, |v| v as u32),
                         }),
                     }
@@ -342,7 +342,7 @@ impl HomePowerModule {
             })
             .collect();
 
-        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        #[expect(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
         Ok(HomePowerModuleState {
             solar_power: (site_data.pv.current_power * 1000.0) as u32,
             home_consumption_power: (site_data.load.current_power * 1000.0) as u32,
@@ -437,7 +437,7 @@ impl RenderablePolybarModule for HomePowerModule {
 }
 
 #[cfg(test)]
-#[allow(clippy::shadow_unrelated)]
+#[expect(clippy::shadow_unrelated)]
 mod tests {
     use super::*;
     use crate::config::SolarEdgeConfig;

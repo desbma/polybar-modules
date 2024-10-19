@@ -19,7 +19,7 @@ impl CpuTopModule {
         Self { max_len }
     }
 
-    #[allow(clippy::unused_self)]
+    #[expect(clippy::unused_self)]
     fn try_update(&mut self) -> anyhow::Result<CpuTopModuleState> {
         // Run ps
         let output = Command::new("ps")
@@ -128,7 +128,7 @@ impl RenderablePolybarModule for CpuTopModule {
 }
 
 #[cfg(test)]
-#[allow(clippy::shadow_unrelated)]
+#[expect(clippy::shadow_unrelated)]
 mod tests {
     use super::*;
 

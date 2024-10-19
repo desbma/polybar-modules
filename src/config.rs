@@ -3,7 +3,7 @@ use std::fs::read_to_string;
 use structopt::StructOpt;
 
 #[derive(Clone, Debug, StructOpt)]
-#[allow(non_camel_case_types)]
+#[expect(non_camel_case_types)]
 pub(crate) enum PolybarModuleName {
     #[structopt(about = "Start Arch Linux update module")]
     arch_updates,

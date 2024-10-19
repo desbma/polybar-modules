@@ -224,7 +224,7 @@ impl RenderablePolybarModule for TodoTxtModule {
 }
 
 #[cfg(test)]
-#[allow(clippy::shadow_unrelated, clippy::too_many_lines)]
+#[expect(clippy::shadow_unrelated, clippy::too_many_lines)]
 mod tests {
     use super::*;
 

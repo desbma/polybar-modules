@@ -167,7 +167,7 @@ impl RenderablePolybarModule for ProgressBarServerModule {
 
     fn render(&self, state: &Self::State) -> String {
         match state {
-            #[allow(clippy::cast_possible_truncation)]
+            #[expect(clippy::cast_possible_truncation)]
             Some(state) => {
                 if state.progress.is_empty() {
                     String::new()
@@ -209,7 +209,7 @@ impl RenderablePolybarModule for ProgressBarServerModule {
 }
 
 #[cfg(test)]
-#[allow(clippy::shadow_unrelated)]
+#[expect(clippy::shadow_unrelated)]
 mod tests {
     use super::*;
 
