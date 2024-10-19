@@ -114,7 +114,7 @@ impl NetworkStatusModule {
         let now = Instant::now();
         let poller_registry = self.poller.registry();
         let ping_period = Self::get_ping_period(&self.env);
-        let mut buffer = [0; 65536];
+        let mut buffer = vec![0; 65536];
 
         for event in self.poller_events.iter().filter(|e| e.is_readable()) {
             // Read ping stdout pending data

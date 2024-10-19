@@ -152,7 +152,7 @@ impl RenderablePolybarModule for BluetoothModule {
 
     fn wait_update(&mut self, prev_state: Option<&Self::State>) {
         if prev_state.is_some() {
-            let mut buffer = [0; 65536];
+            let mut buffer = vec![0; 65536];
             let mut need_render = false;
             while !need_render {
                 // Read new data
