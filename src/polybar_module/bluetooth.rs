@@ -3,10 +3,10 @@ use std::{
     io::Read,
     process::{Child, Command, Stdio},
     str::FromStr,
+    sync::LazyLock,
 };
 
 use anyhow::Context;
-use lazy_static::lazy_static;
 
 use crate::{markup, polybar_module::RenderablePolybarModule, theme};
 
@@ -63,13 +63,12 @@ impl BluetoothModule {
     }
 
     fn probe_controller() -> anyhow::Result<BluetoothController> {
+        static CONTROLER_POWERED_REGEX: LazyLock<regex::Regex> =
+            LazyLock::new(|| regex::Regex::new("^\tPowered: (yes|no)$").unwrap());
+        static CONTROLER_HEADER_REGEX: LazyLock<regex::Regex> = LazyLock::new(|| {
+            regex::Regex::new("^Controller (([A-F0-9]{2}:){5}[A-F0-9]{2}) ").unwrap()
+        });
         let show_output = Self::bluetoothcl_cmd(&["show"])?;
-        lazy_static! {
-            static ref CONTROLER_POWERED_REGEX: regex::Regex =
-                regex::Regex::new("^\tPowered: (yes|no)$").unwrap();
-            static ref CONTROLER_HEADER_REGEX: regex::Regex =
-                regex::Regex::new("^Controller (([A-F0-9]{2}:){5}[A-F0-9]{2}) ").unwrap();
-        }
         // TODO warn if more than one controller found
         let powered = show_output
             .lines()
@@ -96,14 +95,12 @@ impl BluetoothModule {
     fn probe_devices(
         whitelist_addrs: &[macaddr::MacAddr6],
     ) -> anyhow::Result<HashMap<macaddr::MacAddr6, BluetoothDevice>> {
+        static KNOWN_DEVICE_REGEX: LazyLock<regex::Regex> = LazyLock::new(|| {
+            regex::Regex::new("^Device (([A-F0-9]{2}:){5}[A-F0-9]{2}) (.*)$").unwrap()
+        });
+        static CONNECTED_DEVICE_REGEX: LazyLock<regex::Regex> =
+            LazyLock::new(|| regex::Regex::new("^\tConnected: (yes|no)$").unwrap());
         let mut devices: HashMap<macaddr::MacAddr6, BluetoothDevice> = HashMap::new();
-
-        lazy_static! {
-            static ref KNOWN_DEVICE_REGEX: regex::Regex =
-                regex::Regex::new("^Device (([A-F0-9]{2}:){5}[A-F0-9]{2}) (.*)$").unwrap();
-            static ref CONNECTED_DEVICE_REGEX: regex::Regex =
-                regex::Regex::new("^\tConnected: (yes|no)$").unwrap();
-        }
         for device_match in Self::bluetoothcl_cmd(&["devices"])?
             .lines()
             .filter_map(|l| KNOWN_DEVICE_REGEX.captures(l))
@@ -169,12 +166,15 @@ impl RenderablePolybarModule for BluetoothModule {
 
                 // Parse event lines
                 for line in read_str.lines() {
-                    lazy_static! {
-                        static ref POWER_EVENT_REGEX: regex::Regex =
-                            regex::Regex::new("\\[CHG\\] Controller (([A-F0-9]{2}:){5}[A-F0-9]{2}) Powered: (yes|no)$").unwrap();
-                        static ref CONNECT_EVENT_REGEX: regex::Regex =
-                            regex::Regex::new("\\[CHG\\] Device (([A-F0-9]{2}:){5}[A-F0-9]{2}) Connected: (yes|no)$").unwrap();
-                    }
+                    static POWER_EVENT_REGEX: LazyLock<regex::Regex> = LazyLock::new(|| {
+                        regex::Regex::new("\\[CHG\\] Controller (([A-F0-9]{2}:){5}[A-F0-9]{2}) Powered: (yes|no)$").unwrap()
+                    });
+                    static CONNECT_EVENT_REGEX: LazyLock<regex::Regex> = LazyLock::new(|| {
+                        regex::Regex::new(
+                            "\\[CHG\\] Device (([A-F0-9]{2}:){5}[A-F0-9]{2}) Connected: (yes|no)$",
+                        )
+                        .unwrap()
+                    });
 
                     if let Some(power_event_match) = POWER_EVENT_REGEX.captures(line) {
                         log::trace!("{:?}", power_event_match);

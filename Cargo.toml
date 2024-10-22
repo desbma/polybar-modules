@@ -17,7 +17,6 @@ chrono = { version = "0.4.38", default-features = false, features = ["clock", "s
 glob = { version = "0.3.1", default-features = false }
 hex = { version = "0.4.3", default-features = false, features = ["std"] }
 itertools = { version = "0.13.0", default-features = false, features = ["use_std"] }
-lazy_static = { version = "1.5.0", default-features = false }
 log = { version = "0.4.22", default-features = false, features = ["max_level_trace", "release_max_level_info"] }
 macaddr = { version = "1.0.1", default-features = false, features = ["std"] }
 mio = { version = "1.0.2", default-features = false, features = ["os-ext"] }

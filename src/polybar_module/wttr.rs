@@ -1,7 +1,6 @@
-use std::{collections::HashMap, thread::sleep, time::Duration};
+use std::{collections::HashMap, sync::LazyLock, thread::sleep, time::Duration};
 
 use backoff::backoff::Backoff;
-use lazy_static::lazy_static;
 
 use crate::{
     markup,
@@ -21,31 +20,29 @@ pub(crate) struct WttrModuleState {
     temp: i8,
 }
 
-lazy_static! {
-    static ref ICONS: HashMap<&'static str, &'static str> = {
-        let mut m = HashMap::new();
-        m.insert("✨", "?");  // unknown
-        m.insert("☁️", "");  // Cloudy
-        m.insert("🌫", "");  // Fog
-        m.insert("🌧", "");  // HeavyRain
-        m.insert("🌧", "");  // HeavyShowers
-        m.insert("❄️", "");  // HeavySnow
-        m.insert("❄️", "");  // HeavySnowShowers
-        m.insert("🌦", "");  // LightRain
-        m.insert("🌦", "");  // LightShowers
-        m.insert("🌧", "");  // LightSleet
-        m.insert("🌧", "");  // LightSleetShowers
-        m.insert("🌨", "");  // LightSnow
-        m.insert("🌨", "");  // LightSnowShowers
-        m.insert("⛅️", "");  // PartlyCloudy
-        m.insert("☀️", "");  // Sunny
-        m.insert("🌩", "");  // ThunderyHeavyRain
-        m.insert("⛈", "");  // ThunderyShowers
-        m.insert("⛈", "");  // ThunderySnowShowers
-        m.insert("☁️", "");
-        m
-    };
-}
+static ICONS: LazyLock<HashMap<&'static str, &'static str>> = LazyLock::new(|| {
+    HashMap::from([
+        ("✨", "?"), // unknown
+        ("☁️", ""), // Cloudy
+        ("🌫", ""),  // Fog
+        ("🌧", ""),  // HeavyRain
+        ("🌧", ""),  // HeavyShowers
+        ("❄️", ""), // HeavySnow
+        ("❄️", ""), // HeavySnowShowers
+        ("🌦", ""),  // LightRain
+        ("🌦", ""),  // LightShowers
+        ("🌧", ""),  // LightSleet
+        ("🌧", ""),  // LightSleetShowers
+        ("🌨", ""),  // LightSnow
+        ("🌨", ""),  // LightSnowShowers
+        ("⛅️", ""), // PartlyCloudy
+        ("☀️", ""), // Sunny
+        ("🌩", ""),  // ThunderyHeavyRain
+        ("⛈", ""),  // ThunderyShowers
+        ("⛈", ""),  // ThunderySnowShowers
+        ("☁️", ""),
+    ])
+});
 
 impl WttrModule {
     pub(crate) fn new(location: Option<&String>) -> anyhow::Result<Self> {
@@ -76,6 +73,7 @@ impl WttrModule {
             .ok_or_else(|| anyhow::anyhow!("Error parsing string {:?}", text))?;
         let sky = ICONS
             .get(sky_str)
+            .copied()
             .ok_or_else(|| anyhow::anyhow!("Error parsing string {:?}", text))?;
 
         let temp_str = tokens
