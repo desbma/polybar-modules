@@ -74,7 +74,6 @@ impl PulseAudioModule {
             .into_iter()
             .map(|l| l.trim().to_owned());
         let mut sources = Vec::new();
-        let parse_err_str = "Failed to parse pactl output";
         loop {
             let source_lines: Vec<_> = output_sources_lines
                 .by_ref()
@@ -87,12 +86,12 @@ impl PulseAudioModule {
                     let id = source_id_line
                         .rsplit('#')
                         .next()
-                        .ok_or_else(|| anyhow::anyhow!(parse_err_str))?
+                        .ok_or_else(|| anyhow::anyhow!("Failed to parse pactl source id"))?
                         .parse()?;
                     let running = source_lines
                         .iter()
                         .find(|l| l.starts_with("State: "))
-                        .ok_or_else(|| anyhow::anyhow!(parse_err_str))?
+                        .ok_or_else(|| anyhow::anyhow!("Failed to parse pactl source state"))?
                         .ends_with("RUNNING");
                     if !source_lines
                         .iter()
@@ -113,10 +112,8 @@ impl PulseAudioModule {
                                 || l.starts_with("bluez.alias = ")
                                 || l.starts_with("device.alias = ")
                         })
-                        .ok_or_else(|| anyhow::anyhow!(parse_err_str))?
-                        .split('"')
-                        .nth(1)
-                        .ok_or_else(|| anyhow::anyhow!(parse_err_str))?
+                        .and_then(|s| s.split('"').nth(1))
+                        .ok_or_else(|| anyhow::anyhow!("Failed to parse pactl source name"))?
                         .to_owned();
                     sources.push(PulseAudioSource {
                         id,
@@ -158,12 +155,12 @@ impl PulseAudioModule {
                     let id = sink_id_line
                         .rsplit('#')
                         .next()
-                        .ok_or_else(|| anyhow::anyhow!(parse_err_str))?
+                        .ok_or_else(|| anyhow::anyhow!("Failed to parse pactl sink id"))?
                         .parse()?;
                     let running = sink_lines
                         .iter()
                         .find(|l| l.starts_with("State: "))
-                        .ok_or_else(|| anyhow::anyhow!(parse_err_str))?
+                        .ok_or_else(|| anyhow::anyhow!("Failed to parse pactl sink state"))?
                         .ends_with("RUNNING");
                     if !sink_lines
                         .iter()
@@ -177,18 +174,23 @@ impl PulseAudioModule {
                         // Not a real device
                         continue;
                     }
-                    let name = sink_lines
+                    let Some(name) = sink_lines
                         .iter()
                         .find(|l| {
                             l.starts_with("alsa.card_name = ")
                                 || l.starts_with("bluez.alias = ")
                                 || l.starts_with("device.alias = ")
                         })
-                        .ok_or_else(|| anyhow::anyhow!(parse_err_str))?
-                        .split('"')
-                        .nth(1)
-                        .ok_or_else(|| anyhow::anyhow!(parse_err_str))?
-                        .to_owned();
+                        .map(|s| {
+                            s.split('"')
+                                .nth(1)
+                                .map(str::to_owned)
+                                .ok_or_else(|| anyhow::anyhow!("Failed to parse pactl sink name"))
+                        })
+                        .transpose()?
+                    else {
+                        continue;
+                    };
                     sinks.push(PulseAudioSink {
                         id,
                         name: Self::abbrev(&name, 1),
