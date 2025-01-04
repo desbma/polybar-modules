@@ -95,7 +95,7 @@ impl MarketModule {
         }
         let val = val_str
             .parse()
-            .context(format!("Failed to parse {val_str:?}"))?;
+            .with_context(|| format!("Failed to parse {val_str:?}"))?;
         Ok(val)
     }
 
