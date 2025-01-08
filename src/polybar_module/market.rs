@@ -1,8 +1,8 @@
 use std::{thread::sleep, time::Duration};
 
-use anyhow::Context;
-use backoff::backoff::Backoff;
-use chrono::Datelike;
+use anyhow::Context as _;
+use backoff::backoff::Backoff as _;
+use chrono::Datelike as _;
 
 use crate::{
     markup,

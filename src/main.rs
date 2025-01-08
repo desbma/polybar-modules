@@ -3,11 +3,11 @@
 #![feature(exit_status_error)]
 #![feature(hash_extract_if)]
 
-use std::io::{self, IsTerminal};
+use std::io::{self, IsTerminal as _};
 
-use anyhow::Context;
+use anyhow::Context as _;
 use config::PolybarModuleName;
-use structopt::StructOpt;
+use structopt::StructOpt as _;
 
 mod config;
 mod markup;

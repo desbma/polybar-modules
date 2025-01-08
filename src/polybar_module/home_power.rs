@@ -1,12 +1,12 @@
 use std::{
     cmp::Ordering,
-    net::{TcpStream, ToSocketAddrs},
+    net::{TcpStream, ToSocketAddrs as _},
     thread::sleep,
     time::Duration,
 };
 
-use backoff::backoff::Backoff;
-use itertools::Itertools;
+use backoff::backoff::Backoff as _;
+use itertools::Itertools as _;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use sha2::Digest as _;
 use tungstenite::WebSocket;

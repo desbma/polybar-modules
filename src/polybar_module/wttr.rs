@@ -1,6 +1,6 @@
 use std::{collections::HashMap, sync::LazyLock, thread::sleep, time::Duration};
 
-use backoff::backoff::Backoff;
+use backoff::backoff::Backoff as _;
 
 use crate::{
     markup,

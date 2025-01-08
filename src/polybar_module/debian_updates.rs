@@ -4,8 +4,8 @@ use std::{
     time::Duration,
 };
 
-use anyhow::Context;
-use backoff::backoff::Backoff;
+use anyhow::Context as _;
+use backoff::backoff::Backoff as _;
 
 use crate::{
     markup,

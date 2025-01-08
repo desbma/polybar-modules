@@ -1,8 +1,8 @@
 use std::{
     fs::File,
-    io::{ErrorKind, Read},
+    io::{ErrorKind, Read as _},
     mem,
-    os::unix::io::AsRawFd,
+    os::unix::io::AsRawFd as _,
     thread::sleep,
     time::Duration,
 };

@@ -1,9 +1,9 @@
 use std::{
     collections::BTreeMap,
     fs,
-    io::{ErrorKind, Read},
+    io::{ErrorKind, Read as _},
     os::unix::{
-        io::AsRawFd,
+        io::AsRawFd as _,
         net::{UnixListener, UnixStream},
     },
     time::Duration,

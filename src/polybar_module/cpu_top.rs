@@ -1,6 +1,6 @@
-use std::{io::BufRead, process::Command, thread::sleep, time::Duration};
+use std::{io::BufRead as _, process::Command, thread::sleep, time::Duration};
 
-use anyhow::Context;
+use anyhow::Context as _;
 
 use crate::{markup, polybar_module::RenderablePolybarModule, theme};
 

@@ -222,7 +222,7 @@ impl RenderablePolybarModule for SyncthingModule {
 #[cfg(test)]
 #[expect(clippy::shadow_unrelated)]
 mod tests {
-    use std::io::Write;
+    use std::io::Write as _;
 
     use super::*;
 

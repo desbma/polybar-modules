@@ -1,13 +1,13 @@
 use std::{
     fs,
-    io::{self, BufRead, Read},
+    io::{self, BufRead as _, Read as _},
     os::unix::fs::PermissionsExt as _,
     process::{Child, Command, Stdio},
     thread::sleep,
     time::Duration,
 };
 
-use anyhow::Context;
+use anyhow::Context as _;
 
 use crate::{markup, polybar_module::RenderablePolybarModule, theme};
 

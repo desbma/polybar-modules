@@ -1,12 +1,12 @@
 use std::{
     collections::HashMap,
-    io::Read,
+    io::Read as _,
     process::{Child, Command, Stdio},
-    str::FromStr,
+    str::FromStr as _,
     sync::LazyLock,
 };
 
-use anyhow::Context;
+use anyhow::Context as _;
 
 use crate::{markup, polybar_module::RenderablePolybarModule, theme};
 
@@ -295,8 +295,8 @@ mod tests {
     use std::{
         env,
         fs::{File, Permissions},
-        io::Write,
-        os::unix::fs::PermissionsExt,
+        io::Write as _,
+        os::unix::fs::PermissionsExt as _,
         path::PathBuf,
     };
 

@@ -1,5 +1,5 @@
 use std::{
-    io::{BufRead, BufReader, ErrorKind},
+    io::{BufRead as _, BufReader, ErrorKind},
     os::fd::AsRawFd as _,
     process::{Child, Command, Stdio},
 };

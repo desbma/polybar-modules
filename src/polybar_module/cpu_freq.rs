@@ -1,6 +1,6 @@
 use std::{
     fs::{self, File},
-    io::{Read, Seek},
+    io::{Read as _, Seek as _},
     path::PathBuf,
     thread::sleep,
     time::Duration,

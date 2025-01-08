@@ -1,13 +1,13 @@
 use std::{
     collections::HashMap,
-    io::{ErrorKind, Read},
-    os::unix::io::AsRawFd,
+    io::{ErrorKind, Read as _},
+    os::unix::io::AsRawFd as _,
     process::{Child, Command, Stdio},
     thread::sleep,
     time::{Duration, Instant},
 };
 
-use sysinfo::{NetworksExt, System, SystemExt};
+use sysinfo::{NetworksExt as _, System, SystemExt};
 
 use crate::{
     config, markup,

@@ -1,13 +1,13 @@
 use std::{
     borrow::ToOwned,
-    fmt::Write,
+    fmt::Write as _,
     process::{Command, Stdio},
     thread::sleep,
     time::Duration,
 };
 
-use anyhow::Context;
-use backoff::{backoff::Backoff, ExponentialBackoff, ExponentialBackoffBuilder};
+use anyhow::Context as _;
+use backoff::{backoff::Backoff as _, ExponentialBackoff, ExponentialBackoffBuilder};
 
 use crate::{
     markup,
