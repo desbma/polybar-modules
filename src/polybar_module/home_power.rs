@@ -179,8 +179,9 @@ impl ShellyPlus {
             params,
         };
         self.next_msg_id += 1;
-        self.ws
-            .send(tungstenite::Message::Text(serde_json::to_string(&req)?))?;
+        self.ws.send(tungstenite::Message::Text(
+            serde_json::to_string(&req)?.into(),
+        ))?;
 
         // Parse response
         let resp = self.recv_msg()?.into_text()?;
@@ -222,7 +223,7 @@ impl ShellyPlus {
                 };
                 self.next_msg_id += 1;
                 let req_str = serde_json::to_string(&req)?;
-                self.ws.send(tungstenite::Message::Text(req_str))?;
+                self.ws.send(tungstenite::Message::Text(req_str.into()))?;
 
                 // Parse response
                 let resp = self.recv_msg()?.into_text()?;

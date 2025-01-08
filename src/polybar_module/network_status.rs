@@ -7,7 +7,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use sysinfo::{NetworksExt as _, System, SystemExt};
+use sysinfo::Networks;
 
 use crate::{
     config, markup,
@@ -26,7 +26,7 @@ pub(crate) struct NetworkStatusModule {
     host_state_history: Vec<bounded_vec_deque::BoundedVecDeque<bool>>,
     ping_child_deaths: HashMap<usize, Instant>,
     ping_child_last_output: HashMap<usize, Instant>,
-    system: Box<System>,
+    networks: Networks,
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -58,9 +58,7 @@ impl NetworkStatusModule {
             ];
         let ping_child_deaths = HashMap::new();
 
-        let system = Box::new(SystemExt::new_with_specifics(
-            sysinfo::RefreshKind::new().with_networks_list(),
-        ));
+        let networks = Networks::new();
 
         Ok(Self {
             env,
@@ -71,7 +69,7 @@ impl NetworkStatusModule {
             host_state_history,
             ping_child_deaths,
             ping_child_last_output,
-            system,
+            networks,
         })
     }
 
@@ -152,10 +150,10 @@ impl NetworkStatusModule {
             .iter()
             .map(|h| h.iter().filter(|e| **e).count() > h.iter().filter(|e| !**e).count())
             .collect();
-        self.system.refresh_networks_list();
+        self.networks.refresh(true);
         let mut vpn: Vec<String> = self
-            .system
-            .get_networks()
+            .networks
+            .list()
             .iter()
             .filter(|i| i.0.starts_with("wg"))
             .map(|i| i.0.to_owned())
