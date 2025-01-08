@@ -1,6 +1,7 @@
 use std::{
-    io,
-    io::{BufRead, Read},
+    fs,
+    io::{self, BufRead, Read},
+    os::unix::fs::PermissionsExt as _,
     process::{Child, Command, Stdio},
     thread::sleep,
     time::Duration,
@@ -12,6 +13,7 @@ use crate::{markup, polybar_module::RenderablePolybarModule, theme};
 
 pub(crate) struct PulseAudioModule {
     pactl_subscribe_child: Child,
+    easyeffects_installed: bool,
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -32,15 +34,34 @@ struct PulseAudioSink {
 pub(crate) struct PulseAudioModuleState {
     sources: Vec<PulseAudioSource>,
     sinks: Vec<PulseAudioSink>,
+    easyeffects: Option<bool>,
+}
+
+fn easyeffects_installed() -> bool {
+    fs::metadata("/usr/bin/easyeffects")
+        .ok()
+        .is_some_and(|p| (p.permissions().mode() & 0o001) != 0)
+}
+
+fn is_systemd_user_unit_running(name: &str) -> bool {
+    Command::new("systemctl")
+        .args(["--user", "-q", "is-active", name])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .is_ok_and(|s| s.success())
 }
 
 impl PulseAudioModule {
     pub(crate) fn new() -> anyhow::Result<Self> {
         // Pactl process to follow events
         let child = Self::subscribe()?;
+        let easyeffects_installed = easyeffects_installed();
 
         Ok(Self {
             pactl_subscribe_child: child,
+            easyeffects_installed,
         })
     }
 
@@ -53,7 +74,7 @@ impl PulseAudioModule {
             .spawn()
     }
 
-    #[expect(clippy::too_many_lines, clippy::unused_self)]
+    #[expect(clippy::too_many_lines)]
     fn try_update(&mut self) -> anyhow::Result<PulseAudioModuleState> {
         // Run pactl
         let output_sources = Command::new("pactl")
@@ -199,8 +220,15 @@ impl PulseAudioModule {
                 }
             }
         }
+        let easyeffects = self
+            .easyeffects_installed
+            .then(|| is_systemd_user_unit_running("easyeffects.service"));
 
-        Ok(PulseAudioModuleState { sources, sinks })
+        Ok(PulseAudioModuleState {
+            sources,
+            sinks,
+            easyeffects,
+        })
     }
 
     fn abbrev(s: &str, max_len: usize) -> String {
@@ -275,6 +303,29 @@ impl RenderablePolybarModule for PulseAudioModule {
         match state {
             Some(state) => {
                 let mut fragments: Vec<String> = Vec::new();
+                if let Some(easyeffects) = state.easyeffects {
+                    let fragment = markup::action(
+                        &markup::style(
+                            "󰷞",
+                            None,
+                            easyeffects.then_some(theme::Color::Foreground),
+                            None,
+                            None,
+                        ),
+                        markup::PolybarAction {
+                            type_: markup::PolybarActionType::ClickLeft,
+                            // Note: starting or stopping easyeffects will trigger a pactl subscribe event,
+                            // which will naturally update module to reflect service status
+                            command: if easyeffects {
+                                "systemctl --user -q --no-block stop easyeffects.service".to_owned()
+                            } else {
+                                "systemctl --user -q --no-block start easyeffects.service"
+                                    .to_owned()
+                            },
+                        },
+                    );
+                    fragments.push(fragment);
+                }
                 if state.sinks.len() > 1 {
                     for sink in &state.sinks {
                         fragments.push(if sink.running {
@@ -335,7 +386,7 @@ impl RenderablePolybarModule for PulseAudioModule {
 }
 
 #[cfg(test)]
-#[expect(clippy::shadow_unrelated)]
+#[expect(clippy::shadow_unrelated, clippy::too_many_lines)]
 mod tests {
     use super::*;
 
@@ -375,6 +426,7 @@ mod tests {
                     running: true,
                 },
             ],
+            easyeffects: None,
         });
         assert_eq!(
             module.render(&state),
@@ -395,6 +447,7 @@ mod tests {
                 },
             ],
             sinks: vec![],
+            easyeffects: None,
         });
         assert_eq!(
             module.render(&state),
@@ -415,6 +468,7 @@ mod tests {
                     running: true,
                 },
             ],
+            easyeffects: None,
         });
         assert_eq!(
             module.render(&state),
@@ -432,8 +486,103 @@ mod tests {
                 name: "si1".to_owned(),
                 running: false,
             }],
+            easyeffects: None,
         });
         assert_eq!(module.render(&state), "");
+
+        let state = Some(PulseAudioModuleState {
+            sources: vec![],
+            sinks: vec![],
+            easyeffects: Some(true),
+        });
+        assert_eq!(
+            module.render(&state),
+            "%{A1:systemctl --user -q --no-block stop easyeffects.service:}%{u#93a1a1}%{+u}\u{f0dde}%{-u}%{A}"
+        );
+
+        let state = Some(PulseAudioModuleState {
+            sources: vec![],
+            sinks: vec![],
+            easyeffects: Some(false),
+        });
+        assert_eq!(
+            module.render(&state),
+            "%{A1:systemctl --user -q --no-block start easyeffects.service:}\u{f0dde}%{A}"
+        );
+
+        let state = Some(PulseAudioModuleState {
+            sources: vec![
+                PulseAudioSource {
+                    id: 1,
+                    name: "so1".to_owned(),
+                    running: false,
+                },
+                PulseAudioSource {
+                    id: 2,
+                    name: "so2".to_owned(),
+                    running: true,
+                },
+            ],
+            sinks: vec![],
+            easyeffects: Some(true),
+        });
+        assert_eq!(
+            module.render(&state),
+            "%{A1:systemctl --user -q --no-block stop easyeffects.service:}%{u#93a1a1}%{+u}\u{f0dde}%{-u}%{A}   %{F#eee8d5}\u{e992}%{F-} %{A1:pactl set-default-source 1:}so1%{A} %{u#93a1a1}%{+u}so2%{-u}"
+        );
+
+        let state = Some(PulseAudioModuleState {
+            sources: vec![],
+            sinks: vec![
+                PulseAudioSink {
+                    id: 1,
+                    name: "si1".to_owned(),
+                    running: false,
+                },
+                PulseAudioSink {
+                    id: 2,
+                    name: "si2".to_owned(),
+                    running: true,
+                },
+            ],
+            easyeffects: Some(true),
+        });
+        assert_eq!(
+            module.render(&state),
+            "%{A1:systemctl --user -q --no-block stop easyeffects.service:}%{u#93a1a1}%{+u}\u{f0dde}%{-u}%{A} %{A1:pactl set-default-sink 1:}si1%{A} %{u#93a1a1}%{+u}si2%{-u}"
+        );
+
+        let state = Some(PulseAudioModuleState {
+            sources: vec![
+                PulseAudioSource {
+                    id: 1,
+                    name: "so1".to_owned(),
+                    running: false,
+                },
+                PulseAudioSource {
+                    id: 2,
+                    name: "so2".to_owned(),
+                    running: true,
+                },
+            ],
+            sinks: vec![
+                PulseAudioSink {
+                    id: 1,
+                    name: "si1".to_owned(),
+                    running: false,
+                },
+                PulseAudioSink {
+                    id: 2,
+                    name: "si2".to_owned(),
+                    running: true,
+                },
+            ],
+            easyeffects: Some(true),
+        });
+        assert_eq!(
+            module.render(&state),
+            "%{A1:systemctl --user -q --no-block stop easyeffects.service:}%{u#93a1a1}%{+u}\u{f0dde}%{-u}%{A} %{A1:pactl set-default-sink 1:}si1%{A} %{u#93a1a1}%{+u}si2%{-u}  %{F#eee8d5}\u{e992}%{F-} %{A1:pactl set-default-source 1:}so1%{A} %{u#93a1a1}%{+u}so2%{-u}"
+        );
 
         let state = None;
         assert_eq!(module.render(&state), "%{F#cb4b16}%{F-}");
