@@ -34,7 +34,7 @@ simple_logger = { version = "5.0.0", default-features = false }
 strip-ansi-escapes = { version = "0.2.0", default-features = false }
 structopt = { version = "0.3.26", default-features = false }
 sysinfo = { version = "0.33.1", default-features = false, features = ["network"] }
-tasks = { git = "https://github.com/desbma/todo", rev = "2e57189cded6b0ed84f5afb1a93c86698763a324" }
+tasks = { git = "https://github.com/desbma/todo", rev = "84f221a8be5cc68d6a37bcccb6990ab639e50c02" }
 toml = { version = "0.8.19", default-features = false, features = ["parse"] }
 tungstenite = { version = "0.26.1", default-features = false, features = ["native-tls", "handshake"] }
 xdg = { version = "2.5.2", default-features = false }
