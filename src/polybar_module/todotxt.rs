@@ -94,17 +94,15 @@ impl RenderablePolybarModule for TodoTxtModule {
                 Some(TodoTxtModuleState::Active { last_fs_change, .. }) => {
                     let (events_tx, events_rx) = channel();
                     let mut watcher = notify::recommended_watcher(events_tx).unwrap();
-                    let to_watch_filepaths = [
-                        &self.todotxt_filepath,
-                        self.env.public_screen_filepath.parent().unwrap(),
-                    ];
+                    let to_watch_filepaths =
+                        [&self.todotxt_filepath, &self.env.public_screen_filepath];
 
-                    log::debug!("Watching {:?}", to_watch_filepaths);
                     for to_watch_filepath in to_watch_filepaths {
                         watcher
                             .watch(to_watch_filepath, notify::RecursiveMode::NonRecursive)
                             .unwrap();
                     }
+                    log::debug!("Watching {:?}", to_watch_filepaths);
                     let wait_start = Instant::now();
                     while !self.env.public_screen()
                         && (Instant::now().duration_since(wait_start) < MAX_WAIT)
