@@ -1,4 +1,9 @@
-use std::{collections::HashMap, sync::LazyLock, thread::sleep, time::Duration};
+use std::{
+    collections::HashMap,
+    sync::{Arc, LazyLock},
+    thread::sleep,
+    time::Duration,
+};
 
 use backoff::backoff::Backoff as _;
 
@@ -9,8 +14,7 @@ use crate::{
 };
 
 pub(crate) struct WttrModule {
-    client: reqwest::blocking::Client,
-    req: reqwest::blocking::Request,
+    req: ureq::Request,
     env: PolybarModuleEnv,
 }
 
@@ -47,23 +51,27 @@ static ICONS: LazyLock<HashMap<&'static str, &'static str>> = LazyLock::new(|| {
 impl WttrModule {
     pub(crate) fn new(location: Option<&String>) -> anyhow::Result<Self> {
         let env = PolybarModuleEnv::new();
-        let client = reqwest::blocking::Client::builder()
+        let client = ureq::AgentBuilder::new()
+            .tls_connector(Arc::new(ureq::native_tls::TlsConnector::new()?))
             .timeout(TCP_REMOTE_TIMEOUT)
-            .build()?;
-        let url = &format!(
+            .build();
+        let url = format!(
             "https://wttr.in/{}?format=%c/%t",
-            location.as_ref().unwrap_or(&&String::new())
+            location.map_or("", String::as_str)
         );
-        let req = client.get(url).build()?;
-        Ok(Self { client, req, env })
+        let req = client.get(&url);
+        Ok(Self { req, env })
     }
 
     fn try_update(&mut self) -> anyhow::Result<WttrModuleState> {
-        let text = self
-            .client
-            .execute(self.req.try_clone().unwrap())?
-            .error_for_status()?
-            .text()?;
+        let response = self.req.clone().call()?;
+        anyhow::ensure!(
+            response.status() >= 200 && response.status() < 300,
+            "HTTP response {}: {}",
+            response.status(),
+            response.status_text()
+        );
+        let text = response.into_string()?;
         log::debug!("{:?}", text);
 
         let mut tokens = text.split('/').map(str::trim);

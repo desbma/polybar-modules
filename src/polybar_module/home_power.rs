@@ -1,6 +1,7 @@
 use std::{
     cmp::Ordering,
     net::{TcpStream, ToSocketAddrs as _},
+    sync::Arc,
     thread::sleep,
     time::Duration,
 };
@@ -19,8 +20,7 @@ use crate::{
 };
 
 pub(crate) struct HomePowerModule {
-    se_client: reqwest::blocking::Client,
-    se_req_power_flow: reqwest::blocking::Request,
+    se_req_power_flow: ureq::Request,
     se_wait_delay: Option<Duration>,
     shelly_devices: Vec<(ShellyDeviceConfig, Option<ShellyPlus>)>,
     env: PolybarModuleEnv,
@@ -262,11 +262,12 @@ impl ShellyPlus {
 
 impl HomePowerModule {
     pub(crate) fn new(cfg: &HomePowerModuleConfig) -> anyhow::Result<Self> {
-        let se_client = reqwest::blocking::Client::builder()
+        let se_client = ureq::AgentBuilder::new()
+            .tls_connector(Arc::new(ureq::native_tls::TlsConnector::new()?))
             .timeout(TCP_REMOTE_TIMEOUT)
-            .build()?;
-        // Web API used by the monitoring web site
-        // Does not seem to be rate limited, unlike the official API
+            .build();
+        // Web API used by the monitoring web site does not seem to be rate limited,
+        // unlike the official API
         let se_url = format!(
             "https://monitoring.solaredge.com/services/powerflow/site/{}/latest",
             cfg.se.site_id
@@ -275,10 +276,7 @@ impl HomePowerModule {
             "SPRING_SECURITY_REMEMBER_ME_COOKIE={};",
             cfg.se.auth_cookie_val
         );
-        let se_req_power_flow = se_client
-            .get(se_url)
-            .header("Cookie", &se_auth_cookie)
-            .build()?;
+        let se_req_power_flow = se_client.get(&se_url).set("Cookie", &se_auth_cookie);
 
         let shelly_devices = cfg
             .shelly_devices
@@ -288,7 +286,6 @@ impl HomePowerModule {
 
         let env = PolybarModuleEnv::new();
         Ok(Self {
-            se_client,
             se_req_power_flow,
             se_wait_delay: None,
             shelly_devices,
@@ -297,14 +294,17 @@ impl HomePowerModule {
     }
 
     fn try_update(&mut self) -> anyhow::Result<HomePowerModuleState> {
-        let text = self
-            .se_client
-            .execute(self.se_req_power_flow.try_clone().unwrap())?
-            .error_for_status()?
-            .text()?;
-        log::debug!("{:?}", text);
+        let response = self.se_req_power_flow.clone().call()?;
+        anyhow::ensure!(
+            response.status() >= 200 && response.status() < 300,
+            "HTTP response {}: {}",
+            response.status(),
+            response.status_text()
+        );
+        let text = response.into_string()?;
+        log::debug!("{text:?}");
         let site_data: SeSiteCurrentPowerFlow = serde_json::from_str(&text)?;
-        log::debug!("{:?}", site_data);
+        log::debug!("{site_data:?}");
 
         // The rate limit is not as aggressive with this API, use the upstream delay typically of 3s
         self.se_wait_delay = Some(Duration::from_secs(site_data.update_refresh_rate));

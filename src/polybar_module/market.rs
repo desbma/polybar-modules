@@ -1,4 +1,4 @@
-use std::{thread::sleep, time::Duration};
+use std::{sync::Arc, thread::sleep, time::Duration};
 
 use anyhow::Context as _;
 use backoff::backoff::Backoff as _;
@@ -11,8 +11,7 @@ use crate::{
 };
 
 pub(crate) struct MarketModule {
-    client: reqwest::blocking::Client,
-    req: reqwest::blocking::Request,
+    req: ureq::Request,
     selector_val: scraper::Selector,
     selector_delta: scraper::Selector,
     selector_ma50: scraper::Selector,
@@ -30,11 +29,12 @@ pub(crate) struct MarketModuleState {
 
 impl MarketModule {
     pub(crate) fn new() -> anyhow::Result<Self> {
-        let client = reqwest::blocking::Client::builder()
+        let client = ureq::AgentBuilder::new()
+            .tls_connector(Arc::new(ureq::native_tls::TlsConnector::new()?))
             .timeout(TCP_REMOTE_TIMEOUT)
-            .build()?;
+            .build();
         let url = "https://www.boursorama.com/bourse/indices/cours/1rPCAC/";
-        let req = client.get(url).build()?;
+        let req = client.get(url);
 
         // TODO improve selectors?
         let selector_val = scraper::Selector::parse(
@@ -52,7 +52,6 @@ impl MarketModule {
         let env = PolybarModuleEnv::new();
 
         Ok(Self {
-            client,
             req,
             selector_val,
             selector_delta,
@@ -101,13 +100,16 @@ impl MarketModule {
 
     fn try_update(&mut self) -> anyhow::Result<MarketModuleState> {
         // Send request
-        let response = self
-            .client
-            .execute(self.req.try_clone().unwrap())?
-            .error_for_status()?;
+        let response = self.req.clone().call()?;
+        anyhow::ensure!(
+            response.status() >= 200 && response.status() < 300,
+            "HTTP response {}: {}",
+            response.status(),
+            response.status_text()
+        );
 
         // Parse response
-        let page = scraper::Html::parse_document(&response.text()?);
+        let page = scraper::Html::parse_document(&response.into_string()?);
         let val =
             Self::extract_float(&page, &self.selector_val).context("Failed to extract value")?;
         let delta_prct =

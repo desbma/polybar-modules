@@ -1,4 +1,4 @@
-use std::{cmp::max, collections::HashSet, fs, path::Path, thread::sleep, time::Duration};
+use std::{cmp::max, collections::HashSet, fs, io, path::Path, thread::sleep, time::Duration};
 
 use crate::{
     markup,
@@ -7,7 +7,8 @@ use crate::{
 };
 
 pub(crate) struct SyncthingModule {
-    session: reqwest::blocking::Client,
+    session: ureq::Agent,
+    api_key: String,
     system_config: Option<syncthing_rest::SystemConfig>,
     last_event_id: u64,
     folders_syncing_down: HashSet<String>,
@@ -33,6 +34,18 @@ struct SyncthingXmlConfigGui {
     apikey: String,
 }
 
+#[derive(thiserror::Error, Debug)]
+enum HttpError {
+    #[error("HTTP status code {0}: {1}")]
+    Status(u16, String),
+    #[error("URL error: {0}")]
+    Url(#[from] url::ParseError),
+    #[error(transparent)]
+    Io(#[from] io::Error),
+    #[error("HTTP error {0}")]
+    Other(#[from] Box<ureq::Error>),
+}
+
 const REST_EVENT_TIMEOUT: Duration = Duration::from_secs(60 * 60);
 
 impl SyncthingModule {
@@ -43,18 +56,14 @@ impl SyncthingModule {
         let st_config: SyncthingXmlConfig = quick_xml::de::from_str(&st_config_xml)?;
 
         // Build session
-        let mut session_headers = reqwest::header::HeaderMap::new();
-        let mut api_key = reqwest::header::HeaderValue::from_str(&st_config.gui.apikey)?;
-        api_key.set_sensitive(true);
-        session_headers.insert("X-API-Key", api_key);
-        let session = reqwest::blocking::Client::builder()
-            .default_headers(session_headers)
+        let session = ureq::AgentBuilder::new()
             // Set maximum timeout and override with lower one for non event requests otherwise the timeout only
             // applies for connect
             .timeout(max(TCP_LOCAL_TIMEOUT, REST_EVENT_TIMEOUT))
-            .build()?;
+            .build();
 
         Ok(Self {
+            api_key: st_config.gui.apikey,
             session,
             system_config: None,
             last_event_id: 0,
@@ -82,17 +91,11 @@ impl SyncthingModule {
                 let db_completion_str =
                     match self.syncthing_rest_call("db/completion", &[("device", device_id)]) {
                         Ok(s) => s,
-                        Err(e) => {
-                            if let Some(e) = e.downcast_ref::<reqwest::Error>() {
-                                if e.is_status()
-                                    && e.status().unwrap() == reqwest::StatusCode::NOT_FOUND
-                                {
-                                    // Paused devices return 404
-                                    continue;
-                                }
-                            }
-                            anyhow::bail!(e);
+                        Err(HttpError::Status(404, _)) => {
+                            // Paused devices return 404
+                            continue;
                         }
+                        Err(e) => return Err(e.into()),
                     };
                 let db_completion: syncthing_rest::DbCompletion =
                     serde_json::from_str(&db_completion_str)?;
@@ -120,7 +123,7 @@ impl SyncthingModule {
 
     fn syncthing_events(&self, evt_types: &[&str]) -> anyhow::Result<Vec<syncthing_rest::Event>> {
         // See https://docs.syncthing.net/dev/events.html
-        let mut url = reqwest::Url::parse("http://127.0.0.1:8384/rest/events")?;
+        let mut url = url::Url::parse("http://127.0.0.1:8384/rest/events")?;
         url.query_pairs_mut()
             .append_pair("since", &self.last_event_id.to_string())
             .append_pair("events", &evt_types.join(","));
@@ -130,27 +133,49 @@ impl SyncthingModule {
                 .as_secs()
                 .to_string(),
         );
-        log::debug!("GET {:?}", url.to_string());
-        let json_str = self.session.get(url).send()?.error_for_status()?.text()?;
+        log::debug!("GET {:?}", url.as_str());
+        let response = self
+            .session
+            .get(url.as_str())
+            .set("X-API-Key", &self.api_key)
+            .call()?;
+        anyhow::ensure!(
+            response.status() >= 200 && response.status() < 300,
+            "HTTP response {}: {}",
+            response.status(),
+            response.status_text()
+        );
+        let json_str = response.into_string()?;
         log::trace!("{}", json_str);
         let events: Vec<syncthing_rest::Event> = serde_json::from_str(&json_str)?;
         Ok(events)
     }
 
-    fn syncthing_rest_call(&self, path: &str, params: &[(&str, &str)]) -> anyhow::Result<String> {
-        let base_url = reqwest::Url::parse("http://127.0.0.1:8384/rest/")?;
+    fn syncthing_rest_call(
+        &self,
+        path: &str,
+        params: &[(&str, &str)],
+    ) -> Result<String, HttpError> {
+        let base_url = url::Url::parse("http://127.0.0.1:8384/rest/")?;
         let mut url = base_url.join(path)?;
         for (param_key, param_val) in params {
             url.query_pairs_mut().append_pair(param_key, param_val);
         }
-        log::debug!("GET {:?}", url);
-        let json_str = self
+        log::debug!("GET {:?}", url.as_str());
+        let response = self
             .session
-            .get(url)
+            .get(url.as_str())
             .timeout(TCP_LOCAL_TIMEOUT)
-            .send()?
-            .error_for_status()?
-            .text()?;
+            .set("X-API-Key", &self.api_key)
+            .call()
+            .map_err(Box::new)?;
+        if response.status() >= 200 && response.status() < 300 {
+            return Err(HttpError::Status(
+                response.status(),
+                response.status_text().to_owned(),
+            ));
+        }
+        let json_str = response.into_string()?;
         log::trace!("{}", json_str);
         Ok(json_str)
     }
