@@ -167,7 +167,7 @@ fn main() -> anyhow::Result<()> {
         polybar_module::PolybarModule::TodoTxt(module) => render_loop(module),
         polybar_module::PolybarModule::Wttr(module) => render_loop(module),
         polybar_module::PolybarModule::Xmonad(module) => render_loop(module),
-    };
+    }
 }
 
 fn render_loop<T>(mut module: T) -> !

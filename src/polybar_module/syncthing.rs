@@ -169,7 +169,7 @@ impl SyncthingModule {
             .set("X-API-Key", &self.api_key)
             .call()
             .map_err(Box::new)?;
-        if response.status() >= 200 && response.status() < 300 {
+        if response.status() <= 200 && response.status() >= 300 {
             return Err(HttpError::Status(
                 response.status(),
                 response.status_text().to_owned(),
