@@ -102,14 +102,20 @@ impl ArchUpdatesModule {
         };
 
         // Run arch-audit
-        let output_yay = Command::new("yay")
+        let output_aur = Command::new("pikaur")
             .args(["-Qua"])
             .stderr(Stdio::null())
-            .output()?;
+            .output()
+            .or_else(|_| {
+                Command::new("yay")
+                    .args(["-Qua"])
+                    .stderr(Stdio::null())
+                    .output()
+            })?;
         // output.status.exit_ok().context("yay exited with error")?;
 
         // Parse output
-        let output_yay_str = String::from_utf8_lossy(&output_yay.stdout);
+        let output_yay_str = String::from_utf8_lossy(&output_aur.stdout);
         let aur_update_count = output_yay_str.lines().count();
 
         Ok(ArchUpdatesModuleState {
