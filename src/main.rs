@@ -6,8 +6,8 @@
 use std::io::{self, IsTerminal as _};
 
 use anyhow::Context as _;
+use clap::Parser as _;
 use config::PolybarModuleName;
-use structopt::StructOpt as _;
 
 mod config;
 mod markup;
@@ -30,7 +30,7 @@ fn main() -> anyhow::Result<()> {
     }
 
     // Parse command line args
-    let cl_opts = config::CommandLineOpts::from_args();
+    let cl_opts = config::CommandLineOpts::parse();
     log::trace!("{:?}", cl_opts);
 
     // Parse config file

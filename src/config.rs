@@ -1,56 +1,55 @@
 use std::fs::read_to_string;
 
-use structopt::StructOpt;
-
-#[derive(Clone, Debug, StructOpt)]
-#[expect(non_camel_case_types)]
+#[derive(Clone, Debug, clap::Parser)]
+#[expect(non_camel_case_types, clippy::doc_markdown)]
 pub(crate) enum PolybarModuleName {
-    #[structopt(about = "Start Arch Linux update module")]
+    /// Start Arch Linux update module
     arch_updates,
-    #[structopt(about = "Start screen autolock module")]
+    /// Start screen autolock module
     autolock,
-    #[structopt(about = "Start mouse battery module")]
+    /// Start mouse battery module
     battery_mouse,
-    #[structopt(about = "Start bluetooth module")]
+    /// Start bluetooth module
     bluetooth {
         device_whitelist_addrs: Vec<macaddr::MacAddr6>,
     },
-    #[structopt(about = "Start CPU frequency module")]
+    /// Start CPU frequency module
     cpu_freq,
-    #[structopt(about = "Start CPU top process module")]
+    /// Start CPU top process module
     cpu_top { max_len: Option<usize> },
-    #[structopt(about = "Start Debian update module")]
+    /// Start Debian update module
     debian_updates,
-    #[structopt(about = "Start Nvidia GPU module")]
+    /// Start Nvidia GPU module
     gpu_nvidia,
-    #[structopt(about = "Start home power module")]
+    /// Start home power module
     home_power,
-    #[structopt(about = "Start low bandwidth button module")]
+    /// Start low bandwidth button module
     internet_bandwidth,
-    #[structopt(about = "Start market trend module")]
+    /// Start market trend module
     market,
-    #[structopt(about = "Start network status module")]
+    /// Start network status module
     network_status,
-    #[structopt(about = "Start player status module")]
+    /// Start player status module
     player { max_len: usize },
-    #[structopt(about = "Start progress bar server module")]
+    /// Start progress bar server module
     progressbar_server { max_len: usize },
-    #[structopt(about = "Start PulseAudio module")]
+    /// Start PulseAudio module
     pulseaudio,
-    #[structopt(about = "Start Syncthing module")]
+    /// Start Syncthing module
     syncthing,
-    #[structopt(about = "Start Todo.txt module")]
+    /// Start Todo.txt module
     todotxt { max_len: Option<usize> },
-    #[structopt(about = "Start weather module")]
+    /// Start weather module
     wttr { location: Option<String> },
-    #[structopt(about = "Start Xmonad module")]
+    /// Start Xmonad module
     xmonad,
 }
 
-#[derive(Debug, StructOpt)]
-#[structopt(version=env!("CARGO_PKG_VERSION"), about="Polybar modules.")]
+#[derive(Debug, clap::Parser)]
+#[command(version, about = "Polybar modules.")]
 pub(crate) struct CommandLineOpts {
-    #[structopt(subcommand, about = "Polybar module to start")]
+    /// Polybar module to start
+    #[command(subcommand)]
     pub module: PolybarModuleName,
 }
 

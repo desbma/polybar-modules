@@ -14,6 +14,7 @@ anyhow = { version = "1.0.95", default-features = false, features = ["backtrace"
 backoff = { version = "0.4.0", default-features = false }
 bounded-vec-deque = { version = "0.1.1", default-features = false }
 chrono = { version = "0.4.39", default-features = false, features = ["clock", "std"] }
+clap = { version = "4.5.29", default-features = false, features = ["std", "derive", "help"] }
 glob = { version = "0.3.2", default-features = false }
 hex = { version = "0.4.3", default-features = false, features = ["std"] }
 itertools = { version = "0.14.0", default-features = false, features = ["use_std"] }
@@ -31,7 +32,6 @@ sha2 = { version = "0.10.8", default-features = false, features = ["std"] }
 signal-hook = { version = "0.3.17", default-features = false, features = ["iterator"] }
 simple_logger = { version = "5.0.0", default-features = false }
 strip-ansi-escapes = { version = "0.2.1", default-features = false }
-structopt = { version = "0.3.26", default-features = false }
 sysinfo = { version = "0.33.1", default-features = false, features = ["network"] }
 tasks = { git = "https://github.com/desbma/todo", rev = "84f221a8be5cc68d6a37bcccb6990ab639e50c02" }
 thiserror = { version = "2.0.11", default-features = false, features = ["std"] }
