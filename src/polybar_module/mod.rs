@@ -1,4 +1,10 @@
-use std::{fmt::Debug, path::PathBuf, sync::mpsc::channel, time::Duration};
+use std::{
+    fmt::Debug,
+    path::PathBuf,
+    process::{Command, Stdio},
+    sync::mpsc::channel,
+    time::Duration,
+};
 
 use backoff::{ExponentialBackoff, ExponentialBackoffBuilder};
 use notify::Watcher as _;
@@ -135,4 +141,14 @@ impl PolybarModuleEnv {
         }
         did_wait
     }
+}
+
+pub(crate) fn is_systemd_user_unit_running(name: &str) -> bool {
+    Command::new("systemctl")
+        .args(["--user", "-q", "is-active", name])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .is_ok_and(|s| s.success())
 }

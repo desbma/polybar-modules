@@ -108,9 +108,7 @@ impl BluetoothModule {
             let addr_str = device_match.get(1).unwrap().as_str();
             let addr = macaddr::MacAddr6::from_str(addr_str)?;
             if !whitelist_addrs.is_empty() && !whitelist_addrs.contains(&addr) {
-                log::warn!(
-                    "Ignoring device {addr} not in whitelist {whitelist_addrs:?}"
-                );
+                log::warn!("Ignoring device {addr} not in whitelist {whitelist_addrs:?}");
                 continue;
             }
             let name = device_match.get(3).unwrap().as_str().to_owned();

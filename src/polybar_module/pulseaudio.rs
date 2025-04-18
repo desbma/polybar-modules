@@ -9,6 +9,7 @@ use std::{
 
 use anyhow::Context as _;
 
+use super::is_systemd_user_unit_running;
 use crate::{markup, polybar_module::RenderablePolybarModule, theme};
 
 pub(crate) struct PulseAudioModule {
@@ -41,16 +42,6 @@ fn easyeffects_installed() -> bool {
     fs::metadata("/usr/bin/easyeffects")
         .ok()
         .is_some_and(|p| (p.permissions().mode() & 0o001) != 0)
-}
-
-fn is_systemd_user_unit_running(name: &str) -> bool {
-    Command::new("systemctl")
-        .args(["--user", "-q", "is-active", name])
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .is_ok_and(|s| s.success())
 }
 
 impl PulseAudioModule {
