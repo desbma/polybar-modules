@@ -8,7 +8,7 @@ use std::{
 
 use backoff::backoff::Backoff as _;
 use itertools::Itertools as _;
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use sha2::Digest as _;
 use tungstenite::WebSocket;
 
@@ -380,7 +380,7 @@ impl RenderablePolybarModule for HomePowerModule {
         match self.try_update() {
             Ok(s) => Some(s),
             Err(e) => {
-                log::error!("{}", e);
+                log::error!("{e}");
                 None
             }
         }

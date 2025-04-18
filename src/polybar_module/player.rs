@@ -73,7 +73,7 @@ impl RenderablePolybarModule for PlayerModule {
                 }
             }
             poll_res.unwrap();
-            log::trace!("Poll returned with events {:?}", poller_events);
+            log::trace!("Poll returned with events {poller_events:?}");
             if poller_events.iter().any(mio::event::Event::is_readable) {
                 break;
             }
@@ -137,11 +137,12 @@ impl RenderablePolybarModule for PlayerModule {
                 for (base_tokens, sep_idx) in base_tokens_candidates {
                     let tokens: Vec<_> =
                         base_tokens.into_iter().filter(|t| !t.is_empty()).collect();
+                    let (first_tokens, other_tokens) = tokens.split_at(sep_idx);
                     s = format!(
                         "{} {} {}",
                         markup::style("", Some(theme::Color::MainIcon), None, None, None),
-                        tokens[0..sep_idx].join(" "),
-                        tokens[sep_idx..].join(&markup::style(
+                        first_tokens.join(" "),
+                        other_tokens.join(&markup::style(
                             " / ",
                             Some(theme::Color::Unfocused),
                             None,

@@ -2,7 +2,7 @@ use std::{cmp::max, collections::HashSet, fs, io, path::Path, thread::sleep, tim
 
 use crate::{
     markup,
-    polybar_module::{syncthing_rest, RenderablePolybarModule, TCP_LOCAL_TIMEOUT},
+    polybar_module::{RenderablePolybarModule, TCP_LOCAL_TIMEOUT, syncthing_rest},
     theme,
 };
 
@@ -51,7 +51,7 @@ const REST_EVENT_TIMEOUT: Duration = Duration::from_secs(60 * 60);
 impl SyncthingModule {
     pub(crate) fn new(st_config_filepath: &Path) -> anyhow::Result<Self> {
         // Read config to get API key
-        log::debug!("st_config_filepath = {:?}", st_config_filepath);
+        log::debug!("st_config_filepath = {st_config_filepath:?}");
         let st_config_xml = fs::read_to_string(st_config_filepath)?;
         let st_config: SyncthingXmlConfig = quick_xml::de::from_str(&st_config_xml)?;
 
@@ -146,7 +146,7 @@ impl SyncthingModule {
             response.status_text()
         );
         let json_str = response.into_string()?;
-        log::trace!("{}", json_str);
+        log::trace!("{json_str}");
         let events: Vec<syncthing_rest::Event> = serde_json::from_str(&json_str)?;
         Ok(events)
     }
@@ -176,7 +176,7 @@ impl SyncthingModule {
             ));
         }
         let json_str = response.into_string()?;
-        log::trace!("{}", json_str);
+        log::trace!("{json_str}");
         Ok(json_str)
     }
 }
@@ -194,7 +194,7 @@ impl RenderablePolybarModule for SyncthingModule {
                 "RemoteDownloadProgress",
             ]) {
                 for event in events {
-                    log::debug!("{:?}", event);
+                    log::debug!("{event:?}");
                     match event.data {
                         syncthing_rest::EventData::DownloadProgress(event_data) => {
                             self.folders_syncing_down.clear();
@@ -216,7 +216,7 @@ impl RenderablePolybarModule for SyncthingModule {
         match self.try_update() {
             Ok(s) => Some(s),
             Err(e) => {
-                log::error!("{}", e);
+                log::error!("{e}");
                 None
             }
         }

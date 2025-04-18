@@ -132,7 +132,7 @@ impl RenderablePolybarModule for DebianUpdatesModule {
         match self.try_update() {
             Ok(s) => Some(s),
             Err(e) => {
-                log::error!("{}", e);
+                log::error!("{e}");
                 None
             }
         }

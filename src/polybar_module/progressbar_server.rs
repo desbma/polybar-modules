@@ -9,6 +9,8 @@ use std::{
     time::Duration,
 };
 
+use itertools::Itertools as _;
+
 use crate::{markup, polybar_module::RenderablePolybarModule, theme};
 
 pub(crate) struct ProgressBarServerModule {
@@ -78,7 +80,7 @@ impl ProgressBarServerModule {
                     )?;
                     self.clients.insert(client_id, client_stream);
                 } else {
-                    log::warn!("Unhandled event: {:?}", event);
+                    log::warn!("Unhandled event: {event:?}");
                 }
             } else {
                 let mut client_disconnected = false;
@@ -90,11 +92,11 @@ impl ProgressBarServerModule {
                     let mut buffer = [0; 4096];
                     let read_count = client_stream.read(&mut buffer)?;
                     if read_count > 0 {
-                        let progress = u32::from(buffer[read_count - 1]);
+                        let progress = u32::from(*buffer.get(read_count - 1).unwrap());
                         if progress <= 100 {
                             self.cur_progress.insert(token, progress);
                         } else {
-                            log::warn!("Received invalid progress {:?}", progress);
+                            log::warn!("Received invalid progress {progress:?}");
                         }
                     } else {
                         client_disconnected = true;
@@ -103,7 +105,7 @@ impl ProgressBarServerModule {
                     // Client disconnected
                     client_disconnected = true;
                 } else {
-                    log::warn!("Unhandled event: {:?}", event);
+                    log::warn!("Unhandled event: {event:?}");
                 }
 
                 if client_disconnected {
@@ -126,6 +128,7 @@ impl ProgressBarServerModule {
         assert!(len >= 1);
         assert!(progress <= 100);
         if len == 1 {
+            #[expect(clippy::indexing_slicing)]
             RAMP_ICONS[progress as usize / (100 / (RAMP_ICONS.len() - 1))].to_owned()
         } else {
             let progress_chars = len * progress as usize / 100;
@@ -159,7 +162,7 @@ impl RenderablePolybarModule for ProgressBarServerModule {
         match self.try_update() {
             Ok(s) => Some(s),
             Err(e) => {
-                log::error!("{}", e);
+                log::error!("{e}");
                 None
             }
         }
@@ -171,20 +174,20 @@ impl RenderablePolybarModule for ProgressBarServerModule {
             Some(state) => {
                 if state.progress.is_empty() {
                     String::new()
-                } else if state.progress.len() == 1 {
+                } else if let Ok(Some(progress)) = state.progress.iter().at_most_one() {
                     format!(
                         "{} {} {}",
                         markup::style("", Some(theme::Color::Foreground), None, None, None),
                         state.progress.len(),
-                        Self::render_progress(state.progress[0], self.max_len - 2)
+                        Self::render_progress(*progress, self.max_len - 2)
                     )
-                } else if state.progress.len() == 2 {
+                } else if let Some((progress1, progress2)) = state.progress.iter().collect_tuple() {
                     format!(
                         "{} {} {} {}",
                         markup::style("", Some(theme::Color::Foreground), None, None, None),
                         state.progress.len(),
-                        Self::render_progress(state.progress[0], (self.max_len - 3) / 2),
-                        Self::render_progress(state.progress[1], (self.max_len - 3) / 2),
+                        Self::render_progress(*progress1, (self.max_len - 3) / 2),
+                        Self::render_progress(*progress2, (self.max_len - 3) / 2),
                     )
                 } else {
                     // Average progress, then maximum

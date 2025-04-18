@@ -163,7 +163,7 @@ impl RenderablePolybarModule for MarketModule {
         match self.try_update() {
             Ok(s) => Some(s),
             Err(e) => {
-                log::error!("{}", e);
+                log::error!("{e}");
                 None
             }
         }

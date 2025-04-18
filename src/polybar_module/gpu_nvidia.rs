@@ -125,8 +125,8 @@ impl GpuNvidiaModule {
             }
         }
         markup::style(
-            icons[icons.len() - 1].0,
-            Some(icons[icons.len() - 1].1.clone()),
+            icons.last().unwrap().0,
+            Some(icons.last().unwrap().1.clone()),
             None,
             None,
             None,
@@ -152,7 +152,7 @@ impl RenderablePolybarModule for GpuNvidiaModule {
                     }
                 }
                 poll_res.unwrap();
-                log::trace!("Poll returned with events {:?}", poller_events);
+                log::trace!("Poll returned with events {poller_events:?}");
                 if poller_events.iter().any(mio::event::Event::is_readable) {
                     break;
                 }
@@ -164,7 +164,7 @@ impl RenderablePolybarModule for GpuNvidiaModule {
         match self.try_update() {
             Ok(s) => Some(s),
             Err(e) => {
-                log::error!("{}", e);
+                log::error!("{e}");
                 None
             }
         }

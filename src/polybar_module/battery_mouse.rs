@@ -48,12 +48,12 @@ impl RenderablePolybarModule for BatteryMouseModule {
                     .map(|p| {
                         // Parse capacity
                         let capacity_filepath = p.clone().join("capacity");
-                        log::trace!("{:?}", capacity_filepath);
+                        log::trace!("{capacity_filepath:?}");
                         let capacity = if let Ok(s) = fs::read_to_string(&capacity_filepath) {
                             Some(s.trim_end().parse::<u8>()?)
                         } else {
                             let capacity_level_filepath = p.clone().join("capacity_level");
-                            log::trace!("{:?}", capacity_level_filepath);
+                            log::trace!("{capacity_level_filepath:?}");
                             let capacity_level_str = fs::read_to_string(&capacity_level_filepath)?
                                 .trim_end()
                                 .to_owned();
@@ -62,7 +62,7 @@ impl RenderablePolybarModule for BatteryMouseModule {
 
                         // Parse model name
                         let name_filepath = p.join("model_name");
-                        log::trace!("{:?}", name_filepath);
+                        log::trace!("{name_filepath:?}");
                         let mut name_str = fs::read_to_string(&name_filepath)?;
                         name_str = theme::shorten_model_name(name_str.trim_end());
 

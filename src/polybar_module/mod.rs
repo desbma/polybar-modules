@@ -110,11 +110,11 @@ impl PolybarModuleEnv {
         watcher
             .watch(parent_dir, notify::RecursiveMode::NonRecursive)
             .unwrap();
-        log::debug!("Watching {:?}", parent_dir);
+        log::debug!("Watching {parent_dir:?}");
         while self.network_mode() != *mode {
             let evt = events_rx.recv().unwrap();
             did_wait = true;
-            log::trace!("{:?}", evt);
+            log::trace!("{evt:?}");
         }
         did_wait
     }
@@ -127,11 +127,11 @@ impl PolybarModuleEnv {
         watcher
             .watch(parent_dir, notify::RecursiveMode::NonRecursive)
             .unwrap();
-        log::debug!("Watching {:?}", parent_dir);
+        log::debug!("Watching {parent_dir:?}");
         while self.public_screen() != public {
             let evt = events_rx.recv().unwrap();
             did_wait = true;
-            log::trace!("{:?}", evt);
+            log::trace!("{evt:?}");
         }
         did_wait
     }

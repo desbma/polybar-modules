@@ -7,7 +7,7 @@ use std::{
 };
 
 use anyhow::Context as _;
-use backoff::{backoff::Backoff as _, ExponentialBackoff, ExponentialBackoffBuilder};
+use backoff::{ExponentialBackoff, ExponentialBackoffBuilder, backoff::Backoff as _};
 
 use crate::{
     markup,
@@ -149,7 +149,7 @@ impl RenderablePolybarModule for ArchUpdatesModule {
         match self.try_update() {
             Ok(s) => Some(s),
             Err(e) => {
-                log::error!("{}", e);
+                log::error!("{e}");
                 None
             }
         }

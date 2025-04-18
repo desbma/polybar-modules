@@ -72,7 +72,7 @@ impl WttrModule {
             response.status_text()
         );
         let text = response.into_string()?;
-        log::debug!("{:?}", text);
+        log::debug!("{text:?}");
 
         let mut tokens = text.split('/').map(str::trim);
 
@@ -119,7 +119,7 @@ impl RenderablePolybarModule for WttrModule {
         match self.try_update() {
             Ok(s) => Some(s),
             Err(e) => {
-                log::error!("{}", e);
+                log::error!("{e}");
                 None
             }
         }

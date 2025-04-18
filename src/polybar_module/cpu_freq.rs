@@ -56,7 +56,7 @@ impl CpuFreqModule {
             .into_iter()
             .max()
             .ok_or_else(|| anyhow::anyhow!("Unable to read maximum CPU frequency"))?;
-        log::debug!("Frequency range: [{}, {}]", freq_min, freq_max);
+        log::debug!("Frequency range: [{freq_min}, {freq_max}]");
 
         Ok(Self {
             freq_range: (freq_min, freq_max),
@@ -109,7 +109,7 @@ impl RenderablePolybarModule for CpuFreqModule {
         match self.try_update() {
             Ok(s) => Some(s),
             Err(e) => {
-                log::error!("{}", e);
+                log::error!("{e}");
                 None
             }
         }
@@ -120,7 +120,7 @@ impl RenderablePolybarModule for CpuFreqModule {
             Some(state) => {
                 let freq_load = f64::from(100 * (state.avg_freq - self.freq_range.0))
                     / f64::from(self.freq_range.1 - self.freq_range.0);
-                log::debug!("freq_load={}", freq_load);
+                log::debug!("freq_load={freq_load}");
                 markup::style(
                     &format!(
                         "{:.1}/{:.1}/{:.1} GHz",

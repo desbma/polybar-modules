@@ -117,17 +117,25 @@ impl NetworkStatusModule {
         for event in self.poller_events.iter().filter(|e| e.is_readable()) {
             // Read ping stdout pending data
             let idx = usize::from(event.token());
-            let read_count = self.ping_childs[idx]
+            buffer.resize(buffer.capacity(), 0);
+            let read_count = self
+                .ping_childs
+                .get_mut(idx)
+                .unwrap()
                 .stdout
                 .as_mut()
                 .unwrap()
                 .read(&mut buffer)?;
-            let read_str = String::from_utf8_lossy(&buffer[0..read_count]);
-            log::debug!("Got output: {:?}", read_str);
+            buffer.truncate(read_count);
+            let read_str = String::from_utf8_lossy(&buffer);
+            log::debug!("Got output: {read_str:?}");
 
             // Parse ping lines
             for line in read_str.lines() {
-                self.host_state_history[idx].push_back(line.ends_with(" ms"));
+                self.host_state_history
+                    .get_mut(idx)
+                    .unwrap()
+                    .push_back(line.ends_with(" ms"));
                 self.ping_child_last_output.insert(idx, now);
             }
         }
@@ -139,9 +147,9 @@ impl NetworkStatusModule {
         {
             log::debug!(
                 "ping process for {:?} had no output for a while, killing it",
-                self.cfg.hosts[i].host
+                self.cfg.hosts.get(i).unwrap().host
             );
-            let _ = self.ping_childs[i].kill(); // ignore error, it can already be dead
+            let _ = self.ping_childs.get_mut(i).unwrap().kill(); // ignore error, it can already be dead
         }
 
         // Build state
@@ -176,7 +184,10 @@ impl NetworkStatusModule {
                     continue;
                 }
 
-                log::debug!("ping process for {:?} has died", self.cfg.hosts[i].host);
+                log::debug!(
+                    "ping process for {:?} has died",
+                    self.cfg.hosts.get(i).unwrap().host
+                );
 
                 // Keep death timestamp to avoid respawning too fast
                 self.ping_child_deaths.insert(i, now);
@@ -187,7 +198,7 @@ impl NetworkStatusModule {
                 ))?;
 
                 // Add state history entry
-                self.host_state_history[i].push_back(false);
+                self.host_state_history.get_mut(i).unwrap().push_back(false);
             }
         }
 
@@ -197,8 +208,12 @@ impl NetworkStatusModule {
             .extract_if(|_i, ts| now.saturating_duration_since(*ts) > ping_period)
         {
             // Setup new child in its place
-            self.ping_childs[i] =
-                Self::setup_ping_child(&self.cfg.hosts[i].host, i, poller_registry, &self.env)?;
+            *self.ping_childs.get_mut(i).unwrap() = Self::setup_ping_child(
+                &self.cfg.hosts.get(i).unwrap().host,
+                i,
+                poller_registry,
+                &self.env,
+            )?;
             self.ping_child_last_output.insert(i, now);
         }
 
@@ -250,7 +265,7 @@ impl RenderablePolybarModule for NetworkStatusModule {
         match self.try_update() {
             Ok(s) => Some(s),
             Err(e) => {
-                log::error!("{}", e);
+                log::error!("{e}");
                 None
             }
         }

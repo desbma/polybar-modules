@@ -1,7 +1,6 @@
 //! Polybar modules
 
 #![feature(exit_status_error)]
-#![feature(hash_extract_if)]
 
 use std::io::{self, IsTerminal as _};
 
@@ -31,7 +30,7 @@ fn main() -> anyhow::Result<()> {
 
     // Parse command line args
     let cl_opts = config::CommandLineOpts::parse();
-    log::trace!("{:?}", cl_opts);
+    log::trace!("{cl_opts:?}");
 
     // Parse config file
     let cfg = config::parse_config_file();
@@ -179,7 +178,7 @@ where
         // Update
         module.wait_update(prev_state.as_ref());
         let state = module.update();
-        log::debug!("{:?}", state);
+        log::debug!("{state:?}");
 
         // Render or skip?
         let do_render = match &prev_state {

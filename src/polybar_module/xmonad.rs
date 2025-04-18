@@ -63,7 +63,7 @@ impl RenderablePolybarModule for XmonadModule {
                 sleep(Duration::from_secs(1));
             }
             if let Err(e) = self.open_pipe() {
-                log::debug!("{:?}", e);
+                log::debug!("{e:?}");
                 return;
             }
         }
@@ -79,7 +79,7 @@ impl RenderablePolybarModule for XmonadModule {
                 }
             }
             poll_res.unwrap();
-            log::trace!("Poll returned with events {:?}", poller_events);
+            log::trace!("Poll returned with events {poller_events:?}");
             if poller_events.iter().any(mio::event::Event::is_readable) {
                 self.pipe
                     .as_ref()

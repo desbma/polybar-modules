@@ -2,7 +2,7 @@ use std::{
     env,
     fs::metadata,
     path::PathBuf,
-    sync::mpsc::{channel, RecvTimeoutError},
+    sync::mpsc::{RecvTimeoutError, channel},
     thread::sleep,
     time::{Duration, Instant, SystemTime},
 };
@@ -99,7 +99,7 @@ impl RenderablePolybarModule for TodoTxtModule {
                         self.env.public_screen_filepath.parent().unwrap(),
                     ];
 
-                    log::debug!("Watching {:?}", to_watch_filepaths);
+                    log::debug!("Watching {to_watch_filepaths:?}");
                     for to_watch_filepath in to_watch_filepaths {
                         watcher
                             .watch(to_watch_filepath, notify::RecursiveMode::NonRecursive)
@@ -124,7 +124,7 @@ impl RenderablePolybarModule for TodoTxtModule {
                             }
                             Err(_) => res.unwrap(),
                         };
-                        log::trace!("{:?}", evt);
+                        log::trace!("{evt:?}");
                     }
                 }
                 Some(TodoTxtModuleState::Paused) => {
@@ -140,7 +140,7 @@ impl RenderablePolybarModule for TodoTxtModule {
         match self.try_update() {
             Ok(s) => Some(s),
             Err(e) => {
-                log::error!("{}", e);
+                log::error!("{e}");
                 None
             }
         }
@@ -230,8 +230,11 @@ mod tests {
 
     #[test]
     fn test_render() {
-        env::set_var("TODO_FILE", "/dev/null");
-        env::set_var("DONE_FILE", "/dev/null");
+        // SAFETY: actually NOT safe, but this is for tests only, and we are feeling lucky
+        unsafe {
+            env::set_var("TODO_FILE", "/dev/null");
+            env::set_var("DONE_FILE", "/dev/null");
+        }
         let xdg_dirs = xdg::BaseDirectories::new().unwrap();
         let runtime_dir = xdg_dirs.get_runtime_directory().unwrap();
         let module = TodoTxtModule::new(None).unwrap();

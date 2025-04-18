@@ -109,9 +109,7 @@ impl BluetoothModule {
             let addr = macaddr::MacAddr6::from_str(addr_str)?;
             if !whitelist_addrs.is_empty() && !whitelist_addrs.contains(&addr) {
                 log::warn!(
-                    "Ignoring device {} not in whitelist {:?}",
-                    addr,
-                    whitelist_addrs
+                    "Ignoring device {addr} not in whitelist {whitelist_addrs:?}"
                 );
                 continue;
             }
@@ -129,7 +127,7 @@ impl BluetoothModule {
                 addr,
             };
 
-            log::debug!("New known device ({}): {:?}", addr, device);
+            log::debug!("New known device ({addr}): {device:?}");
             devices.insert(addr, device);
         }
 
@@ -153,6 +151,7 @@ impl RenderablePolybarModule for BluetoothModule {
             let mut need_render = false;
             while !need_render {
                 // Read new data
+                buffer.resize(buffer.capacity(), 0);
                 let read_count = self
                     .bluetoothctl_child
                     .stdout
@@ -160,9 +159,10 @@ impl RenderablePolybarModule for BluetoothModule {
                     .unwrap()
                     .read(&mut buffer)
                     .unwrap();
-                let read_buf = &strip_ansi_escapes::strip(&buffer[0..read_count]);
+                buffer.truncate(read_count);
+                let read_buf = &strip_ansi_escapes::strip(&buffer);
                 let read_str = String::from_utf8_lossy(read_buf);
-                log::trace!("{} bytes read: {:?}", read_count, read_str);
+                log::trace!("{read_count} bytes read: {read_str:?}");
 
                 // Parse event lines
                 for line in read_str.lines() {
@@ -177,7 +177,7 @@ impl RenderablePolybarModule for BluetoothModule {
                     });
 
                     if let Some(power_event_match) = POWER_EVENT_REGEX.captures(line) {
-                        log::trace!("{:?}", power_event_match);
+                        log::trace!("{power_event_match:?}");
 
                         let addr: macaddr::MacAddr6 =
                             macaddr::MacAddr6::from_str(power_event_match.get(1).unwrap().as_str())
@@ -200,7 +200,7 @@ impl RenderablePolybarModule for BluetoothModule {
                             log::warn!("Power event for unknown controller");
                         }
                     } else if let Some(connect_event_match) = CONNECT_EVENT_REGEX.captures(line) {
-                        log::trace!("{:?}", connect_event_match);
+                        log::trace!("{connect_event_match:?}");
 
                         let addr: macaddr::MacAddr6 = macaddr::MacAddr6::from_str(
                             connect_event_match.get(1).unwrap().as_str(),
@@ -218,10 +218,10 @@ impl RenderablePolybarModule for BluetoothModule {
                             d.connected = status;
                             need_render = true;
                         } else {
-                            log::warn!("Ignoring event for unknown device {}", addr);
+                            log::warn!("Ignoring event for unknown device {addr}");
                         }
                     } else {
-                        log::debug!("Ignored line: {:?}", line);
+                        log::debug!("Ignored line: {line:?}");
                     }
                 }
             }
@@ -309,7 +309,10 @@ mod tests {
         paths_vec.insert(0, PathBuf::from(dir));
 
         let paths = env::join_paths(paths_vec).unwrap();
-        env::set_var("PATH", paths);
+        // SAFETY: actually NOT safe, but this is for tests only, and we are feeling lucky
+        unsafe {
+            env::set_var("PATH", paths);
+        }
 
         path_orig
     }
@@ -378,6 +381,9 @@ mod tests {
             "%{F#eee8d5}%{F-} %{A1:bluetoothctl power off:}\u{f205}%{A} %{A1:bluetoothctl connect 01\\:02\\:03\\:04\\:05\\:06:}D1%{A} %{A1:bluetoothctl disconnect 02\\:01\\:03\\:04\\:05\\:06:}%{u#93a1a1}%{+u}D2%{-u}%{A}"
         );
 
-        env::set_var("PATH", path_orig);
+        // SAFETY: actually NOT safe, but this is for tests only, and we are feeling lucky
+        unsafe {
+            env::set_var("PATH", path_orig);
+        }
     }
 }
