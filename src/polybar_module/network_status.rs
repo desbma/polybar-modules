@@ -1,4 +1,5 @@
 use std::{
+    cmp::min,
     collections::HashMap,
     io::{ErrorKind, Read as _},
     os::unix::io::AsRawFd as _,
@@ -16,6 +17,7 @@ use crate::{
 };
 
 const PING_AVG_COUNT: usize = 3;
+const AGGREGATE_DELAY: Duration = Duration::from_millis(200);
 
 pub(crate) struct NetworkStatusModule {
     env: PolybarModuleEnv,
@@ -25,7 +27,7 @@ pub(crate) struct NetworkStatusModule {
     poller_events: mio::Events,
     host_state_history: Vec<bounded_vec_deque::BoundedVecDeque<bool>>,
     ping_child_deaths: HashMap<usize, Instant>,
-    ping_child_last_output: HashMap<usize, Instant>,
+    ping_child_last_reachable: HashMap<usize, Instant>,
     networks: Networks,
 }
 
@@ -68,7 +70,7 @@ impl NetworkStatusModule {
             poller_events,
             host_state_history,
             ping_child_deaths,
-            ping_child_last_output,
+            ping_child_last_reachable: ping_child_last_output,
             networks,
         })
     }
@@ -108,6 +110,7 @@ impl NetworkStatusModule {
         Ok(child)
     }
 
+    #[expect(clippy::too_many_lines)]
     fn try_update(&mut self) -> anyhow::Result<NetworkStatusModuleState> {
         let now = Instant::now();
         let poller_registry = self.poller.registry();
@@ -128,22 +131,32 @@ impl NetworkStatusModule {
                 .read(&mut buffer)?;
             buffer.truncate(read_count);
             let read_str = String::from_utf8_lossy(&buffer);
-            log::debug!("Got output: {read_str:?}");
+            log::trace!(
+                "Got output for host {:?}: {:?}",
+                self.cfg.hosts.get(idx).unwrap().host,
+                read_str
+            );
 
             // Parse ping lines
             for line in read_str.lines() {
+                let status = line.ends_with(" ms");
                 self.host_state_history
                     .get_mut(idx)
                     .unwrap()
-                    .push_back(line.ends_with(" ms"));
-                self.ping_child_last_output.insert(idx, now);
+                    .push_back(status);
+                if status {
+                    self.ping_child_last_reachable.insert(idx, now);
+                }
             }
         }
 
-        // Kill processes with no output for too long
+        // Kill processes with no output or failed output for too long
+        // This works around a rare bug, if a host becomes unreachable, then reachable again
+        // ping sometimes never picks it up again for some reason
+        let stale_timeout = Self::get_stale_child_timeout(&self.env);
         for (i, _ts) in self
-            .ping_child_last_output
-            .extract_if(|_i, ts| now.saturating_duration_since(*ts) > 2 * ping_period)
+            .ping_child_last_reachable
+            .extract_if(|_i, ts| now.saturating_duration_since(*ts) > stale_timeout)
         {
             log::debug!(
                 "ping process for {:?} had no output for a while, killing it",
@@ -179,7 +192,13 @@ impl NetworkStatusModule {
 
         // Cleanup newly dead processes
         for (i, child) in &mut self.ping_childs.iter_mut().enumerate() {
-            if let Ok(Some(_)) = child.try_wait() {
+            let wait_res = child.try_wait();
+            log::trace!(
+                "Host {:?} child wait: {:?}",
+                self.cfg.hosts.get(i).unwrap().host,
+                wait_res
+            );
+            if let Ok(Some(_)) = wait_res {
                 if self.ping_child_deaths.contains_key(&i) {
                     continue;
                 }
@@ -214,7 +233,7 @@ impl NetworkStatusModule {
                 poller_registry,
                 &self.env,
             )?;
-            self.ping_child_last_output.insert(i, now);
+            self.ping_child_last_reachable.insert(i, now);
         }
 
         Ok(NetworkStatusModuleState {
@@ -228,6 +247,10 @@ impl NetworkStatusModule {
             NetworkMode::LowBandwith => Duration::from_secs(5),
             NetworkMode::Unrestricted => Duration::from_secs(1),
         }
+    }
+
+    fn get_stale_child_timeout(env: &PolybarModuleEnv) -> Duration {
+        min(Self::get_ping_period(env) * 2, Duration::from_secs(5))
     }
 }
 
@@ -245,9 +268,9 @@ impl RenderablePolybarModule for NetworkStatusModule {
     fn wait_update(&mut self, prev_state: Option<&Self::State>) {
         if prev_state.is_some() {
             // Micro sleep to aggregate several ping events
-            sleep(Duration::from_millis(100));
+            sleep(AGGREGATE_DELAY);
 
-            let duration = Self::get_ping_period(&self.env);
+            let duration = Self::get_ping_period(&self.env).saturating_sub(AGGREGATE_DELAY);
             log::trace!("Waiting for network events");
             let poll_res = self.poller.poll(&mut self.poller_events, Some(duration));
             if let Err(e) = &poll_res {
