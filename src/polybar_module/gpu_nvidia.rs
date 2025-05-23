@@ -145,11 +145,11 @@ impl RenderablePolybarModule for GpuNvidiaModule {
             log::trace!("Waiting for stdout data");
             loop {
                 let poll_res = self.poller.poll(&mut poller_events, None);
-                if let Err(e) = &poll_res {
-                    if e.kind() == ErrorKind::Interrupted {
-                        // Ignore error, can occur on return from hibernation
-                        continue;
-                    }
+                if let Err(e) = &poll_res
+                    && e.kind() == ErrorKind::Interrupted
+                {
+                    // Ignore error, can occur on return from hibernation
+                    continue;
                 }
                 poll_res.unwrap();
                 log::trace!("Poll returned with events {poller_events:?}");

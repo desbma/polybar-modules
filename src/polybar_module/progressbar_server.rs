@@ -148,10 +148,10 @@ impl RenderablePolybarModule for ProgressBarServerModule {
     fn wait_update(&mut self, _prev_state: Option<&Self::State>) {
         loop {
             let poll_res = self.poller.poll(&mut self.poller_events, None);
-            if let Err(e) = &poll_res {
-                if e.kind() == ErrorKind::Interrupted {
-                    continue;
-                }
+            if let Err(e) = &poll_res
+                && e.kind() == ErrorKind::Interrupted
+            {
+                continue;
             }
             poll_res.unwrap();
             break;

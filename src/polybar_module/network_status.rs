@@ -273,11 +273,11 @@ impl RenderablePolybarModule for NetworkStatusModule {
             let duration = Self::get_ping_period(&self.env).saturating_sub(AGGREGATE_DELAY);
             log::trace!("Waiting for network events");
             let poll_res = self.poller.poll(&mut self.poller_events, Some(duration));
-            if let Err(e) = &poll_res {
-                if e.kind() == ErrorKind::Interrupted {
-                    // Ignore error, and do not retry, can occur on return from hibernation
-                    return;
-                }
+            if let Err(e) = &poll_res
+                && e.kind() == ErrorKind::Interrupted
+            {
+                // Ignore error, and do not retry, can occur on return from hibernation
+                return;
             }
             poll_res.unwrap();
             log::trace!("Poll returned with events {:?}", self.poller_events);

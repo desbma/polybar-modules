@@ -2,6 +2,7 @@
 name = "polybar-modules"
 version = "0.1.0"
 authors = ["desbma <desbma@users.noreply.github.com>"]
+rust-version = "1.88"
 edition = "2024"
 
 [profile.release]
