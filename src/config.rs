@@ -66,14 +66,14 @@ pub(crate) struct ModuleConfig {
 
 #[derive(Debug, serde::Deserialize)]
 pub(crate) struct HomePowerModuleConfig {
-    pub se: SolarEdgeConfig,
+    pub inverter_modbus: InverterModbusConfig,
     pub shelly_devices: Vec<ShellyDeviceConfig>,
 }
 
 #[derive(Debug, serde::Deserialize)]
-pub(crate) struct SolarEdgeConfig {
-    pub site_id: u64,
-    pub auth_cookie_val: String,
+pub(crate) struct InverterModbusConfig {
+    pub host: String,
+    pub port: u16,
 }
 
 #[derive(Debug, Clone, serde::Deserialize)]

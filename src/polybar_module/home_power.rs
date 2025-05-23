@@ -1,27 +1,28 @@
 use std::{
     cmp::Ordering,
-    net::{TcpStream, ToSocketAddrs as _},
-    sync::Arc,
+    net::{SocketAddr, TcpStream, ToSocketAddrs as _},
     thread::sleep,
     time::Duration,
 };
 
+use anyhow::Context as _;
 use backoff::backoff::Backoff as _;
 use itertools::Itertools as _;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use sha2::Digest as _;
+use tokio_modbus::prelude::SyncReader as _;
 use tungstenite::WebSocket;
 
 use crate::{
     config::{HomePowerModuleConfig, ShellyDeviceConfig},
     markup,
-    polybar_module::{NetworkMode, PolybarModuleEnv, RenderablePolybarModule, TCP_REMOTE_TIMEOUT},
+    polybar_module::{NetworkMode, PolybarModuleEnv, RenderablePolybarModule},
     theme,
 };
 
 pub(crate) struct HomePowerModule {
-    se_req_power_flow: ureq::Request,
-    se_wait_delay: Option<Duration>,
+    modbus_addr: SocketAddr,
+    modbus_ctx: Option<tokio_modbus::client::sync::Context>,
     shelly_devices: Vec<(ShellyDeviceConfig, Option<ShellyPlus>)>,
     env: PolybarModuleEnv,
 }
@@ -44,28 +45,6 @@ struct HomeDevice {
 struct HomeDeviceStatus {
     enabled: bool,
     power: u32,
-}
-
-//
-// SolarEdge API
-//
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all(deserialize = "camelCase"))]
-struct SeSiteCurrentPowerFlow {
-    update_refresh_rate: u64,
-    #[serde(alias = "GRID", alias = "grid")]
-    grid: SePowerState,
-    #[serde(alias = "LOAD", alias = "load")]
-    load: SePowerState,
-    #[serde(alias = "PV", alias = "pv")]
-    pv: SePowerState,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all(deserialize = "camelCase"))]
-struct SePowerState {
-    current_power: f64,
 }
 
 //
@@ -262,21 +241,12 @@ impl ShellyPlus {
 
 impl HomePowerModule {
     pub(crate) fn new(cfg: &HomePowerModuleConfig) -> anyhow::Result<Self> {
-        let se_client = ureq::AgentBuilder::new()
-            .tls_connector(Arc::new(ureq::native_tls::TlsConnector::new()?))
-            .timeout(TCP_REMOTE_TIMEOUT)
-            .build();
-        // Web API used by the monitoring web site does not seem to be rate limited,
-        // unlike the official API
-        let se_url = format!(
-            "https://monitoring.solaredge.com/services/powerflow/site/{}/latest",
-            cfg.se.site_id
-        );
-        let se_auth_cookie = format!(
-            "SPRING_SECURITY_REMEMBER_ME_COOKIE={};",
-            cfg.se.auth_cookie_val
-        );
-        let se_req_power_flow = se_client.get(&se_url).set("Cookie", &se_auth_cookie);
+        let addr = format!("{}:{}", cfg.inverter_modbus.host, cfg.inverter_modbus.port)
+            .to_socket_addrs()?
+            .at_most_one()
+            .ok()
+            .flatten()
+            .ok_or_else(|| anyhow::anyhow!("Inverser IP resolution did not yield 1 IP"))?;
 
         let shelly_devices = cfg
             .shelly_devices
@@ -286,28 +256,60 @@ impl HomePowerModule {
 
         let env = PolybarModuleEnv::new();
         Ok(Self {
-            se_req_power_flow,
-            se_wait_delay: None,
+            modbus_addr: addr,
+            modbus_ctx: None,
             shelly_devices,
             env,
         })
     }
 
+    #[expect(clippy::cast_possible_wrap)]
     fn try_update(&mut self) -> anyhow::Result<HomePowerModuleState> {
-        let response = self.se_req_power_flow.clone().call()?;
-        anyhow::ensure!(
-            response.status() >= 200 && response.status() < 300,
-            "HTTP response {}: {}",
-            response.status(),
-            response.status_text()
-        );
-        let text = response.into_string()?;
-        log::debug!("{text:?}");
-        let site_data: SeSiteCurrentPowerFlow = serde_json::from_str(&text)?;
-        log::debug!("{site_data:?}");
+        let modbus_ctx = if let Some(modbus_ctx) = self.modbus_ctx.as_mut() {
+            modbus_ctx
+        } else {
+            let modbus_ctx =
+                tokio_modbus::client::sync::tcp::connect_slave(self.modbus_addr, 1.into())
+                    .context("Failed to connect to inverter")?;
+            self.modbus_ctx = Some(modbus_ctx);
+            self.modbus_ctx.as_mut().unwrap()
+        };
 
-        // The rate limit is not as aggressive with this API, use the upstream delay typically of 3s
-        self.se_wait_delay = Some(Duration::from_secs(site_data.update_refresh_rate));
+        // https://github.com/nmakel/solaredge_modbus/blob/fd3ce7ae32a259ee371c672dac3bcd75bfe51258/src/solaredge_modbus/__init__.py#L486
+        let power_ac = modbus_ctx
+            .read_holding_registers(0x9c93, 1)??
+            .into_iter()
+            .at_most_one()
+            .ok()
+            .flatten()
+            .unwrap() as i16;
+        let power_ac_scale = modbus_ctx
+            .read_holding_registers(0x9c94, 1)??
+            .into_iter()
+            .at_most_one()
+            .ok()
+            .flatten()
+            .unwrap() as i16;
+        let solar_power = f64::from(power_ac) * 10_f64.powf(f64::from(power_ac_scale));
+
+        // https://github.com/nmakel/solaredge_modbus/blob/fd3ce7ae32a259ee371c672dac3bcd75bfe51258/src/solaredge_modbus/__init__.py#L603
+        let l1_power = modbus_ctx
+            .read_holding_registers(0x9d0f, 1)??
+            .into_iter()
+            .at_most_one()
+            .ok()
+            .flatten()
+            .unwrap() as i16;
+        let power_scale = modbus_ctx
+            .read_holding_registers(0x9d12, 1)??
+            .into_iter()
+            .at_most_one()
+            .ok()
+            .flatten()
+            .unwrap() as i16;
+        let grid_export = f64::from(l1_power) * 10_f64.powf(f64::from(power_scale));
+
+        let home_consumption_power = solar_power - grid_export;
 
         let devices = self
             .shelly_devices
@@ -345,9 +347,9 @@ impl HomePowerModule {
 
         #[expect(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
         Ok(HomePowerModuleState {
-            solar_power: (site_data.pv.current_power * 1000.0) as u32,
-            home_consumption_power: (site_data.load.current_power * 1000.0) as u32,
-            grid_power: (site_data.grid.current_power * 1000.0) as u32,
+            solar_power: solar_power as u32,
+            home_consumption_power: home_consumption_power as u32,
+            grid_power: grid_export.abs() as u32,
             devices,
         })
     }
@@ -358,18 +360,12 @@ impl RenderablePolybarModule for HomePowerModule {
 
     fn wait_update(&mut self, prev_state: Option<&Self::State>) {
         if let Some(prev_state) = prev_state {
-            let sleep_duration = match prev_state {
-                // Nominal
-                Some(_) => {
-                    self.env.network_error_backoff.reset();
-                    if let Some(wait_delay) = self.se_wait_delay {
-                        wait_delay
-                    } else {
-                        Duration::from_secs(60)
-                    }
-                }
-                // Error occured
-                None => self.env.network_error_backoff.next_backoff().unwrap(),
+            let sleep_duration = if prev_state.is_some() {
+                self.env.network_error_backoff.reset();
+                Duration::from_secs(1)
+            } else {
+                self.modbus_ctx = None; // Force reconnect
+                self.env.network_error_backoff.next_backoff().unwrap()
             };
             sleep(sleep_duration);
         }
@@ -441,16 +437,16 @@ impl RenderablePolybarModule for HomePowerModule {
 #[expect(clippy::shadow_unrelated)]
 mod tests {
     use super::*;
-    use crate::config::SolarEdgeConfig;
+    use crate::config::InverterModbusConfig;
 
     #[test]
     fn test_render() {
         let module = HomePowerModule::new(&HomePowerModuleConfig {
-            se: SolarEdgeConfig {
-                site_id: 0,
-                auth_cookie_val: String::new(),
-            },
             shelly_devices: vec![],
+            inverter_modbus: InverterModbusConfig {
+                host: "127.0.0.1".to_owned(),
+                port: 0,
+            },
         })
         .unwrap();
 
