@@ -1,6 +1,6 @@
 use std::{
     cmp::Ordering,
-    net::{SocketAddr, TcpStream, ToSocketAddrs as _},
+    net::{TcpStream, ToSocketAddrs as _},
     thread::sleep,
     time::Duration,
 };
@@ -14,14 +14,14 @@ use tokio_modbus::prelude::SyncReader as _;
 use tungstenite::WebSocket;
 
 use crate::{
-    config::{HomePowerModuleConfig, ShellyDeviceConfig},
+    config::{HomePowerModuleConfig, InverterModbusConfig, ShellyDeviceConfig},
     markup,
     polybar_module::{NetworkMode, PolybarModuleEnv, RenderablePolybarModule},
     theme,
 };
 
 pub(crate) struct HomePowerModule {
-    modbus_addr: SocketAddr,
+    modbus_cfg: InverterModbusConfig,
     modbus_ctx: Option<tokio_modbus::client::sync::Context>,
     shelly_devices: Vec<(ShellyDeviceConfig, Option<ShellyPlus>)>,
     env: PolybarModuleEnv,
@@ -240,14 +240,7 @@ impl ShellyPlus {
 }
 
 impl HomePowerModule {
-    pub(crate) fn new(cfg: &HomePowerModuleConfig) -> anyhow::Result<Self> {
-        let addr = format!("{}:{}", cfg.inverter_modbus.host, cfg.inverter_modbus.port)
-            .to_socket_addrs()?
-            .at_most_one()
-            .ok()
-            .flatten()
-            .ok_or_else(|| anyhow::anyhow!("Inverser IP resolution did not yield 1 IP"))?;
-
+    pub(crate) fn new(cfg: &HomePowerModuleConfig) -> Self {
         let shelly_devices = cfg
             .shelly_devices
             .iter()
@@ -255,12 +248,12 @@ impl HomePowerModule {
             .collect();
 
         let env = PolybarModuleEnv::new();
-        Ok(Self {
-            modbus_addr: addr,
+        Self {
+            modbus_cfg: cfg.inverter_modbus.clone(),
             modbus_ctx: None,
             shelly_devices,
             env,
-        })
+        }
     }
 
     #[expect(clippy::cast_possible_wrap)]
@@ -268,9 +261,14 @@ impl HomePowerModule {
         let modbus_ctx = if let Some(modbus_ctx) = self.modbus_ctx.as_mut() {
             modbus_ctx
         } else {
-            let modbus_ctx =
-                tokio_modbus::client::sync::tcp::connect_slave(self.modbus_addr, 1.into())
-                    .context("Failed to connect to inverter")?;
+            let addr = format!("{}:{}", self.modbus_cfg.host, self.modbus_cfg.port)
+                .to_socket_addrs()?
+                .at_most_one()
+                .ok()
+                .flatten()
+                .ok_or_else(|| anyhow::anyhow!("Inverser IP resolution did not yield 1 IP"))?;
+            let modbus_ctx = tokio_modbus::client::sync::tcp::connect_slave(addr, 1.into())
+                .context("Failed to connect to inverter")?;
             self.modbus_ctx = Some(modbus_ctx);
             self.modbus_ctx.as_mut().unwrap()
         };
@@ -448,8 +446,7 @@ mod tests {
                 host: "127.0.0.1".to_owned(),
                 port: 0,
             },
-        })
-        .unwrap();
+        });
 
         let state = Some(HomePowerModuleState {
             solar_power: 2000,

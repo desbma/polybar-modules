@@ -70,7 +70,7 @@ pub(crate) struct HomePowerModuleConfig {
     pub shelly_devices: Vec<ShellyDeviceConfig>,
 }
 
-#[derive(Debug, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Deserialize)]
 pub(crate) struct InverterModbusConfig {
     pub host: String,
     pub port: u16,

@@ -81,7 +81,7 @@ fn main() -> anyhow::Result<()> {
                 })
                 .context("Unable to get home power module config from config file")?;
             polybar_module::PolybarModule::HomePower(
-                polybar_module::home_power::HomePowerModule::new(&home_power_cfg)?,
+                polybar_module::home_power::HomePowerModule::new(&home_power_cfg),
             )
         }
         PolybarModuleName::internet_bandwidth => polybar_module::PolybarModule::InternetBandwidth(
