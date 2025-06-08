@@ -34,7 +34,7 @@ signal-hook = { version = "0.3.17", default-features = false, features = ["itera
 simple_logger = { version = "5.0.0", default-features = false }
 strip-ansi-escapes = { version = "0.2.1", default-features = false }
 sysinfo = { version = "0.34.2", default-features = false, features = ["network"] }
-tasks = { git = "https://github.com/desbma/todo", rev = "84f221a8be5cc68d6a37bcccb6990ab639e50c02" }
+tasks = { git = "https://github.com/desbma/todo", rev = "13d7329c37b6e1ad788add9e3f3d0fd506d79d32" }
 thiserror = { version = "2.0.12", default-features = false, features = ["std"] }
 tokio-modbus = { version = "0.16.1", default-features = false, features = ["tcp-sync"] }
 toml = { version = "0.8.20", default-features = false, features = ["parse"] }
