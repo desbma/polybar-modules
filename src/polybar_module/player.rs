@@ -58,6 +58,11 @@ impl Drop for PlayerModule {
     }
 }
 
+const ICON_PLAYER: &str = "";
+const ICON_PLAYER_PLAYING: &str = "";
+const ICON_PLAYER_PAUSED: &str = "";
+const ICON_PLAYER_STOPPED: &str = "";
+
 impl RenderablePolybarModule for PlayerModule {
     type State = Option<PlayerModuleState>;
 
@@ -101,9 +106,9 @@ impl RenderablePolybarModule for PlayerModule {
         match state {
             Some(state) => {
                 let status = match state.status.as_str() {
-                    "Playing" => "󰐊",
-                    "Stopped" => "󰓛",
-                    "Paused" => "󰏤",
+                    "Playing" => ICON_PLAYER_PLAYING,
+                    "Paused" => ICON_PLAYER_PAUSED,
+                    "Stopped" => ICON_PLAYER_STOPPED,
                     _ => state.status.as_str(),
                 };
                 let player = match state.player.as_str() {
@@ -140,7 +145,7 @@ impl RenderablePolybarModule for PlayerModule {
                     let (first_tokens, other_tokens) = tokens.split_at(sep_idx);
                     s = format!(
                         "{} {} {}",
-                        markup::style("", Some(theme::Color::MainIcon), None, None, None),
+                        markup::style(ICON_PLAYER, Some(theme::Color::MainIcon), None, None, None),
                         first_tokens.join(" "),
                         other_tokens.join(&markup::style(
                             " / ",

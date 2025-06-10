@@ -11,6 +11,8 @@ pub(crate) enum Color {
     Critical = 0xdc322f,
 }
 
+pub(crate) const ICON_WARNING: &str = "";
+
 pub(crate) fn ellipsis(s: &str, max_len: Option<usize>) -> String {
     match max_len {
         Some(max_len) => {

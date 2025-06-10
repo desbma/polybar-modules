@@ -10,7 +10,7 @@ use backoff::backoff::Backoff as _;
 use crate::{
     markup,
     polybar_module::{NetworkMode, PolybarModuleEnv, RenderablePolybarModule, TCP_REMOTE_TIMEOUT},
-    theme,
+    theme::{self, ICON_WARNING},
 };
 
 pub(crate) struct WttrModule {
@@ -27,24 +27,24 @@ pub(crate) struct WttrModuleState {
 static ICONS: LazyLock<HashMap<&'static str, &'static str>> = LazyLock::new(|| {
     HashMap::from([
         ("✨", "?"), // unknown
-        ("☁️", ""), // Cloudy
-        ("🌫", ""),  // Fog
-        ("🌧", ""),  // HeavyRain
-        ("🌧", ""),  // HeavyShowers
-        ("❄️", ""), // HeavySnow
-        ("❄️", ""), // HeavySnowShowers
-        ("🌦", ""),  // LightRain
-        ("🌦", ""),  // LightShowers
-        ("🌧", ""),  // LightSleet
-        ("🌧", ""),  // LightSleetShowers
-        ("🌨", ""),  // LightSnow
-        ("🌨", ""),  // LightSnowShowers
-        ("⛅️", ""), // PartlyCloudy
-        ("☀️", ""), // Sunny
-        ("🌩", ""),  // ThunderyHeavyRain
-        ("⛈", ""),  // ThunderyShowers
-        ("⛈", ""),  // ThunderySnowShowers
-        ("☁️", ""),
+        ("☁️", "󰖐"), // Cloudy
+        ("🌫", "󰖑"),  // Fog
+        ("🌧", "󰖖"),  // HeavyRain
+        ("🌧", "󰖖"),  // HeavyShowers
+        ("❄️", "󰼶"), // HeavySnow
+        ("❄️", "󰼶"), // HeavySnowShowers
+        ("🌦", "󰖗"),  // LightRain
+        ("🌦", "󰖗"),  // LightShowers
+        ("🌧", "󰖗"),  // LightSleet
+        ("🌧", "󰖗"),  // LightSleetShowers
+        ("🌨", "󰖘"),  // LightSnow
+        ("🌨", "󰖘"),  // LightSnowShowers
+        ("⛅️", "󰖕"), // PartlyCloudy
+        ("☀️", "󰖙"), // Sunny
+        ("🌩", "󰙾"),  // ThunderyHeavyRain
+        ("⛈", "󰙾"),  // ThunderyShowers
+        ("⛈", "󰙾"),  // ThunderySnowShowers
+        ("☁️", "󰹮"),
     ])
 });
 
@@ -134,7 +134,13 @@ impl RenderablePolybarModule for WttrModule {
                     state.temp
                 )
             }
-            None => markup::style("", Some(theme::Color::Attention), None, None, None),
+            None => markup::style(
+                ICON_WARNING,
+                Some(theme::Color::Attention),
+                None,
+                None,
+                None,
+            ),
         }
     }
 }
@@ -154,6 +160,6 @@ mod tests {
         assert_eq!(module.render(&state), "%{F#eee8d5}%{F-} 15°C");
 
         let state = None;
-        assert_eq!(module.render(&state), "%{F#cb4b16}%{F-}");
+        assert_eq!(module.render(&state), "%{F#cb4b16}%{F-}");
     }
 }

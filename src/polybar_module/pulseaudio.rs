@@ -10,7 +10,11 @@ use std::{
 use anyhow::Context as _;
 
 use super::is_systemd_user_unit_running;
-use crate::{markup, polybar_module::RenderablePolybarModule, theme};
+use crate::{
+    markup,
+    polybar_module::RenderablePolybarModule,
+    theme::{self, ICON_WARNING},
+};
 
 pub(crate) struct PulseAudioModule {
     pactl_subscribe_child: Child,
@@ -245,6 +249,9 @@ impl Drop for PulseAudioModule {
     }
 }
 
+const ICON_AUDIO_EFFECTS: &str = "󰋍";
+const ICON_MICROPHONE: &str = "";
+
 impl RenderablePolybarModule for PulseAudioModule {
     type State = Option<PulseAudioModuleState>;
 
@@ -299,7 +306,7 @@ impl RenderablePolybarModule for PulseAudioModule {
                 if let Some(easyeffects) = state.easyeffects {
                     let fragment = markup::action(
                         &markup::style(
-                            "󰷞",
+                            ICON_AUDIO_EFFECTS,
                             None,
                             easyeffects.then_some(theme::Color::Foreground),
                             None,
@@ -345,7 +352,7 @@ impl RenderablePolybarModule for PulseAudioModule {
                 }
                 if state.sources.len() > 1 {
                     fragments.push(markup::style(
-                        "",
+                        ICON_MICROPHONE,
                         Some(theme::Color::MainIcon),
                         None,
                         None,
@@ -373,7 +380,13 @@ impl RenderablePolybarModule for PulseAudioModule {
                 }
                 fragments.join(" ").trim_end().to_owned()
             }
-            None => markup::style("", Some(theme::Color::Attention), None, None, None),
+            None => markup::style(
+                ICON_WARNING,
+                Some(theme::Color::Attention),
+                None,
+                None,
+                None,
+            ),
         }
     }
 }
@@ -490,7 +503,7 @@ mod tests {
         });
         assert_eq!(
             module.render(&state),
-            "%{A1:systemctl --user -q --no-block stop easyeffects.service:}%{u#93a1a1}%{+u}\u{f0dde}%{-u}%{A}"
+            "%{A1:systemctl --user -q --no-block stop easyeffects.service:}%{u#93a1a1}%{+u}󰋍%{-u}%{A}"
         );
 
         let state = Some(PulseAudioModuleState {
@@ -500,7 +513,7 @@ mod tests {
         });
         assert_eq!(
             module.render(&state),
-            "%{A1:systemctl --user -q --no-block start easyeffects.service:}\u{f0dde}%{A}"
+            "%{A1:systemctl --user -q --no-block start easyeffects.service:}󰋍%{A}"
         );
 
         let state = Some(PulseAudioModuleState {
@@ -521,7 +534,7 @@ mod tests {
         });
         assert_eq!(
             module.render(&state),
-            "%{A1:systemctl --user -q --no-block stop easyeffects.service:}%{u#93a1a1}%{+u}\u{f0dde}%{-u}%{A}   %{F#eee8d5}\u{e992}%{F-} %{A1:pactl set-default-source 1:}so1%{A} %{u#93a1a1}%{+u}so2%{-u}"
+            "%{A1:systemctl --user -q --no-block stop easyeffects.service:}%{u#93a1a1}%{+u}󰋍%{-u}%{A}   %{F#eee8d5}%{F-} %{A1:pactl set-default-source 1:}so1%{A} %{u#93a1a1}%{+u}so2%{-u}"
         );
 
         let state = Some(PulseAudioModuleState {
@@ -542,7 +555,7 @@ mod tests {
         });
         assert_eq!(
             module.render(&state),
-            "%{A1:systemctl --user -q --no-block stop easyeffects.service:}%{u#93a1a1}%{+u}\u{f0dde}%{-u}%{A} %{A1:pactl set-default-sink 1:}si1%{A} %{u#93a1a1}%{+u}si2%{-u}"
+            "%{A1:systemctl --user -q --no-block stop easyeffects.service:}%{u#93a1a1}%{+u}󰋍%{-u}%{A} %{A1:pactl set-default-sink 1:}si1%{A} %{u#93a1a1}%{+u}si2%{-u}"
         );
 
         let state = Some(PulseAudioModuleState {
@@ -574,10 +587,10 @@ mod tests {
         });
         assert_eq!(
             module.render(&state),
-            "%{A1:systemctl --user -q --no-block stop easyeffects.service:}%{u#93a1a1}%{+u}\u{f0dde}%{-u}%{A} %{A1:pactl set-default-sink 1:}si1%{A} %{u#93a1a1}%{+u}si2%{-u}  %{F#eee8d5}\u{e992}%{F-} %{A1:pactl set-default-source 1:}so1%{A} %{u#93a1a1}%{+u}so2%{-u}"
+            "%{A1:systemctl --user -q --no-block stop easyeffects.service:}%{u#93a1a1}%{+u}󰋍%{-u}%{A} %{A1:pactl set-default-sink 1:}si1%{A} %{u#93a1a1}%{+u}si2%{-u}  %{F#eee8d5}%{F-} %{A1:pactl set-default-source 1:}so1%{A} %{u#93a1a1}%{+u}so2%{-u}"
         );
 
         let state = None;
-        assert_eq!(module.render(&state), "%{F#cb4b16}%{F-}");
+        assert_eq!(module.render(&state), "%{F#cb4b16}%{F-}");
     }
 }

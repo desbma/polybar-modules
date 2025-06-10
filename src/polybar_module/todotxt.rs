@@ -13,7 +13,7 @@ use tasks::{Task, TodoFile};
 use crate::{
     markup,
     polybar_module::{PolybarModuleEnv, RenderablePolybarModule},
-    theme,
+    theme::{self, ICON_WARNING},
 };
 
 pub(crate) struct TodoTxtModule {
@@ -83,6 +83,9 @@ impl TodoTxtModule {
             .map(|m| m.modified().unwrap())
     }
 }
+
+const ICON_TODOTXT: &str = "";
+const ICON_TODOTXT_HIDDEN: &str = "";
 
 impl RenderablePolybarModule for TodoTxtModule {
     type State = Option<TodoTxtModuleState>;
@@ -156,7 +159,7 @@ impl RenderablePolybarModule for TodoTxtModule {
             }) => {
                 let s1 = format!(
                     "{} ",
-                    markup::style("", Some(theme::Color::MainIcon), None, None, None)
+                    markup::style(ICON_TODOTXT, Some(theme::Color::MainIcon), None, None, None)
                 );
                 let s2 = format!("{pending_count} ");
                 let max_task_len = self.max_len.map(|max_len| max_len - s2.len());
@@ -207,9 +210,9 @@ impl RenderablePolybarModule for TodoTxtModule {
             Some(TodoTxtModuleState::Paused) => {
                 format!(
                     "{} {}",
-                    markup::style("", Some(theme::Color::MainIcon), None, None, None),
+                    markup::style(ICON_TODOTXT, Some(theme::Color::MainIcon), None, None, None),
                     markup::action(
-                        &markup::style("", None, None, None, None),
+                        &markup::style(ICON_TODOTXT_HIDDEN, None, None, None, None),
                         markup::PolybarAction {
                             type_: markup::PolybarActionType::ClickLeft,
                             command: format!(
@@ -220,7 +223,13 @@ impl RenderablePolybarModule for TodoTxtModule {
                     ),
                 )
             }
-            None => markup::style("", Some(theme::Color::Attention), None, None, None),
+            None => markup::style(
+                ICON_WARNING,
+                Some(theme::Color::Attention),
+                None,
+                None,
+                None,
+            ),
         }
     }
 }
@@ -249,7 +258,7 @@ mod tests {
         assert_eq!(
             module.render(&state),
             format!(
-                "%{{F#eee8d5}}%{{F-}} %{{A1:touch {}/public_screen:}}10 😌%{{A}}",
+                "%{{F#eee8d5}}%{{F-}} %{{A1:touch {}/public_screen:}}10 😌%{{A}}",
                 runtime_dir.to_str().unwrap()
             )
         );
@@ -266,7 +275,7 @@ mod tests {
         assert_eq!(
             module.render(&state),
             format!(
-                "%{{F#eee8d5}}%{{F-}} %{{A1:touch {}/public_screen:}}10 todo%{{A}}",
+                "%{{F#eee8d5}}%{{F-}} %{{A1:touch {}/public_screen:}}10 todo%{{A}}",
                 runtime_dir.to_str().unwrap()
             )
         );
@@ -283,7 +292,7 @@ mod tests {
         assert_eq!(
             module.render(&state),
             format!(
-                "%{{F#eee8d5}}%{{F-}} %{{A1:touch {}/public_screen:}}10 todo%{{A}}",
+                "%{{F#eee8d5}}%{{F-}} %{{A1:touch {}/public_screen:}}10 todo%{{A}}",
                 runtime_dir.to_str().unwrap()
             )
         );
@@ -307,7 +316,7 @@ mod tests {
         assert_eq!(
             module.render(&state),
             format!(
-                "%{{F#eee8d5}}%{{F-}} %{{A1:touch {}/public_screen:}}10 %{{u#cb4b16}}%{{+u}}todo%{{-u}}%{{A}}",
+                "%{{F#eee8d5}}%{{F-}} %{{A1:touch {}/public_screen:}}10 %{{u#cb4b16}}%{{+u}}todo%{{-u}}%{{A}}",
                 runtime_dir.to_str().unwrap()
             )
         );
@@ -324,7 +333,7 @@ mod tests {
         assert_eq!(
             module.render(&state),
             format!(
-                "%{{F#eee8d5}}%{{F-}} %{{A1:touch {}/public_screen:}}10 %{{u#93a1a1}}%{{+u}}todo%{{-u}}%{{A}}",
+                "%{{F#eee8d5}}%{{F-}} %{{A1:touch {}/public_screen:}}10 %{{u#93a1a1}}%{{+u}}todo%{{-u}}%{{A}}",
                 runtime_dir.to_str().unwrap()
             )
         );
@@ -341,7 +350,7 @@ mod tests {
         assert_eq!(
             module.render(&state),
             format!(
-                "%{{F#eee8d5}}%{{F-}} %{{A1:touch {}/public_screen:}}10 %{{u#cb4b16}}%{{+u}}todo%{{-u}}%{{A}}",
+                "%{{F#eee8d5}}%{{F-}} %{{A1:touch {}/public_screen:}}10 %{{u#cb4b16}}%{{+u}}todo%{{-u}}%{{A}}",
                 runtime_dir.to_str().unwrap()
             )
         );
@@ -360,7 +369,7 @@ mod tests {
         assert_eq!(
             module.render(&state),
             format!(
-                "%{{F#eee8d5}}%{{F-}} %{{A1:touch {}/public_screen:}}10 todo%{{A}}",
+                "%{{F#eee8d5}}%{{F-}} %{{A1:touch {}/public_screen:}}10 todo%{{A}}",
                 runtime_dir.to_str().unwrap()
             )
         );
@@ -377,7 +386,7 @@ mod tests {
         assert_eq!(
             module.render(&state),
             format!(
-                "%{{F#eee8d5}}%{{F-}} %{{A1:touch {}/public_screen:}}101 to…%{{A}}",
+                "%{{F#eee8d5}}%{{F-}} %{{A1:touch {}/public_screen:}}101 to…%{{A}}",
                 runtime_dir.to_str().unwrap()
             )
         );
@@ -394,7 +403,7 @@ mod tests {
         assert_eq!(
             module.render(&state),
             format!(
-                "%{{F#eee8d5}}%{{F-}} %{{A1:touch {}/public_screen:}}1011 t…%{{A}}",
+                "%{{F#eee8d5}}%{{F-}} %{{A1:touch {}/public_screen:}}1011 t…%{{A}}",
                 runtime_dir.to_str().unwrap()
             )
         );
@@ -411,7 +420,7 @@ mod tests {
         assert_eq!(
             module.render(&state),
             format!(
-                "%{{F#eee8d5}}%{{F-}} %{{A1:touch {}/public_screen:}}10 tod…%{{A}}",
+                "%{{F#eee8d5}}%{{F-}} %{{A1:touch {}/public_screen:}}10 tod…%{{A}}",
                 runtime_dir.to_str().unwrap()
             )
         );
@@ -420,7 +429,7 @@ mod tests {
         assert_eq!(
             module.render(&state),
             format!(
-                "%{{F#eee8d5}}%{{F-}} %{{A1:rm {}/public_screen:}}%{{A}}",
+                "%{{F#eee8d5}}%{{F-}} %{{A1:rm {}/public_screen:}}%{{A}}",
                 runtime_dir.to_str().unwrap()
             )
         );

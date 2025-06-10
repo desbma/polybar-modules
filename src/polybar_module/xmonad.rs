@@ -7,7 +7,11 @@ use std::{
     time::Duration,
 };
 
-use crate::{markup, polybar_module::RenderablePolybarModule, theme};
+use crate::{
+    markup,
+    polybar_module::RenderablePolybarModule,
+    theme::{self, ICON_WARNING},
+};
 
 pub(crate) struct XmonadModule {
     xdg_dirs: xdg::BaseDirectories,
@@ -117,7 +121,13 @@ impl RenderablePolybarModule for XmonadModule {
                 .collect::<Vec<String>>()
                 .join(" ")
         } else {
-            markup::style("", Some(theme::Color::Attention), None, None, None)
+            markup::style(
+                ICON_WARNING,
+                Some(theme::Color::Attention),
+                None,
+                None,
+                None,
+            )
         }
     }
 }
@@ -142,6 +152,6 @@ mod tests {
         assert_eq!(module.render(&state), "Tabb Simp");
 
         let state = None;
-        assert_eq!(module.render(&state), "%{F#cb4b16}%{F-}");
+        assert_eq!(module.render(&state), "%{F#cb4b16}%{F-}");
     }
 }

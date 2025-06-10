@@ -11,7 +11,11 @@ use std::{
 
 use itertools::Itertools as _;
 
-use crate::{markup, polybar_module::RenderablePolybarModule, theme};
+use crate::{
+    markup,
+    polybar_module::RenderablePolybarModule,
+    theme::{self, ICON_WARNING},
+};
 
 pub(crate) struct ProgressBarServerModule {
     max_len: usize,
@@ -142,6 +146,8 @@ impl ProgressBarServerModule {
     }
 }
 
+const ICON_PROGRESSBAR_SERVER: &str = "";
+
 impl RenderablePolybarModule for ProgressBarServerModule {
     type State = Option<ProgressBarServerModuleState>;
 
@@ -177,14 +183,26 @@ impl RenderablePolybarModule for ProgressBarServerModule {
                 } else if let Ok(Some(progress)) = state.progress.iter().at_most_one() {
                     format!(
                         "{} {} {}",
-                        markup::style("", Some(theme::Color::Foreground), None, None, None),
+                        markup::style(
+                            ICON_PROGRESSBAR_SERVER,
+                            Some(theme::Color::MainIcon),
+                            None,
+                            None,
+                            None
+                        ),
                         state.progress.len(),
                         Self::render_progress(*progress, self.max_len - 2)
                     )
                 } else if let Some((progress1, progress2)) = state.progress.iter().collect_tuple() {
                     format!(
                         "{} {} {} {}",
-                        markup::style("", Some(theme::Color::Foreground), None, None, None),
+                        markup::style(
+                            ICON_PROGRESSBAR_SERVER,
+                            Some(theme::Color::MainIcon),
+                            None,
+                            None,
+                            None
+                        ),
                         state.progress.len(),
                         Self::render_progress(*progress1, (self.max_len - 3) / 2),
                         Self::render_progress(*progress2, (self.max_len - 3) / 2),
@@ -193,7 +211,13 @@ impl RenderablePolybarModule for ProgressBarServerModule {
                     // Average progress, then maximum
                     format!(
                         "{} {} {} {}",
-                        markup::style("", Some(theme::Color::Foreground), None, None, None),
+                        markup::style(
+                            ICON_PROGRESSBAR_SERVER,
+                            Some(theme::Color::MainIcon),
+                            None,
+                            None,
+                            None
+                        ),
                         state.progress.len(),
                         Self::render_progress(
                             state.progress.iter().sum::<u32>() / state.progress.len() as u32,
@@ -206,7 +230,13 @@ impl RenderablePolybarModule for ProgressBarServerModule {
                     )
                 }
             }
-            None => markup::style("", Some(theme::Color::Attention), None, None, None),
+            None => markup::style(
+                ICON_WARNING,
+                Some(theme::Color::Attention),
+                None,
+                None,
+                None,
+            ),
         }
     }
 }
@@ -226,7 +256,7 @@ mod tests {
         let state = Some(ProgressBarServerModuleState { progress: vec![30] });
         assert_eq!(
             module.render(&state),
-            "%{F#93a1a1}%{F-} 1 ■■■■■             "
+            "%{F#eee8d5}%{F-} 1 ■■■■■             "
         );
 
         let state = Some(ProgressBarServerModuleState {
@@ -234,7 +264,7 @@ mod tests {
         });
         assert_eq!(
             module.render(&state),
-            "%{F#93a1a1}%{F-} 2 ■■       ■■■     "
+            "%{F#eee8d5}%{F-} 2 ■■       ■■■     "
         );
 
         let state = Some(ProgressBarServerModuleState {
@@ -242,40 +272,40 @@ mod tests {
         });
         assert_eq!(
             module.render(&state),
-            "%{F#93a1a1}%{F-} 3 ■■■      ■■■■    "
+            "%{F#eee8d5}%{F-} 3 ■■■      ■■■■    "
         );
 
         let module = ProgressBarServerModule::new(5).unwrap();
 
         let state = Some(ProgressBarServerModuleState { progress: vec![30] });
-        assert_eq!(module.render(&state), "%{F#93a1a1}%{F-} 1    ");
+        assert_eq!(module.render(&state), "%{F#eee8d5}%{F-} 1    ");
 
         let state = Some(ProgressBarServerModuleState {
             progress: vec![100],
         });
-        assert_eq!(module.render(&state), "%{F#93a1a1}%{F-} 1 ■■■");
+        assert_eq!(module.render(&state), "%{F#eee8d5}%{F-} 1 ■■■");
 
         let state = Some(ProgressBarServerModuleState {
             progress: vec![30, 45],
         });
-        assert_eq!(module.render(&state), "%{F#93a1a1}%{F-} 2 ▃ ▄");
+        assert_eq!(module.render(&state), "%{F#eee8d5}%{F-} 2 ▃ ▄");
 
         let state = Some(ProgressBarServerModuleState {
             progress: vec![30, 100],
         });
-        assert_eq!(module.render(&state), "%{F#93a1a1}%{F-} 2 ▃ █");
+        assert_eq!(module.render(&state), "%{F#eee8d5}%{F-} 2 ▃ █");
 
         let state = Some(ProgressBarServerModuleState {
             progress: vec![30, 40, 50],
         });
-        assert_eq!(module.render(&state), "%{F#93a1a1}%{F-} 3 ▃ ▄");
+        assert_eq!(module.render(&state), "%{F#eee8d5}%{F-} 3 ▃ ▄");
 
         let state = Some(ProgressBarServerModuleState {
             progress: vec![30, 100, 50],
         });
-        assert_eq!(module.render(&state), "%{F#93a1a1}%{F-} 3 ▅ █");
+        assert_eq!(module.render(&state), "%{F#eee8d5}%{F-} 3 ▅ █");
 
         let state = None;
-        assert_eq!(module.render(&state), "%{F#cb4b16}%{F-}");
+        assert_eq!(module.render(&state), "%{F#cb4b16}%{F-}");
     }
 }

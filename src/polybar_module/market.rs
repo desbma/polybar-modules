@@ -7,7 +7,7 @@ use chrono::Datelike as _;
 use crate::{
     markup,
     polybar_module::{NetworkMode, PolybarModuleEnv, RenderablePolybarModule, TCP_REMOTE_TIMEOUT},
-    theme,
+    theme::{self, ICON_WARNING},
 };
 
 pub(crate) struct MarketModule {
@@ -128,6 +128,9 @@ impl MarketModule {
     }
 }
 
+const ICON_MARKET_UP: &str = "";
+const ICON_MARKET_DOWN: &str = "";
+
 impl RenderablePolybarModule for MarketModule {
     type State = Option<MarketModuleState>;
 
@@ -176,9 +179,9 @@ impl RenderablePolybarModule for MarketModule {
                     "{} {:.0} {}",
                     markup::style(
                         if state.ma50 >= state.ma100 {
-                            ""
+                            ICON_MARKET_UP
                         } else {
-                            ""
+                            ICON_MARKET_DOWN
                         },
                         Some(theme::Color::MainIcon),
                         None,
@@ -203,7 +206,13 @@ impl RenderablePolybarModule for MarketModule {
                     ),
                 )
             }
-            None => markup::style("", Some(theme::Color::Attention), None, None, None),
+            None => markup::style(
+                ICON_WARNING,
+                Some(theme::Color::Attention),
+                None,
+                None,
+                None,
+            ),
         }
     }
 }
@@ -267,6 +276,6 @@ mod tests {
         );
 
         let state = None;
-        assert_eq!(module.render(&state), "%{F#cb4b16}%{F-}");
+        assert_eq!(module.render(&state), "%{F#cb4b16}%{F-}");
     }
 }

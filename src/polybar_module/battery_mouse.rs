@@ -30,6 +30,8 @@ impl BatteryMouseModule {
     }
 }
 
+const ICON_MOUSE: &str = "󰍽";
+
 impl RenderablePolybarModule for BatteryMouseModule {
     type State = BatteryMouseModuleState;
 
@@ -79,7 +81,7 @@ impl RenderablePolybarModule for BatteryMouseModule {
         let mut fragments: Vec<String> = Vec::new();
         if !state.levels.is_empty() {
             fragments.push(markup::style(
-                "",
+                ICON_MOUSE,
                 Some(theme::Color::MainIcon),
                 None,
                 None,
@@ -128,7 +130,7 @@ mod tests {
         let state = BatteryMouseModuleState { levels };
         assert_eq!(
             module.render(&state),
-            "%{F#eee8d5}%{F-} m0 100% m1 50% %{F#b58900}m2 49%%{F-} %{F#cb4b16}m3 30%%{F-} %{F#cb4b16}m4 29%%{F-} %{F#cb4b16}m5 5%%{F-} m6 ?"
+            "%{F#eee8d5}󰍽%{F-} m0 100% m1 50% %{F#b58900}m2 49%%{F-} %{F#cb4b16}m3 30%%{F-} %{F#cb4b16}m4 29%%{F-} %{F#cb4b16}m5 5%%{F-} m6 ?"
         );
     }
 }

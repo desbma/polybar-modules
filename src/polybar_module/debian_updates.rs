@@ -9,8 +9,10 @@ use backoff::backoff::Backoff as _;
 
 use crate::{
     markup,
-    polybar_module::{NetworkMode, PolybarModuleEnv, RenderablePolybarModule},
-    theme,
+    polybar_module::{
+        NetworkMode, PolybarModuleEnv, RenderablePolybarModule, arch_updates::ICON_UPDATE,
+    },
+    theme::{self, ICON_WARNING},
 };
 
 pub(crate) struct DebianUpdatesModule {
@@ -146,7 +148,7 @@ impl RenderablePolybarModule for DebianUpdatesModule {
                 } else {
                     let mut r = format!(
                         "{} {}",
-                        markup::style("", Some(theme::Color::MainIcon), None, None, None),
+                        markup::style(ICON_UPDATE, Some(theme::Color::MainIcon), None, None, None),
                         state.update_count
                     );
                     if state.security_update_count > 0 {
@@ -161,7 +163,13 @@ impl RenderablePolybarModule for DebianUpdatesModule {
                     r
                 }
             }
-            None => markup::style("", Some(theme::Color::Attention), None, None, None),
+            None => markup::style(
+                ICON_WARNING,
+                Some(theme::Color::Attention),
+                None,
+                None,
+                None,
+            ),
         }
     }
 }
@@ -185,7 +193,7 @@ mod tests {
             update_count: 12,
             security_update_count: 0,
         });
-        assert_eq!(module.render(&state), "%{F#eee8d5}%{F-} 12");
+        assert_eq!(module.render(&state), "%{F#eee8d5}%{F-} 12");
 
         let state = Some(DebianUpdatesModuleState {
             update_count: 12,
@@ -193,10 +201,10 @@ mod tests {
         });
         assert_eq!(
             module.render(&state),
-            "%{F#eee8d5}%{F-} 12%{F#cb4b16}(2)%{F-}"
+            "%{F#eee8d5}%{F-} 12%{F#cb4b16}(2)%{F-}"
         );
 
         let state = None;
-        assert_eq!(module.render(&state), "%{F#cb4b16}%{F-}");
+        assert_eq!(module.render(&state), "%{F#cb4b16}%{F-}");
     }
 }

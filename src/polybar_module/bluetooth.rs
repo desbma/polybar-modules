@@ -140,6 +140,9 @@ impl Drop for BluetoothModule {
     }
 }
 
+const ICON_BLUETOOTH_ENABLED: &str = "󰂯";
+const ICON_BLUETOOTH_DISABLED: &str = "󰂲";
+
 impl RenderablePolybarModule for BluetoothModule {
     type State = BluetoothModuleState;
 
@@ -242,7 +245,13 @@ impl RenderablePolybarModule for BluetoothModule {
     fn render(&self, state: &Self::State) -> String {
         let mut fragments: Vec<String> = vec![if state.controller_powered {
             markup::action(
-                &markup::style("󰂯", Some(theme::Color::MainIcon), None, None, None),
+                &markup::style(
+                    ICON_BLUETOOTH_ENABLED,
+                    Some(theme::Color::MainIcon),
+                    None,
+                    None,
+                    None,
+                ),
                 markup::PolybarAction {
                     type_: markup::PolybarActionType::ClickLeft,
                     command: "bluetoothctl power off".to_owned(),
@@ -250,7 +259,13 @@ impl RenderablePolybarModule for BluetoothModule {
             )
         } else {
             markup::action(
-                &markup::style("󰂲", Some(theme::Color::MainIcon), None, None, None),
+                &markup::style(
+                    ICON_BLUETOOTH_DISABLED,
+                    Some(theme::Color::MainIcon),
+                    None,
+                    None,
+                    None,
+                ),
                 markup::PolybarAction {
                     type_: markup::PolybarActionType::ClickLeft,
                     command: "bluetoothctl power on".to_owned(),
@@ -343,7 +358,7 @@ mod tests {
         };
         assert_eq!(
             module.render(&state),
-            "%{A1:bluetoothctl power on:}%{F#eee8d5}\u{f00b2}%{F-}%{A}"
+            "%{A1:bluetoothctl power on:}%{F#eee8d5}󰂲%{F-}%{A}"
         );
 
         let state = BluetoothModuleState {
@@ -352,7 +367,7 @@ mod tests {
         };
         assert_eq!(
             module.render(&state),
-            "%{A1:bluetoothctl power off:}%{F#eee8d5}\u{f00af}%{F-}%{A}"
+            "%{A1:bluetoothctl power off:}%{F#eee8d5}󰂯%{F-}%{A}"
         );
 
         let state = BluetoothModuleState {
@@ -372,7 +387,7 @@ mod tests {
         };
         assert_eq!(
             module.render(&state),
-            "%{A1:bluetoothctl power off:}%{F#eee8d5}\u{f00af}%{F-}%{A} %{A1:bluetoothctl connect 01\\:02\\:03\\:04\\:05\\:06:}D1%{A} %{A1:bluetoothctl disconnect 02\\:01\\:03\\:04\\:05\\:06:}%{u#93a1a1}%{+u}D2%{-u}%{A}"
+            "%{A1:bluetoothctl power off:}%{F#eee8d5}󰂯%{F-}%{A} %{A1:bluetoothctl connect 01\\:02\\:03\\:04\\:05\\:06:}D1%{A} %{A1:bluetoothctl disconnect 02\\:01\\:03\\:04\\:05\\:06:}%{u#93a1a1}%{+u}D2%{-u}%{A}"
         );
 
         // SAFETY: actually NOT safe, but this is for tests only, and we are feeling lucky

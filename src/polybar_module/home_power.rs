@@ -17,7 +17,7 @@ use crate::{
     config::{HomePowerModuleConfig, InverterModbusConfig, ShellyDeviceConfig},
     markup,
     polybar_module::{NetworkMode, PolybarModuleEnv, RenderablePolybarModule},
-    theme,
+    theme::{self, ICON_WARNING},
 };
 
 pub(crate) struct HomePowerModule {
@@ -354,6 +354,13 @@ impl HomePowerModule {
     }
 }
 
+const ICON_POWER: &str = "";
+const ICON_POWER_SOLAR: &str = "";
+const ICON_POWER_HOME: &str = "󱤃";
+const ICON_POWER_GRID: &str = "󰴾";
+const ICON_POWER_FLOW_LEFT: &str = "";
+const ICON_POWER_FLOW_RIGHT: &str = "";
+
 impl RenderablePolybarModule for HomePowerModule {
     type State = Option<HomePowerModuleState>;
 
@@ -385,16 +392,23 @@ impl RenderablePolybarModule for HomePowerModule {
         match state {
             Some(state) => {
                 format!(
-                    "{} {:.1}{}󱤃{:.1}{}󰴾{:.1}kW{}",
-                    markup::style("", Some(theme::Color::MainIcon), None, None, None),
+                    "{} {}{:.1}{}{}{:.1}{}{}{:.1}kW{}",
+                    markup::style(ICON_POWER, Some(theme::Color::MainIcon), None, None, None),
+                    ICON_POWER_SOLAR,
                     f64::from(state.solar_power) / 1000.0,
-                    if state.solar_power > 0 { '' } else { ' ' },
+                    if state.solar_power > 0 {
+                        ICON_POWER_FLOW_RIGHT
+                    } else {
+                        " "
+                    },
+                    ICON_POWER_HOME,
                     f64::from(state.home_consumption_power) / 1000.0,
                     match state.solar_power.cmp(&state.home_consumption_power) {
-                        Ordering::Greater => '',
-                        Ordering::Less => '',
-                        Ordering::Equal => ' ',
+                        Ordering::Greater => ICON_POWER_FLOW_RIGHT,
+                        Ordering::Less => ICON_POWER_FLOW_LEFT,
+                        Ordering::Equal => " ",
                     },
+                    ICON_POWER_GRID,
                     f64::from(state.grid_power) / 1000.0,
                     if state.devices.is_empty() {
                         String::new()
@@ -427,7 +441,13 @@ impl RenderablePolybarModule for HomePowerModule {
                     }
                 )
             }
-            None => markup::style("", Some(theme::Color::Attention), None, None, None),
+            None => markup::style(
+                ICON_WARNING,
+                Some(theme::Color::Attention),
+                None,
+                None,
+                None,
+            ),
         }
     }
 }
@@ -454,10 +474,7 @@ mod tests {
             grid_power: 1400,
             devices: vec![],
         });
-        assert_eq!(
-            module.render(&state),
-            "%{F#eee8d5}\u{ea06}%{F-} \u{ee81}2.0\u{e912}\u{f1903}0.6\u{e912}\u{f0d3e}1.4kW"
-        );
+        assert_eq!(module.render(&state), "%{F#eee8d5}%{F-} 2.0󱤃0.6󰴾1.4kW");
 
         let state = Some(HomePowerModuleState {
             solar_power: 0,
@@ -493,10 +510,10 @@ mod tests {
         });
         assert_eq!(
             module.render(&state),
-            "%{F#eee8d5}\u{ea06}%{F-} \u{ee81}0.0 \u{f1903}0.6\u{e910}\u{f0d3e}1.4kW D1 %{u#93a1a1}%{+u}D2%{-u} %{u#b58900}%{+u}D3%{-u} %{F#657b83}D4%{F-}"
+            "%{F#eee8d5}%{F-} 0.0 󱤃0.6󰴾1.4kW D1 %{u#93a1a1}%{+u}D2%{-u} %{u#b58900}%{+u}D3%{-u} %{F#657b83}D4%{F-}"
         );
 
         let state = None;
-        assert_eq!(module.render(&state), "%{F#cb4b16}%{F-}");
+        assert_eq!(module.render(&state), "%{F#cb4b16}%{F-}");
     }
 }

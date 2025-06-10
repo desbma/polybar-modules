@@ -17,6 +17,9 @@ impl AutolockModule {
     }
 }
 
+const ICON_AUTOLOCK_ENABLED: &str = "󱫗";
+const ICON_AUTOLOCK_DISABLED: &str = "󱫕";
+
 impl RenderablePolybarModule for AutolockModule {
     type State = AutolockModuleState;
 
@@ -35,7 +38,7 @@ impl RenderablePolybarModule for AutolockModule {
     fn render(&self, state: &Self::State) -> String {
         if state.enabled {
             markup::action(
-                "󱫗",
+                ICON_AUTOLOCK_ENABLED,
                 markup::PolybarAction {
                     type_: markup::PolybarActionType::ClickLeft,
                     command: format!(
@@ -46,7 +49,13 @@ impl RenderablePolybarModule for AutolockModule {
             )
         } else {
             markup::action(
-                &markup::style("󱫖", None, Some(theme::Color::Notice), None, None),
+                &markup::style(
+                    ICON_AUTOLOCK_DISABLED,
+                    None,
+                    Some(theme::Color::Notice),
+                    None,
+                    None,
+                ),
                 markup::PolybarAction {
                     type_: markup::PolybarActionType::ClickLeft,
                     command: format!(
@@ -72,7 +81,7 @@ mod tests {
         assert_eq!(
             module.render(&state),
             format!(
-                "%{{A1:systemctl --user stop autolock.service && pkill -USR1 -f \'polybar-modules autolock$\':}}\u{f1ad7}%{{A}}",
+                "%{{A1:systemctl --user stop autolock.service && pkill -USR1 -f \'polybar-modules autolock$\':}}󱫗%{{A}}",
             )
         );
 
@@ -80,7 +89,7 @@ mod tests {
         assert_eq!(
             module.render(&state),
             format!(
-                "%{{A1:systemctl --user start autolock.service && pkill -USR1 -f \'polybar-modules autolock$\':}}%{{u#b58900}}%{{+u}}\u{f1ad6}%{{-u}}%{{A}}",
+                "%{{A1:systemctl --user start autolock.service && pkill -USR1 -f \'polybar-modules autolock$\':}}%{{u#b58900}}%{{+u}}󱫕%{{-u}}%{{A}}",
             )
         );
     }

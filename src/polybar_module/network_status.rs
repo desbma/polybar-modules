@@ -13,7 +13,7 @@ use sysinfo::Networks;
 use crate::{
     config, markup,
     polybar_module::{NetworkMode, PolybarModuleEnv, RenderablePolybarModule},
-    theme,
+    theme::{self, ICON_WARNING},
 };
 
 const PING_AVG_COUNT: usize = 3;
@@ -262,6 +262,9 @@ impl Drop for NetworkStatusModule {
     }
 }
 
+const ICON_NETWORK: &str = "";
+const ICON_NETWORK_VPN: &str = "󰒃";
+
 impl RenderablePolybarModule for NetworkStatusModule {
     type State = Option<NetworkStatusModuleState>;
 
@@ -298,7 +301,7 @@ impl RenderablePolybarModule for NetworkStatusModule {
         match state {
             Some(state) => {
                 let mut fragments: Vec<String> = vec![markup::style(
-                    "",
+                    ICON_NETWORK,
                     Some(theme::Color::MainIcon),
                     None,
                     None,
@@ -317,7 +320,13 @@ impl RenderablePolybarModule for NetworkStatusModule {
                 if !state.vpn.is_empty() {
                     fragments.push(format!(
                         " {}",
-                        markup::style("", Some(theme::Color::MainIcon), None, None, None,)
+                        markup::style(
+                            ICON_NETWORK_VPN,
+                            Some(theme::Color::MainIcon),
+                            None,
+                            None,
+                            None,
+                        )
                     ));
                     for wireguard_interface in &state.vpn {
                         fragments.push(markup::style(
@@ -331,7 +340,13 @@ impl RenderablePolybarModule for NetworkStatusModule {
                 }
                 fragments.join(" ")
             }
-            None => markup::style("", Some(theme::Color::Attention), None, None, None),
+            None => markup::style(
+                ICON_WARNING,
+                Some(theme::Color::Attention),
+                None,
+                None,
+                None,
+            ),
         }
     }
 }
@@ -392,10 +407,10 @@ mod tests {
         });
         assert_eq!(
             module.render(&state),
-            "%{F#eee8d5}%{F-} %{u#93a1a1}%{+u}h1%{-u} %{F#cb4b16}h2%{F-}  %{F#eee8d5}%{F-} %{u#93a1a1}%{+u}i1%{-u}"
+            "%{F#eee8d5}%{F-} %{u#93a1a1}%{+u}h1%{-u} %{F#cb4b16}h2%{F-}  %{F#eee8d5}󰒃%{F-} %{u#93a1a1}%{+u}i1%{-u}"
         );
 
         let state = None;
-        assert_eq!(module.render(&state), "%{F#cb4b16}%{F-}");
+        assert_eq!(module.render(&state), "%{F#cb4b16}%{F-}");
     }
 }

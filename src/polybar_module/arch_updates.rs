@@ -12,7 +12,7 @@ use backoff::{ExponentialBackoff, ExponentialBackoffBuilder, backoff::Backoff as
 use crate::{
     markup,
     polybar_module::{NetworkMode, PolybarModuleEnv, RenderablePolybarModule},
-    theme,
+    theme::{self, ICON_WARNING},
 };
 
 pub(crate) struct ArchUpdatesModule {
@@ -126,6 +126,8 @@ impl ArchUpdatesModule {
     }
 }
 
+pub(crate) const ICON_UPDATE: &str = "";
+
 impl RenderablePolybarModule for ArchUpdatesModule {
     type State = Option<ArchUpdatesModuleState>;
 
@@ -163,7 +165,7 @@ impl RenderablePolybarModule for ArchUpdatesModule {
                 } else {
                     let mut r = format!(
                         "{} {}",
-                        markup::style("", Some(theme::Color::MainIcon), None, None, None),
+                        markup::style(ICON_UPDATE, Some(theme::Color::MainIcon), None, None, None),
                         state.repo_update_count
                     );
                     if state.repo_security_update_count > 0 {
@@ -181,7 +183,13 @@ impl RenderablePolybarModule for ArchUpdatesModule {
                     r
                 }
             }
-            None => markup::style("", Some(theme::Color::Attention), None, None, None),
+            None => markup::style(
+                ICON_WARNING,
+                Some(theme::Color::Attention),
+                None,
+                None,
+                None,
+            ),
         }
     }
 }
@@ -207,7 +215,7 @@ mod tests {
             repo_security_update_count: 0,
             aur_update_count: 0,
         });
-        assert_eq!(module.render(&state), "%{F#eee8d5}%{F-} 12");
+        assert_eq!(module.render(&state), "%{F#eee8d5}%{F-} 12");
 
         let state = Some(ArchUpdatesModuleState {
             repo_update_count: 12,
@@ -216,7 +224,7 @@ mod tests {
         });
         assert_eq!(
             module.render(&state),
-            "%{F#eee8d5}%{F-} 12%{F#cb4b16}(2)%{F-}"
+            "%{F#eee8d5}%{F-} 12%{F#cb4b16}(2)%{F-}"
         );
 
         let state = Some(ArchUpdatesModuleState {
@@ -226,7 +234,7 @@ mod tests {
         });
         assert_eq!(
             module.render(&state),
-            "%{F#eee8d5}%{F-} 12%{F#cb4b16}(2)%{F-}+3"
+            "%{F#eee8d5}%{F-} 12%{F#cb4b16}(2)%{F-}+3"
         );
 
         let state = Some(ArchUpdatesModuleState {
@@ -234,16 +242,16 @@ mod tests {
             repo_security_update_count: 0,
             aur_update_count: 3,
         });
-        assert_eq!(module.render(&state), "%{F#eee8d5}%{F-} 12+3");
+        assert_eq!(module.render(&state), "%{F#eee8d5}%{F-} 12+3");
 
         let state = Some(ArchUpdatesModuleState {
             repo_update_count: 0,
             repo_security_update_count: 0,
             aur_update_count: 3,
         });
-        assert_eq!(module.render(&state), "%{F#eee8d5}%{F-} 0+3");
+        assert_eq!(module.render(&state), "%{F#eee8d5}%{F-} 0+3");
 
         let state = None;
-        assert_eq!(module.render(&state), "%{F#cb4b16}%{F-}");
+        assert_eq!(module.render(&state), "%{F#cb4b16}%{F-}");
     }
 }

@@ -6,7 +6,11 @@ use std::{
     time::Duration,
 };
 
-use crate::{markup, polybar_module::RenderablePolybarModule, theme};
+use crate::{
+    markup,
+    polybar_module::RenderablePolybarModule,
+    theme::{self, ICON_WARNING},
+};
 
 pub(crate) struct GpuNvidiaModule {
     _proc: Child,
@@ -134,6 +138,8 @@ impl GpuNvidiaModule {
     }
 }
 
+const ICON_GPU: &str = "";
+
 impl RenderablePolybarModule for GpuNvidiaModule {
     type State = Option<GpuNvidiaModuleState>;
 
@@ -188,7 +194,7 @@ impl RenderablePolybarModule for GpuNvidiaModule {
                 let mem_prct = 100.0 * f32::from(state.mem_used) / f32::from(state.mem_total);
                 format!(
                     "{} {:2.0}% {} {:4}+{:4}MHz {} {:3}W",
-                    markup::style("", Some(theme::Color::MainIcon), None, None, None),
+                    markup::style(ICON_GPU, Some(theme::Color::MainIcon), None, None, None),
                     mem_prct,
                     Self::ramp_prct(mem_prct as u8),
                     state.freq_graphics,
@@ -197,7 +203,13 @@ impl RenderablePolybarModule for GpuNvidiaModule {
                     state.power_draw
                 )
             }
-            None => markup::style("", Some(theme::Color::Attention), None, None, None),
+            None => markup::style(
+                ICON_WARNING,
+                Some(theme::Color::Attention),
+                None,
+                None,
+                None,
+            ),
         }
     }
 }
@@ -282,6 +294,6 @@ mod tests {
         );
 
         let state = None;
-        assert_eq!(module.render(&state), "%{F#cb4b16}%{F-}");
+        assert_eq!(module.render(&state), "%{F#cb4b16}%{F-}");
     }
 }

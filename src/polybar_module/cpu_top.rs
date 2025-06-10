@@ -2,7 +2,11 @@ use std::{io::BufRead as _, process::Command, thread::sleep, time::Duration};
 
 use anyhow::Context as _;
 
-use crate::{markup, polybar_module::RenderablePolybarModule, theme};
+use crate::{
+    markup,
+    polybar_module::RenderablePolybarModule,
+    theme::{self, ICON_WARNING},
+};
 
 pub(crate) struct CpuTopModule {
     max_len: Option<usize>,
@@ -122,7 +126,13 @@ impl RenderablePolybarModule for CpuTopModule {
                 None,
                 None,
             ),
-            None => markup::style("", Some(theme::Color::Attention), None, None, None),
+            None => markup::style(
+                ICON_WARNING,
+                Some(theme::Color::Attention),
+                None,
+                None,
+                None,
+            ),
         }
     }
 }
@@ -200,6 +210,6 @@ mod tests {
         assert_eq!(module.render(&state), "%{F#cb4b16}99%     bz%{F-}");
 
         let state = None;
-        assert_eq!(module.render(&state), "%{F#cb4b16}%{F-}");
+        assert_eq!(module.render(&state), "%{F#cb4b16}%{F-}");
     }
 }

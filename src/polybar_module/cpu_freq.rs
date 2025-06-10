@@ -6,7 +6,11 @@ use std::{
     time::Duration,
 };
 
-use crate::{markup, polybar_module::RenderablePolybarModule, theme};
+use crate::{
+    markup,
+    polybar_module::RenderablePolybarModule,
+    theme::{self, ICON_WARNING},
+};
 
 pub(crate) struct CpuFreqModule {
     freq_range: (u32, u32),
@@ -142,7 +146,13 @@ impl RenderablePolybarModule for CpuFreqModule {
                     None,
                 )
             }
-            None => markup::style("", Some(theme::Color::Attention), None, None, None),
+            None => markup::style(
+                ICON_WARNING,
+                Some(theme::Color::Attention),
+                None,
+                None,
+                None,
+            ),
         }
     }
 }

@@ -3,7 +3,7 @@ use std::{cmp::max, collections::HashSet, fs, io, path::Path, thread::sleep, tim
 use crate::{
     markup,
     polybar_module::{RenderablePolybarModule, TCP_LOCAL_TIMEOUT, syncthing_rest},
-    theme,
+    theme::{self, ICON_WARNING},
 };
 
 pub(crate) struct SyncthingModule {
@@ -181,6 +181,12 @@ impl SyncthingModule {
     }
 }
 
+const ICON_SYNCTHING: &str = "󱋖";
+const ICON_SYNCTHING_FOLDER: &str = "";
+const ICON_SYNCTHING_DEVICE: &str = "";
+const ICON_SYNCTHING_UPLOADING: &str = "";
+const ICON_SYNCTHING_DOWNLOADING: &str = "";
+
 #[expect(clippy::single_match)]
 impl RenderablePolybarModule for SyncthingModule {
     type State = Option<SyncthingModuleState>;
@@ -226,12 +232,22 @@ impl RenderablePolybarModule for SyncthingModule {
         match state {
             Some(state) => markup::action(
                 &format!(
-                    "{}  {}  {}/{} {} {}",
-                    markup::style("", Some(theme::Color::MainIcon), None, None, None),
+                    "{} {} {} {} {}/{} {}{} {}{}",
+                    markup::style(
+                        ICON_SYNCTHING,
+                        Some(theme::Color::MainIcon),
+                        None,
+                        None,
+                        None
+                    ),
+                    ICON_SYNCTHING_FOLDER,
                     state.folder_count,
+                    ICON_SYNCTHING_DEVICE,
                     state.device_connected_count,
                     state.remote_device_count,
+                    ICON_SYNCTHING_DOWNLOADING,
                     state.folders_syncing_down_count,
+                    ICON_SYNCTHING_UPLOADING,
                     state.device_syncing_to_count
                 ),
                 markup::PolybarAction {
@@ -239,7 +255,13 @@ impl RenderablePolybarModule for SyncthingModule {
                     command: "firefox --new-tab 'http://127.0.0.1:8384/'".to_owned(),
                 },
             ),
-            None => markup::style("", Some(theme::Color::Attention), None, None, None),
+            None => markup::style(
+                ICON_WARNING,
+                Some(theme::Color::Attention),
+                None,
+                None,
+                None,
+            ),
         }
     }
 }
@@ -267,10 +289,10 @@ mod tests {
         });
         assert_eq!(
             module.render(&state),
-            "%{A1:firefox --new-tab 'http\\://127.0.0.1\\:8384/':}%{F#eee8d5}%{F-}  1  2/5 4 3%{A}"
+            "%{A1:firefox --new-tab 'http\\://127.0.0.1\\:8384/':}%{F#eee8d5}󱋖%{F-}  1  2/5 4 3%{A}"
         );
 
         let state = None;
-        assert_eq!(module.render(&state), "%{F#cb4b16}%{F-}");
+        assert_eq!(module.render(&state), "%{F#cb4b16}%{F-}");
     }
 }
