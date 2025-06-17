@@ -5,7 +5,7 @@ use std::{
     time::Duration,
 };
 
-use backoff::backoff::Backoff as _;
+use backon::BackoffBuilder as _;
 
 use crate::{
     markup,
@@ -104,11 +104,11 @@ impl RenderablePolybarModule for WttrModule {
             let sleep_duration = match prev_state {
                 // Nominal
                 Some(_) => {
-                    self.env.network_error_backoff.reset();
+                    self.env.network_error_backoff = self.env.network_error_backoff_builder.build();
                     Duration::from_secs(60 * 5)
                 }
                 // Error occured
-                None => self.env.network_error_backoff.next_backoff().unwrap(),
+                None => self.env.network_error_backoff.next().unwrap(),
             };
             sleep(sleep_duration);
         }

@@ -1,7 +1,7 @@
 use std::{sync::Arc, thread::sleep, time::Duration};
 
 use anyhow::Context as _;
-use backoff::backoff::Backoff as _;
+use backon::BackoffBuilder as _;
 use chrono::Datelike as _;
 
 use crate::{
@@ -139,11 +139,11 @@ impl RenderablePolybarModule for MarketModule {
             let sleep_duration = match prev_state {
                 // Nominal
                 Some(_) => {
-                    self.env.network_error_backoff.reset();
+                    self.env.network_error_backoff = self.env.network_error_backoff_builder.build();
                     Duration::from_secs(60 * 30)
                 }
                 // Error occured
-                None => self.env.network_error_backoff.next_backoff().unwrap(),
+                None => self.env.network_error_backoff.next().unwrap(),
             };
             sleep(sleep_duration);
         }

@@ -6,7 +6,7 @@ use std::{
 };
 
 use anyhow::Context as _;
-use backoff::backoff::Backoff as _;
+use backon::BackoffBuilder as _;
 use itertools::Itertools as _;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use sha2::Digest as _;
@@ -367,11 +367,11 @@ impl RenderablePolybarModule for HomePowerModule {
     fn wait_update(&mut self, prev_state: Option<&Self::State>) {
         if let Some(prev_state) = prev_state {
             let sleep_duration = if prev_state.is_some() {
-                self.env.network_error_backoff.reset();
+                self.env.network_error_backoff = self.env.network_error_backoff_builder.build();
                 Duration::from_secs(1)
             } else {
                 self.modbus_ctx = None; // Force reconnect
-                self.env.network_error_backoff.next_backoff().unwrap()
+                self.env.network_error_backoff.next().unwrap()
             };
             sleep(sleep_duration);
         }

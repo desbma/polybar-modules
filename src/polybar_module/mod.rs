@@ -6,7 +6,7 @@ use std::{
     time::Duration,
 };
 
-use backoff::{ExponentialBackoff, ExponentialBackoffBuilder};
+use backon::BackoffBuilder as _;
 use notify::Watcher as _;
 
 pub(crate) mod arch_updates;
@@ -30,6 +30,7 @@ pub(crate) mod todotxt;
 pub(crate) mod wttr;
 pub(crate) mod xmonad;
 
+#[expect(clippy::large_enum_variant)]
 pub(crate) enum PolybarModule {
     ArchUpdates(arch_updates::ArchUpdatesModule),
     Autolock(autolock::AutolockModule),
@@ -74,7 +75,8 @@ pub(crate) trait RenderablePolybarModule {
 pub(crate) struct PolybarModuleEnv {
     pub low_bw_filepath: PathBuf,
     pub public_screen_filepath: PathBuf,
-    pub network_error_backoff: ExponentialBackoff,
+    pub network_error_backoff_builder: backon::ExponentialBuilder,
+    pub network_error_backoff: backon::ExponentialBackoff,
 }
 
 impl PolybarModuleEnv {
@@ -82,16 +84,17 @@ impl PolybarModuleEnv {
         let xdg_dirs = xdg::BaseDirectories::new().unwrap();
         let low_bw_filepath = xdg_dirs.get_data_home().join("low_internet_bandwidth");
         let public_screen_filepath = xdg_dirs.place_runtime_file("public_screen").unwrap();
-        let network_error_backoff = ExponentialBackoffBuilder::new()
-            .with_initial_interval(Duration::from_secs(5))
-            .with_randomization_factor(0.25)
-            .with_multiplier(1.5)
-            .with_max_interval(Duration::from_secs(60 * 60))
-            .with_max_elapsed_time(None)
-            .build();
+        let network_error_backoff_builder = backon::ExponentialBuilder::default()
+            .with_jitter()
+            .with_factor(1.5)
+            .with_min_delay(Duration::from_secs(3))
+            .with_max_delay(Duration::from_secs(60 * 60))
+            .without_max_times();
+        let network_error_backoff = network_error_backoff_builder.build();
         Self {
             low_bw_filepath,
             public_screen_filepath,
+            network_error_backoff_builder,
             network_error_backoff,
         }
     }

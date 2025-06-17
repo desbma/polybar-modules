@@ -7,7 +7,7 @@ use std::{
 };
 
 use anyhow::Context as _;
-use backoff::{ExponentialBackoff, ExponentialBackoffBuilder, backoff::Backoff as _};
+use backon::BackoffBuilder as _;
 
 use crate::{
     markup,
@@ -18,7 +18,8 @@ use crate::{
 pub(crate) struct ArchUpdatesModule {
     xdg_dirs: xdg::BaseDirectories,
     env: PolybarModuleEnv,
-    server_error_backoff: ExponentialBackoff,
+    server_error_backoff_builder: backon::ExponentialBuilder,
+    server_error_backoff: backon::ExponentialBackoff,
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -33,16 +34,17 @@ impl ArchUpdatesModule {
     pub(crate) fn new() -> anyhow::Result<Self> {
         let xdg_dirs = xdg::BaseDirectories::new()?;
         let env = PolybarModuleEnv::new();
-        let server_error_backoff = ExponentialBackoffBuilder::new()
-            .with_initial_interval(Duration::from_secs(30 * 60))
-            .with_randomization_factor(0.25)
-            .with_multiplier(3.0)
-            .with_max_interval(Duration::from_secs(12 * 60 * 60))
-            .with_max_elapsed_time(None)
-            .build();
+        let server_error_backoff_builder = backon::ExponentialBuilder::default()
+            .with_jitter()
+            .with_factor(3.0)
+            .with_min_delay(Duration::from_secs(15 * 60))
+            .with_max_delay(Duration::from_secs(6 * 60 * 60))
+            .without_max_times();
+        let server_error_backoff = server_error_backoff_builder.build();
         Ok(Self {
             xdg_dirs,
             env,
+            server_error_backoff_builder,
             server_error_backoff,
         })
     }
@@ -136,11 +138,11 @@ impl RenderablePolybarModule for ArchUpdatesModule {
             let sleep_duration = match prev_state {
                 // Nominal
                 Some(_) => {
-                    self.env.network_error_backoff.reset();
+                    self.server_error_backoff = self.server_error_backoff_builder.build();
                     Duration::from_secs(3 * 60 * 60)
                 }
                 // Error occured
-                None => self.server_error_backoff.next_backoff().unwrap(),
+                None => self.server_error_backoff.next().unwrap(),
             };
             sleep(sleep_duration);
         }
