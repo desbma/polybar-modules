@@ -27,7 +27,7 @@ pub(crate) struct XmonadModuleState {
 
 impl XmonadModule {
     pub(crate) fn new() -> anyhow::Result<Self> {
-        let xdg_dirs = xdg::BaseDirectories::new()?;
+        let xdg_dirs = xdg::BaseDirectories::new();
         Ok(Self {
             xdg_dirs,
             pipe: None,

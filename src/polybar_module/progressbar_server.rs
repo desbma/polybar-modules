@@ -37,7 +37,7 @@ const RAMP_ICONS: [&str; 8] = ["▁", "▂", "▃", "▄", "▅", "▆", "▇", 
 impl ProgressBarServerModule {
     pub(crate) fn new(max_len: usize) -> anyhow::Result<Self> {
         let binary_name = env!("CARGO_PKG_NAME");
-        let xdg_dirs = xdg::BaseDirectories::with_prefix(binary_name)?;
+        let xdg_dirs = xdg::BaseDirectories::with_prefix(binary_name);
         let socket_filepath = match xdg_dirs.find_runtime_file("progressbar_server.socket") {
             Some(socket_filepath) => {
                 fs::remove_file(&socket_filepath)?;

@@ -1,4 +1,4 @@
-use std::{sync::Arc, thread::sleep, time::Duration};
+use std::{thread::sleep, time::Duration};
 
 use anyhow::Context as _;
 use backon::BackoffBuilder as _;
@@ -11,7 +11,7 @@ use crate::{
 };
 
 pub(crate) struct MarketModule {
-    req: ureq::Request,
+    client: ureq::Agent,
     selector_val: scraper::Selector,
     selector_delta: scraper::Selector,
     selector_ma50: scraper::Selector,
@@ -28,13 +28,17 @@ pub(crate) struct MarketModuleState {
 }
 
 impl MarketModule {
-    pub(crate) fn new() -> anyhow::Result<Self> {
-        let client = ureq::AgentBuilder::new()
-            .tls_connector(Arc::new(ureq::native_tls::TlsConnector::new()?))
-            .timeout(TCP_REMOTE_TIMEOUT)
-            .build();
-        let url = "https://www.boursorama.com/bourse/indices/cours/1rPCAC/";
-        let req = client.get(url);
+    pub(crate) fn new() -> Self {
+        let client = ureq::Agent::new_with_config(
+            ureq::Agent::config_builder()
+                .tls_config(
+                    ureq::tls::TlsConfig::builder()
+                        .provider(ureq::tls::TlsProvider::NativeTls)
+                        .build(),
+                )
+                .timeout_global(Some(TCP_REMOTE_TIMEOUT))
+                .build(),
+        );
 
         // TODO improve selectors?
         let selector_val = scraper::Selector::parse(
@@ -51,14 +55,14 @@ impl MarketModule {
             scraper::Selector::parse("tr.c-table__row:nth-child(12) > td:nth-child(4)").unwrap();
         let env = PolybarModuleEnv::new();
 
-        Ok(Self {
-            req,
+        Self {
+            client,
             selector_val,
             selector_delta,
             selector_ma50,
             selector_ma100,
             env,
-        })
+        }
     }
 
     fn wait_working_day() -> bool {
@@ -100,16 +104,16 @@ impl MarketModule {
 
     fn try_update(&mut self) -> anyhow::Result<MarketModuleState> {
         // Send request
-        let response = self.req.clone().call()?;
+        let url = "https://www.boursorama.com/bourse/indices/cours/1rPCAC/";
+        let response = self.client.get(url).call()?;
         anyhow::ensure!(
-            response.status() >= 200 && response.status() < 300,
-            "HTTP response {}: {}",
+            response.status().is_success(),
+            "HTTP response {}",
             response.status(),
-            response.status_text()
         );
 
         // Parse response
-        let page = scraper::Html::parse_document(&response.into_string()?);
+        let page = scraper::Html::parse_document(&response.into_body().read_to_string()?);
         let val =
             Self::extract_float(&page, &self.selector_val).context("Failed to extract value")?;
         let delta_prct =
@@ -224,7 +228,7 @@ mod tests {
 
     #[test]
     fn test_render() {
-        let module = MarketModule::new().unwrap();
+        let module = MarketModule::new();
 
         let state = Some(MarketModuleState {
             val: 5000.6,

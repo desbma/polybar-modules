@@ -38,8 +38,7 @@ fn main() -> anyhow::Result<()> {
     // Init stuff
     let module: polybar_module::PolybarModule = match cl_opts.module {
         PolybarModuleName::arch_updates => polybar_module::PolybarModule::ArchUpdates(
-            polybar_module::arch_updates::ArchUpdatesModule::new()
-                .context("Failed to initialize Arch updates module")?,
+            polybar_module::arch_updates::ArchUpdatesModule::new(),
         ),
         PolybarModuleName::autolock => polybar_module::PolybarModule::Autolock(
             polybar_module::autolock::AutolockModule::new()
@@ -88,7 +87,7 @@ fn main() -> anyhow::Result<()> {
             polybar_module::internet_bandwidth::InternetBandwidthModule::new(),
         ),
         PolybarModuleName::market => {
-            polybar_module::PolybarModule::Market(polybar_module::market::MarketModule::new()?)
+            polybar_module::PolybarModule::Market(polybar_module::market::MarketModule::new())
         }
         PolybarModuleName::network_status => {
             let network_status_cfg = cfg
@@ -121,8 +120,7 @@ fn main() -> anyhow::Result<()> {
                 .context("Failed to initialize Pulseaudio module")?,
         ),
         PolybarModuleName::syncthing => {
-            let xdg_dirs = xdg::BaseDirectories::with_prefix("syncthing")
-                .context("Unable fo find Synthing config directory")?;
+            let xdg_dirs = xdg::BaseDirectories::with_prefix("syncthing");
             let st_config_filepath = xdg_dirs
                 .find_config_file("config.xml")
                 .context("Unable fo find Synthing config file")?;
@@ -136,8 +134,7 @@ fn main() -> anyhow::Result<()> {
                 .context("Failed to initialize Todo.txt module")?,
         ),
         PolybarModuleName::wttr { location } => polybar_module::PolybarModule::Wttr(
-            polybar_module::wttr::WttrModule::new(location.as_ref())
-                .context("Failed to initialize Wttr module")?,
+            polybar_module::wttr::WttrModule::new(location.as_ref()),
         ),
         PolybarModuleName::xmonad => polybar_module::PolybarModule::Xmonad(
             polybar_module::xmonad::XmonadModule::new()

@@ -98,7 +98,7 @@ pub(crate) struct NetworkStatusModuleConfig {
 
 pub(crate) fn parse_config_file() -> anyhow::Result<Config> {
     let binary_name = env!("CARGO_PKG_NAME");
-    let xdg_dirs = xdg::BaseDirectories::with_prefix(binary_name)?;
+    let xdg_dirs = xdg::BaseDirectories::with_prefix(binary_name);
     let config_filepath = xdg_dirs
         .find_config_file("config.toml")
         .ok_or_else(|| anyhow::anyhow!("Unable to find config file"))?;

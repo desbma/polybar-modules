@@ -56,11 +56,13 @@ impl SyncthingModule {
         let st_config: SyncthingXmlConfig = quick_xml::de::from_str(&st_config_xml)?;
 
         // Build session
-        let session = ureq::AgentBuilder::new()
-            // Set maximum timeout and override with lower one for non event requests otherwise the timeout only
-            // applies for connect
-            .timeout(max(TCP_LOCAL_TIMEOUT, REST_EVENT_TIMEOUT))
-            .build();
+        let session = ureq::Agent::new_with_config(
+            ureq::Agent::config_builder()
+                // Set maximum timeout and override with lower one for non event requests otherwise the timeout only
+                // applies for connect
+                .timeout_global(Some(max(TCP_LOCAL_TIMEOUT, REST_EVENT_TIMEOUT)))
+                .build(),
+        );
 
         Ok(Self {
             api_key: st_config.gui.apikey,
@@ -137,15 +139,14 @@ impl SyncthingModule {
         let response = self
             .session
             .get(url.as_str())
-            .set("X-API-Key", &self.api_key)
+            .header("X-API-Key", &self.api_key)
             .call()?;
         anyhow::ensure!(
-            response.status() >= 200 && response.status() < 300,
-            "HTTP response {}: {}",
-            response.status(),
-            response.status_text()
+            response.status().is_success(),
+            "HTTP response {}",
+            response.status()
         );
-        let json_str = response.into_string()?;
+        let json_str = response.into_body().read_to_string()?;
         log::trace!("{json_str}");
         let events: Vec<syncthing_rest::Event> = serde_json::from_str(&json_str)?;
         Ok(events)
@@ -165,17 +166,23 @@ impl SyncthingModule {
         let response = self
             .session
             .get(url.as_str())
-            .timeout(TCP_LOCAL_TIMEOUT)
-            .set("X-API-Key", &self.api_key)
+            .header("X-API-Key", &self.api_key)
+            .config()
+            .timeout_global(Some(TCP_LOCAL_TIMEOUT))
+            .build()
             .call()
             .map_err(Box::new)?;
-        if response.status() <= 200 && response.status() >= 300 {
+        if !response.status().is_success() {
             return Err(HttpError::Status(
-                response.status(),
-                response.status_text().to_owned(),
+                response.status().as_u16(),
+                response
+                    .status()
+                    .canonical_reason()
+                    .unwrap_or("?")
+                    .to_owned(),
             ));
         }
-        let json_str = response.into_string()?;
+        let json_str = response.into_body().read_to_string().map_err(Box::new)?;
         log::trace!("{json_str}");
         Ok(json_str)
     }

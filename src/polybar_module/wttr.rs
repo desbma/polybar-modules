@@ -1,9 +1,4 @@
-use std::{
-    collections::HashMap,
-    sync::{Arc, LazyLock},
-    thread::sleep,
-    time::Duration,
-};
+use std::{collections::HashMap, sync::LazyLock, thread::sleep, time::Duration};
 
 use backon::BackoffBuilder as _;
 
@@ -14,7 +9,8 @@ use crate::{
 };
 
 pub(crate) struct WttrModule {
-    req: ureq::Request,
+    client: ureq::Agent,
+    url: String,
     env: PolybarModuleEnv,
 }
 
@@ -49,29 +45,33 @@ static ICONS: LazyLock<HashMap<&'static str, &'static str>> = LazyLock::new(|| {
 });
 
 impl WttrModule {
-    pub(crate) fn new(location: Option<&String>) -> anyhow::Result<Self> {
+    pub(crate) fn new(location: Option<&String>) -> Self {
         let env = PolybarModuleEnv::new();
-        let client = ureq::AgentBuilder::new()
-            .tls_connector(Arc::new(ureq::native_tls::TlsConnector::new()?))
-            .timeout(TCP_REMOTE_TIMEOUT)
-            .build();
+        let client = ureq::Agent::new_with_config(
+            ureq::Agent::config_builder()
+                .tls_config(
+                    ureq::tls::TlsConfig::builder()
+                        .provider(ureq::tls::TlsProvider::NativeTls)
+                        .build(),
+                )
+                .timeout_global(Some(TCP_REMOTE_TIMEOUT))
+                .build(),
+        );
         let url = format!(
             "https://wttr.in/{}?format=%c/%t",
             location.map_or("", String::as_str)
         );
-        let req = client.get(&url);
-        Ok(Self { req, env })
+        Self { client, url, env }
     }
 
     fn try_update(&mut self) -> anyhow::Result<WttrModuleState> {
-        let response = self.req.clone().call()?;
+        let response = self.client.get(&self.url).call()?;
         anyhow::ensure!(
-            response.status() >= 200 && response.status() < 300,
-            "HTTP response {}: {}",
+            response.status().is_success(),
+            "HTTP response {}",
             response.status(),
-            response.status_text()
         );
-        let text = response.into_string()?;
+        let text = response.into_body().read_to_string()?;
         log::debug!("{text:?}");
 
         let mut tokens = text.split('/').map(str::trim);
@@ -152,7 +152,7 @@ mod tests {
 
     #[test]
     fn test_render() {
-        let module = WttrModule::new(None).unwrap();
+        let module = WttrModule::new(None);
 
         let state = Some(WttrModuleState {
             sky: "", temp: 15

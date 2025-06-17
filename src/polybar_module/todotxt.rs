@@ -246,7 +246,7 @@ mod tests {
             env::set_var("TODO_FILE", "/dev/null");
             env::set_var("DONE_FILE", "/dev/null");
         }
-        let xdg_dirs = xdg::BaseDirectories::new().unwrap();
+        let xdg_dirs = xdg::BaseDirectories::new();
         let runtime_dir = xdg_dirs.get_runtime_directory().unwrap();
         let module = TodoTxtModule::new(None).unwrap();
 

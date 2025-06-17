@@ -81,8 +81,11 @@ pub(crate) struct PolybarModuleEnv {
 
 impl PolybarModuleEnv {
     pub(crate) fn new() -> Self {
-        let xdg_dirs = xdg::BaseDirectories::new().unwrap();
-        let low_bw_filepath = xdg_dirs.get_data_home().join("low_internet_bandwidth");
+        let xdg_dirs = xdg::BaseDirectories::new();
+        let low_bw_filepath = xdg_dirs
+            .get_data_home()
+            .unwrap()
+            .join("low_internet_bandwidth");
         let public_screen_filepath = xdg_dirs.place_runtime_file("public_screen").unwrap();
         let network_error_backoff_builder = backon::ExponentialBuilder::default()
             .with_jitter()

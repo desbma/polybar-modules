@@ -31,8 +31,8 @@ pub(crate) struct ArchUpdatesModuleState {
 }
 
 impl ArchUpdatesModule {
-    pub(crate) fn new() -> anyhow::Result<Self> {
-        let xdg_dirs = xdg::BaseDirectories::new()?;
+    pub(crate) fn new() -> Self {
+        let xdg_dirs = xdg::BaseDirectories::new();
         let env = PolybarModuleEnv::new();
         let server_error_backoff_builder = backon::ExponentialBuilder::default()
             .with_jitter()
@@ -41,12 +41,12 @@ impl ArchUpdatesModule {
             .with_max_delay(Duration::from_secs(6 * 60 * 60))
             .without_max_times();
         let server_error_backoff = server_error_backoff_builder.build();
-        Ok(Self {
+        Self {
             xdg_dirs,
             env,
             server_error_backoff_builder,
             server_error_backoff,
-        })
+        }
     }
 
     fn try_update(&mut self) -> anyhow::Result<ArchUpdatesModuleState> {
@@ -203,7 +203,7 @@ mod tests {
 
     #[test]
     fn test_render() {
-        let module = ArchUpdatesModule::new().unwrap();
+        let module = ArchUpdatesModule::new();
 
         let state = Some(ArchUpdatesModuleState {
             repo_update_count: 0,
