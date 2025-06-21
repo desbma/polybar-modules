@@ -256,8 +256,37 @@ impl HomePowerModule {
         }
     }
 
-    #[expect(clippy::cast_possible_wrap)]
+    fn modbus_read_holding_register(
+        ctx: &mut tokio_modbus::client::sync::Context,
+        addr: u16,
+    ) -> anyhow::Result<i16> {
+        #[expect(clippy::cast_possible_wrap)]
+        let v = ctx
+            .read_holding_registers(addr, 1)??
+            .into_iter()
+            .at_most_one()
+            .ok()
+            .flatten()
+            .unwrap() as i16;
+        if v == i16::MAX {
+            anyhow::bail!("Invalid value for modbus register 0x{addr:02x}: 0x{v:02x}");
+        }
+        Ok(v)
+    }
+
+    fn modbus_decode_value(raw: i16, scale_factor: i16) -> f64 {
+        f64::from(raw) * 10_f64.powf(f64::from(scale_factor))
+    }
+
     fn try_update(&mut self) -> anyhow::Result<HomePowerModuleState> {
+        // https://knowledge-center.solaredge.com/sites/kc/files/sunspec-implementation-technical-note.pdf
+        // https://github.com/nmakel/solaredge_modbus/blob/fd3ce7ae32a259ee371c672dac3bcd75bfe51258/src/solaredge_modbus/__init__.py#L486
+        // https://github.com/nmakel/solaredge_modbus/blob/fd3ce7ae32a259ee371c672dac3bcd75bfe51258/src/solaredge_modbus/__init__.py#L603
+        const REG_ADDR_I_AC_POWER: u16 = 0x9c93;
+        const REG_ADDR_I_AC_POWER_SF: u16 = 0x9c94;
+        const REG_ADDR_M_AC_POWER: u16 = 0x9d0e;
+        const REG_ADDR_M_AC_POWER_SF: u16 = 0x9d12;
+
         let modbus_ctx = if let Some(modbus_ctx) = self.modbus_ctx.as_mut() {
             modbus_ctx
         } else {
@@ -273,39 +302,15 @@ impl HomePowerModule {
             self.modbus_ctx.as_mut().unwrap()
         };
 
-        // https://github.com/nmakel/solaredge_modbus/blob/fd3ce7ae32a259ee371c672dac3bcd75bfe51258/src/solaredge_modbus/__init__.py#L486
-        let power_ac = modbus_ctx
-            .read_holding_registers(0x9c93, 1)??
-            .into_iter()
-            .at_most_one()
-            .ok()
-            .flatten()
-            .unwrap() as i16;
-        let power_ac_scale = modbus_ctx
-            .read_holding_registers(0x9c94, 1)??
-            .into_iter()
-            .at_most_one()
-            .ok()
-            .flatten()
-            .unwrap() as i16;
-        let solar_power = f64::from(power_ac) * 10_f64.powf(f64::from(power_ac_scale));
+        let power_ac = Self::modbus_read_holding_register(modbus_ctx, REG_ADDR_I_AC_POWER)?;
+        let power_ac_scale =
+            Self::modbus_read_holding_register(modbus_ctx, REG_ADDR_I_AC_POWER_SF)?;
+        let solar_power = Self::modbus_decode_value(power_ac, power_ac_scale);
 
-        // https://github.com/nmakel/solaredge_modbus/blob/fd3ce7ae32a259ee371c672dac3bcd75bfe51258/src/solaredge_modbus/__init__.py#L603
-        let l1_power = modbus_ctx
-            .read_holding_registers(0x9d0f, 1)??
-            .into_iter()
-            .at_most_one()
-            .ok()
-            .flatten()
-            .unwrap() as i16;
-        let power_scale = modbus_ctx
-            .read_holding_registers(0x9d12, 1)??
-            .into_iter()
-            .at_most_one()
-            .ok()
-            .flatten()
-            .unwrap() as i16;
-        let grid_export = f64::from(l1_power) * 10_f64.powf(f64::from(power_scale));
+        let meter_ac_power = Self::modbus_read_holding_register(modbus_ctx, REG_ADDR_M_AC_POWER)?;
+        let meter_ac_power_scale =
+            Self::modbus_read_holding_register(modbus_ctx, REG_ADDR_M_AC_POWER_SF)?;
+        let grid_export = Self::modbus_decode_value(meter_ac_power, meter_ac_power_scale);
 
         let home_consumption_power = solar_power - grid_export;
 
