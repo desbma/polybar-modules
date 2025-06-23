@@ -388,6 +388,8 @@ impl RenderablePolybarModule for HomePowerModule {
             Ok(s) => Some(s),
             Err(e) => {
                 log::error!("{e}");
+                // Force reconnect
+                self.modbus_ctx = None;
                 None
             }
         }
