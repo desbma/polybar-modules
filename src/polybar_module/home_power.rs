@@ -287,7 +287,7 @@ impl HomePowerModule {
         const REG_ADDR_M_AC_POWER: u16 = 0x9d0e;
         const REG_ADDR_M_AC_POWER_SF: u16 = 0x9d12;
 
-        let modbus_ctx = if let Some(modbus_ctx) = self.modbus_ctx.as_mut() {
+        let mut modbus_ctx = if let Some(modbus_ctx) = self.modbus_ctx.take() {
             modbus_ctx
         } else {
             let addr = format!("{}:{}", self.modbus_cfg.host, self.modbus_cfg.port)
@@ -296,20 +296,19 @@ impl HomePowerModule {
                 .ok()
                 .flatten()
                 .ok_or_else(|| anyhow::anyhow!("Inverser IP resolution did not yield 1 IP"))?;
-            let modbus_ctx = tokio_modbus::client::sync::tcp::connect_slave(addr, 1.into())
-                .context("Failed to connect to inverter")?;
-            self.modbus_ctx = Some(modbus_ctx);
-            self.modbus_ctx.as_mut().unwrap()
+            tokio_modbus::client::sync::tcp::connect_slave(addr, 1.into())
+                .context("Failed to connect to inverter")?
         };
 
-        let power_ac = Self::modbus_read_holding_register(modbus_ctx, REG_ADDR_I_AC_POWER)?;
+        let power_ac = Self::modbus_read_holding_register(&mut modbus_ctx, REG_ADDR_I_AC_POWER)?;
         let power_ac_scale =
-            Self::modbus_read_holding_register(modbus_ctx, REG_ADDR_I_AC_POWER_SF)?;
+            Self::modbus_read_holding_register(&mut modbus_ctx, REG_ADDR_I_AC_POWER_SF)?;
         let solar_power = Self::modbus_decode_value(power_ac, power_ac_scale);
 
-        let meter_ac_power = Self::modbus_read_holding_register(modbus_ctx, REG_ADDR_M_AC_POWER)?;
+        let meter_ac_power =
+            Self::modbus_read_holding_register(&mut modbus_ctx, REG_ADDR_M_AC_POWER)?;
         let meter_ac_power_scale =
-            Self::modbus_read_holding_register(modbus_ctx, REG_ADDR_M_AC_POWER_SF)?;
+            Self::modbus_read_holding_register(&mut modbus_ctx, REG_ADDR_M_AC_POWER_SF)?;
         let grid_export = Self::modbus_decode_value(meter_ac_power, meter_ac_power_scale);
 
         let home_consumption_power = solar_power - grid_export;
@@ -349,6 +348,8 @@ impl HomePowerModule {
             })
             .collect();
 
+        self.modbus_ctx = Some(modbus_ctx);
+
         #[expect(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
         Ok(HomePowerModuleState {
             solar_power: solar_power as u32,
@@ -375,7 +376,6 @@ impl RenderablePolybarModule for HomePowerModule {
                 self.env.network_error_backoff = self.env.network_error_backoff_builder.build();
                 Duration::from_secs(1)
             } else {
-                self.modbus_ctx = None; // Force reconnect
                 self.env.network_error_backoff.next().unwrap()
             };
             sleep(sleep_duration);
