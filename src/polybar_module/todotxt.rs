@@ -185,7 +185,6 @@ impl RenderablePolybarModule for TodoTxtModule {
                                 {
                                     Some(theme::Color::Attention)
                                 } else {
-                                    #[expect(clippy::return_and_then)]
                                     match next_task.as_ref().and_then(|t| t.priority) {
                                         Some('A') => Some(theme::Color::Attention),
                                         Some('B') => Some(theme::Color::Notice),
