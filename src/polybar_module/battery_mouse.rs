@@ -130,7 +130,7 @@ mod tests {
         let state = BatteryMouseModuleState { levels };
         assert_eq!(
             module.render(&state),
-            "%{F#eee8d5}󰍽%{F-} m0 100% m1 50% %{F#b58900}m2 49%%{F-} %{F#cb4b16}m3 30%%{F-} %{F#cb4b16}m4 29%%{F-} %{F#cb4b16}m5 5%%{F-} m6 ?"
+            "%{F#f1e9d2}󰍽%{F-} m0 100% m1 50% %{F#ac8300}m2 49%%{F-} %{F#d56500}m3 30%%{F-} %{F#d56500}m4 29%%{F-} %{F#d56500}m5 5%%{F-} m6 ?"
         );
     }
 }

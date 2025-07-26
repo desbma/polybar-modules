@@ -380,7 +380,7 @@ mod tests {
         });
         assert_eq!(
             module.render(&state),
-            "%{F#eee8d5}%{F-} %{u#93a1a1}%{+u}h1%{-u} %{u#93a1a1}%{+u}h2%{-u}"
+            "%{F#f1e9d2}%{F-} %{u#8faaab}%{+u}h1%{-u} %{u#8faaab}%{+u}h2%{-u}"
         );
 
         let state = Some(NetworkStatusModuleState {
@@ -389,7 +389,7 @@ mod tests {
         });
         assert_eq!(
             module.render(&state),
-            "%{F#eee8d5}%{F-} h1 %{u#93a1a1}%{+u}h2%{-u}"
+            "%{F#f1e9d2}%{F-} h1 %{u#8faaab}%{+u}h2%{-u}"
         );
 
         let state = Some(NetworkStatusModuleState {
@@ -398,7 +398,7 @@ mod tests {
         });
         assert_eq!(
             module.render(&state),
-            "%{F#eee8d5}%{F-} %{u#93a1a1}%{+u}h1%{-u} %{F#cb4b16}h2%{F-}"
+            "%{F#f1e9d2}%{F-} %{u#8faaab}%{+u}h1%{-u} %{F#d56500}h2%{F-}"
         );
 
         let state = Some(NetworkStatusModuleState {
@@ -407,10 +407,10 @@ mod tests {
         });
         assert_eq!(
             module.render(&state),
-            "%{F#eee8d5}%{F-} %{u#93a1a1}%{+u}h1%{-u} %{F#cb4b16}h2%{F-}  %{F#eee8d5}󰒃%{F-} %{u#93a1a1}%{+u}i1%{-u}"
+            "%{F#f1e9d2}%{F-} %{u#8faaab}%{+u}h1%{-u} %{F#d56500}h2%{F-}  %{F#f1e9d2}󰒃%{F-} %{u#8faaab}%{+u}i1%{-u}"
         );
 
         let state = None;
-        assert_eq!(module.render(&state), "%{F#cb4b16}%{F-}");
+        assert_eq!(module.render(&state), "%{F#d56500}%{F-}");
     }
 }

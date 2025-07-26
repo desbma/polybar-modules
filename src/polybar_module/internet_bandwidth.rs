@@ -102,7 +102,7 @@ mod tests {
         assert_eq!(
             module.render(&state),
             format!(
-                "%{{A1:rm {home}/.local/share/low_internet_bandwidth:}}%{{u#b58900}}%{{+u}}󰅛%{{-u}}%{{A}}"
+                "%{{A1:rm {home}/.local/share/low_internet_bandwidth:}}%{{u#ac8300}}%{{+u}}󰅛%{{-u}}%{{A}}"
             )
         );
     }

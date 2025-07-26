@@ -236,7 +236,7 @@ mod tests {
             ma50: 4501.0,
             ma100: 4500.0,
         });
-        assert_eq!(module.render(&state), "%{F#eee8d5}%{F-} 5001 +0.10%");
+        assert_eq!(module.render(&state), "%{F#f1e9d2}%{F-} 5001 +0.10%");
 
         let state = Some(MarketModuleState {
             val: 5000.6,
@@ -244,7 +244,7 @@ mod tests {
             ma50: 4500.0,
             ma100: 4501.0,
         });
-        assert_eq!(module.render(&state), "%{F#eee8d5}%{F-} 5001 +0.10%");
+        assert_eq!(module.render(&state), "%{F#f1e9d2}%{F-} 5001 +0.10%");
 
         let state = Some(MarketModuleState {
             val: 5000.6,
@@ -254,7 +254,7 @@ mod tests {
         });
         assert_eq!(
             module.render(&state),
-            "%{F#eee8d5}%{F-} 5001 %{F#859900}+1.01%%{F-}"
+            "%{F#f1e9d2}%{F-} 5001 %{F#819500}+1.01%%{F-}"
         );
 
         let state = Some(MarketModuleState {
@@ -265,7 +265,7 @@ mod tests {
         });
         assert_eq!(
             module.render(&state),
-            "%{F#eee8d5}%{F-} 5001 %{F#cb4b16}-2.01%%{F-}"
+            "%{F#f1e9d2}%{F-} 5001 %{F#d56500}-2.01%%{F-}"
         );
 
         let state = Some(MarketModuleState {
@@ -276,10 +276,10 @@ mod tests {
         });
         assert_eq!(
             module.render(&state),
-            "%{F#eee8d5}%{F-} 5001 %{F#b58900}-1.01%%{F-}"
+            "%{F#f1e9d2}%{F-} 5001 %{F#ac8300}-1.01%%{F-}"
         );
 
         let state = None;
-        assert_eq!(module.render(&state), "%{F#cb4b16}%{F-}");
+        assert_eq!(module.render(&state), "%{F#d56500}%{F-}");
     }
 }

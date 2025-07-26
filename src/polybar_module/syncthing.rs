@@ -296,10 +296,10 @@ mod tests {
         });
         assert_eq!(
             module.render(&state),
-            "%{A1:firefox --new-tab 'http\\://127.0.0.1\\:8384/':}%{F#eee8d5}󱋖%{F-}  1  2/5 4 3%{A}"
+            "%{A1:firefox --new-tab 'http\\://127.0.0.1\\:8384/':}%{F#f1e9d2}󱋖%{F-}  1  2/5 4 3%{A}"
         );
 
         let state = None;
-        assert_eq!(module.render(&state), "%{F#cb4b16}%{F-}");
+        assert_eq!(module.render(&state), "%{F#d56500}%{F-}");
     }
 }

@@ -234,7 +234,7 @@ mod tests {
         });
         assert_eq!(
             module.render(&state),
-            "%{F#eee8d5}%{F-}  5% %{F#859900}▁%{F-}  600+ 800MHz 40°C  20W"
+            "%{F#f1e9d2}%{F-}  5% %{F#819500}▁%{F-}  600+ 800MHz 40°C  20W"
         );
 
         let state = Some(GpuNvidiaModuleState {
@@ -248,7 +248,7 @@ mod tests {
         });
         assert_eq!(
             module.render(&state),
-            "%{F#eee8d5}%{F-} 88% %{F#dc322f}█%{F-} 1600+2000MHz 69°C 200W"
+            "%{F#f1e9d2}%{F-} 88% %{F#f23749}█%{F-} 1600+2000MHz 69°C 200W"
         );
 
         let state = Some(GpuNvidiaModuleState {
@@ -262,7 +262,7 @@ mod tests {
         });
         assert_eq!(
             module.render(&state),
-            "%{F#eee8d5}%{F-} 88% %{F#dc322f}█%{F-} 1600+2000MHz %{u#dc322f}%{+u}%{F#dc322f}69°C%{F-}%{-u} 200W"
+            "%{F#f1e9d2}%{F-} 88% %{F#f23749}█%{F-} 1600+2000MHz %{u#f23749}%{+u}%{F#f23749}69°C%{F-}%{-u} 200W"
         );
 
         let state = Some(GpuNvidiaModuleState {
@@ -276,7 +276,7 @@ mod tests {
         });
         assert_eq!(
             module.render(&state),
-            "%{F#eee8d5}%{F-} 88% %{F#dc322f}█%{F-} 1600+2000MHz %{u#dc322f}%{+u}%{F#dc322f}70°C%{F-}%{-u} 200W"
+            "%{F#f1e9d2}%{F-} 88% %{F#f23749}█%{F-} 1600+2000MHz %{u#f23749}%{+u}%{F#f23749}70°C%{F-}%{-u} 200W"
         );
 
         let state = Some(GpuNvidiaModuleState {
@@ -290,10 +290,10 @@ mod tests {
         });
         assert_eq!(
             module.render(&state),
-            "%{F#eee8d5}%{F-} 98% %{F#dc322f}█%{F-} 1600+2000MHz %{u#dc322f}%{+u}%{F#dc322f}70°C%{F-}%{-u} 200W"
+            "%{F#f1e9d2}%{F-} 98% %{F#f23749}█%{F-} 1600+2000MHz %{u#f23749}%{+u}%{F#f23749}70°C%{F-}%{-u} 200W"
         );
 
         let state = None;
-        assert_eq!(module.render(&state), "%{F#cb4b16}%{F-}");
+        assert_eq!(module.render(&state), "%{F#d56500}%{F-}");
     }
 }

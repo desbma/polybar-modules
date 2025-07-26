@@ -89,7 +89,7 @@ mod tests {
         assert_eq!(
             module.render(&state),
             format!(
-                "%{{A1:systemctl --user start autolock.service && pkill -USR1 -f \'polybar-modules autolock$\':}}%{{u#b58900}}%{{+u}}󱫕%{{-u}}%{{A}}",
+                "%{{A1:systemctl --user start autolock.service && pkill -USR1 -f \'polybar-modules autolock$\':}}%{{u#ac8300}}%{{+u}}󱫕%{{-u}}%{{A}}",
             )
         );
     }

@@ -174,7 +174,7 @@ mod tests {
             max_freq: 4_000_000,
             avg_freq: 2_000_000,
         });
-        assert_eq!(module.render(&state), "%{F#859900}1.0/2.0/4.0 GHz%{F-}");
+        assert_eq!(module.render(&state), "%{F#819500}1.0/2.0/4.0 GHz%{F-}");
 
         let state = Some(CpuFreqModuleState {
             min_freq: 1_000_000,
@@ -188,13 +188,13 @@ mod tests {
             max_freq: 4_000_000,
             avg_freq: 3_500_000,
         });
-        assert_eq!(module.render(&state), "%{F#b58900}1.0/3.5/4.0 GHz%{F-}");
+        assert_eq!(module.render(&state), "%{F#ac8300}1.0/3.5/4.0 GHz%{F-}");
 
         let state = Some(CpuFreqModuleState {
             min_freq: 1_000_000,
             max_freq: 4_000_000,
             avg_freq: 4_500_000,
         });
-        assert_eq!(module.render(&state), "%{F#cb4b16}1.0/4.5/4.0 GHz%{F-}");
+        assert_eq!(module.render(&state), "%{F#d56500}1.0/4.5/4.0 GHz%{F-}");
     }
 }

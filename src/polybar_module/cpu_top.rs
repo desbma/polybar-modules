@@ -201,15 +201,15 @@ mod tests {
             cpu_prct: 50,
             process_name: "bz".to_owned(),
         });
-        assert_eq!(module.render(&state), "%{F#b58900}50%     bz%{F-}");
+        assert_eq!(module.render(&state), "%{F#ac8300}50%     bz%{F-}");
 
         let state = Some(CpuTopModuleState {
             cpu_prct: 99,
             process_name: "bz".to_owned(),
         });
-        assert_eq!(module.render(&state), "%{F#cb4b16}99%     bz%{F-}");
+        assert_eq!(module.render(&state), "%{F#d56500}99%     bz%{F-}");
 
         let state = None;
-        assert_eq!(module.render(&state), "%{F#cb4b16}%{F-}");
+        assert_eq!(module.render(&state), "%{F#d56500}%{F-}");
     }
 }

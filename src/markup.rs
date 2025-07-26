@@ -64,7 +64,7 @@ mod tests {
     fn test_style() {
         assert_eq!(
             style("", Some(theme::Color::MainIcon), None, None, None),
-            "%{F#eee8d5}%{F-}"
+            "%{F#f1e9d2}%{F-}"
         );
     }
 

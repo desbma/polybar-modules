@@ -152,6 +152,6 @@ mod tests {
         assert_eq!(module.render(&state), "Tabb Simp");
 
         let state = None;
-        assert_eq!(module.render(&state), "%{F#cb4b16}%{F-}");
+        assert_eq!(module.render(&state), "%{F#d56500}%{F-}");
     }
 }

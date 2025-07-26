@@ -256,7 +256,7 @@ mod tests {
         let state = Some(ProgressBarServerModuleState { progress: vec![30] });
         assert_eq!(
             module.render(&state),
-            "%{F#eee8d5}%{F-} 1 ■■■■■             "
+            "%{F#f1e9d2}%{F-} 1 ■■■■■             "
         );
 
         let state = Some(ProgressBarServerModuleState {
@@ -264,7 +264,7 @@ mod tests {
         });
         assert_eq!(
             module.render(&state),
-            "%{F#eee8d5}%{F-} 2 ■■       ■■■     "
+            "%{F#f1e9d2}%{F-} 2 ■■       ■■■     "
         );
 
         let state = Some(ProgressBarServerModuleState {
@@ -272,40 +272,40 @@ mod tests {
         });
         assert_eq!(
             module.render(&state),
-            "%{F#eee8d5}%{F-} 3 ■■■      ■■■■    "
+            "%{F#f1e9d2}%{F-} 3 ■■■      ■■■■    "
         );
 
         let module = ProgressBarServerModule::new(5).unwrap();
 
         let state = Some(ProgressBarServerModuleState { progress: vec![30] });
-        assert_eq!(module.render(&state), "%{F#eee8d5}%{F-} 1    ");
+        assert_eq!(module.render(&state), "%{F#f1e9d2}%{F-} 1    ");
 
         let state = Some(ProgressBarServerModuleState {
             progress: vec![100],
         });
-        assert_eq!(module.render(&state), "%{F#eee8d5}%{F-} 1 ■■■");
+        assert_eq!(module.render(&state), "%{F#f1e9d2}%{F-} 1 ■■■");
 
         let state = Some(ProgressBarServerModuleState {
             progress: vec![30, 45],
         });
-        assert_eq!(module.render(&state), "%{F#eee8d5}%{F-} 2 ▃ ▄");
+        assert_eq!(module.render(&state), "%{F#f1e9d2}%{F-} 2 ▃ ▄");
 
         let state = Some(ProgressBarServerModuleState {
             progress: vec![30, 100],
         });
-        assert_eq!(module.render(&state), "%{F#eee8d5}%{F-} 2 ▃ █");
+        assert_eq!(module.render(&state), "%{F#f1e9d2}%{F-} 2 ▃ █");
 
         let state = Some(ProgressBarServerModuleState {
             progress: vec![30, 40, 50],
         });
-        assert_eq!(module.render(&state), "%{F#eee8d5}%{F-} 3 ▃ ▄");
+        assert_eq!(module.render(&state), "%{F#f1e9d2}%{F-} 3 ▃ ▄");
 
         let state = Some(ProgressBarServerModuleState {
             progress: vec![30, 100, 50],
         });
-        assert_eq!(module.render(&state), "%{F#eee8d5}%{F-} 3 ▅ █");
+        assert_eq!(module.render(&state), "%{F#f1e9d2}%{F-} 3 ▅ █");
 
         let state = None;
-        assert_eq!(module.render(&state), "%{F#cb4b16}%{F-}");
+        assert_eq!(module.render(&state), "%{F#d56500}%{F-}");
     }
 }

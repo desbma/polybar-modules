@@ -436,7 +436,7 @@ mod tests {
         });
         assert_eq!(
             module.render(&state),
-            "%{A1:pactl set-default-sink 1:}si1%{A} %{u#93a1a1}%{+u}si2%{-u}  %{F#eee8d5}%{F-} %{A1:pactl set-default-source 1:}so1%{A} %{u#93a1a1}%{+u}so2%{-u}"
+            "%{A1:pactl set-default-sink 1:}si1%{A} %{u#8faaab}%{+u}si2%{-u}  %{F#f1e9d2}%{F-} %{A1:pactl set-default-source 1:}so1%{A} %{u#8faaab}%{+u}so2%{-u}"
         );
 
         let state = Some(PulseAudioModuleState {
@@ -457,7 +457,7 @@ mod tests {
         });
         assert_eq!(
             module.render(&state),
-            "  %{F#eee8d5}%{F-} %{A1:pactl set-default-source 1:}so1%{A} %{u#93a1a1}%{+u}so2%{-u}"
+            "  %{F#f1e9d2}%{F-} %{A1:pactl set-default-source 1:}so1%{A} %{u#8faaab}%{+u}so2%{-u}"
         );
 
         let state = Some(PulseAudioModuleState {
@@ -478,7 +478,7 @@ mod tests {
         });
         assert_eq!(
             module.render(&state),
-            "%{A1:pactl set-default-sink 1:}si1%{A} %{u#93a1a1}%{+u}si2%{-u}"
+            "%{A1:pactl set-default-sink 1:}si1%{A} %{u#8faaab}%{+u}si2%{-u}"
         );
 
         let state = Some(PulseAudioModuleState {
@@ -503,7 +503,7 @@ mod tests {
         });
         assert_eq!(
             module.render(&state),
-            "%{A1:systemctl --user -q --no-block stop easyeffects.service:}%{u#93a1a1}%{+u}󰋍%{-u}%{A}"
+            "%{A1:systemctl --user -q --no-block stop easyeffects.service:}%{u#8faaab}%{+u}󰋍%{-u}%{A}"
         );
 
         let state = Some(PulseAudioModuleState {
@@ -534,7 +534,7 @@ mod tests {
         });
         assert_eq!(
             module.render(&state),
-            "%{A1:systemctl --user -q --no-block stop easyeffects.service:}%{u#93a1a1}%{+u}󰋍%{-u}%{A}   %{F#eee8d5}%{F-} %{A1:pactl set-default-source 1:}so1%{A} %{u#93a1a1}%{+u}so2%{-u}"
+            "%{A1:systemctl --user -q --no-block stop easyeffects.service:}%{u#8faaab}%{+u}󰋍%{-u}%{A}   %{F#f1e9d2}%{F-} %{A1:pactl set-default-source 1:}so1%{A} %{u#8faaab}%{+u}so2%{-u}"
         );
 
         let state = Some(PulseAudioModuleState {
@@ -555,7 +555,7 @@ mod tests {
         });
         assert_eq!(
             module.render(&state),
-            "%{A1:systemctl --user -q --no-block stop easyeffects.service:}%{u#93a1a1}%{+u}󰋍%{-u}%{A} %{A1:pactl set-default-sink 1:}si1%{A} %{u#93a1a1}%{+u}si2%{-u}"
+            "%{A1:systemctl --user -q --no-block stop easyeffects.service:}%{u#8faaab}%{+u}󰋍%{-u}%{A} %{A1:pactl set-default-sink 1:}si1%{A} %{u#8faaab}%{+u}si2%{-u}"
         );
 
         let state = Some(PulseAudioModuleState {
@@ -587,10 +587,10 @@ mod tests {
         });
         assert_eq!(
             module.render(&state),
-            "%{A1:systemctl --user -q --no-block stop easyeffects.service:}%{u#93a1a1}%{+u}󰋍%{-u}%{A} %{A1:pactl set-default-sink 1:}si1%{A} %{u#93a1a1}%{+u}si2%{-u}  %{F#eee8d5}%{F-} %{A1:pactl set-default-source 1:}so1%{A} %{u#93a1a1}%{+u}so2%{-u}"
+            "%{A1:systemctl --user -q --no-block stop easyeffects.service:}%{u#8faaab}%{+u}󰋍%{-u}%{A} %{A1:pactl set-default-sink 1:}si1%{A} %{u#8faaab}%{+u}si2%{-u}  %{F#f1e9d2}%{F-} %{A1:pactl set-default-source 1:}so1%{A} %{u#8faaab}%{+u}so2%{-u}"
         );
 
         let state = None;
-        assert_eq!(module.render(&state), "%{F#cb4b16}%{F-}");
+        assert_eq!(module.render(&state), "%{F#d56500}%{F-}");
     }
 }

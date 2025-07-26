@@ -480,7 +480,7 @@ mod tests {
             grid_power: 1400,
             devices: vec![],
         });
-        assert_eq!(module.render(&state), "%{F#eee8d5}%{F-} 2.0󱤃0.6󰴾1.4kW");
+        assert_eq!(module.render(&state), "%{F#f1e9d2}%{F-} 2.0󱤃0.6󰴾1.4kW");
 
         let state = Some(HomePowerModuleState {
             solar_power: 0,
@@ -516,10 +516,10 @@ mod tests {
         });
         assert_eq!(
             module.render(&state),
-            "%{F#eee8d5}%{F-} 0.0 󱤃0.6󰴾1.4kW D1 %{u#93a1a1}%{+u}D2%{-u} %{u#b58900}%{+u}D3%{-u} %{F#657b83}D4%{F-}"
+            "%{F#f1e9d2}%{F-} 0.0 󱤃0.6󰴾1.4kW D1 %{u#8faaab}%{+u}D2%{-u} %{u#ac8300}%{+u}D3%{-u} %{F#657377}D4%{F-}"
         );
 
         let state = None;
-        assert_eq!(module.render(&state), "%{F#cb4b16}%{F-}");
+        assert_eq!(module.render(&state), "%{F#d56500}%{F-}");
     }
 }

@@ -217,7 +217,7 @@ mod tests {
             repo_security_update_count: 0,
             aur_update_count: 0,
         });
-        assert_eq!(module.render(&state), "%{F#eee8d5}%{F-} 12");
+        assert_eq!(module.render(&state), "%{F#f1e9d2}%{F-} 12");
 
         let state = Some(ArchUpdatesModuleState {
             repo_update_count: 12,
@@ -226,7 +226,7 @@ mod tests {
         });
         assert_eq!(
             module.render(&state),
-            "%{F#eee8d5}%{F-} 12%{F#cb4b16}(2)%{F-}"
+            "%{F#f1e9d2}%{F-} 12%{F#d56500}(2)%{F-}"
         );
 
         let state = Some(ArchUpdatesModuleState {
@@ -236,7 +236,7 @@ mod tests {
         });
         assert_eq!(
             module.render(&state),
-            "%{F#eee8d5}%{F-} 12%{F#cb4b16}(2)%{F-}+3"
+            "%{F#f1e9d2}%{F-} 12%{F#d56500}(2)%{F-}+3"
         );
 
         let state = Some(ArchUpdatesModuleState {
@@ -244,16 +244,16 @@ mod tests {
             repo_security_update_count: 0,
             aur_update_count: 3,
         });
-        assert_eq!(module.render(&state), "%{F#eee8d5}%{F-} 12+3");
+        assert_eq!(module.render(&state), "%{F#f1e9d2}%{F-} 12+3");
 
         let state = Some(ArchUpdatesModuleState {
             repo_update_count: 0,
             repo_security_update_count: 0,
             aur_update_count: 3,
         });
-        assert_eq!(module.render(&state), "%{F#eee8d5}%{F-} 0+3");
+        assert_eq!(module.render(&state), "%{F#f1e9d2}%{F-} 0+3");
 
         let state = None;
-        assert_eq!(module.render(&state), "%{F#cb4b16}%{F-}");
+        assert_eq!(module.render(&state), "%{F#d56500}%{F-}");
     }
 }

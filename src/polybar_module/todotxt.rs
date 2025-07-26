@@ -257,7 +257,7 @@ mod tests {
         assert_eq!(
             module.render(&state),
             format!(
-                "%{{F#eee8d5}}%{{F-}} %{{A1:touch {}/public_screen:}}10 😌%{{A}}",
+                "%{{F#f1e9d2}}%{{F-}} %{{A1:touch {}/public_screen:}}10 😌%{{A}}",
                 runtime_dir.to_str().unwrap()
             )
         );
@@ -274,7 +274,7 @@ mod tests {
         assert_eq!(
             module.render(&state),
             format!(
-                "%{{F#eee8d5}}%{{F-}} %{{A1:touch {}/public_screen:}}10 todo%{{A}}",
+                "%{{F#f1e9d2}}%{{F-}} %{{A1:touch {}/public_screen:}}10 todo%{{A}}",
                 runtime_dir.to_str().unwrap()
             )
         );
@@ -291,7 +291,7 @@ mod tests {
         assert_eq!(
             module.render(&state),
             format!(
-                "%{{F#eee8d5}}%{{F-}} %{{A1:touch {}/public_screen:}}10 todo%{{A}}",
+                "%{{F#f1e9d2}}%{{F-}} %{{A1:touch {}/public_screen:}}10 todo%{{A}}",
                 runtime_dir.to_str().unwrap()
             )
         );
@@ -315,7 +315,7 @@ mod tests {
         assert_eq!(
             module.render(&state),
             format!(
-                "%{{F#eee8d5}}%{{F-}} %{{A1:touch {}/public_screen:}}10 %{{u#cb4b16}}%{{+u}}todo%{{-u}}%{{A}}",
+                "%{{F#f1e9d2}}%{{F-}} %{{A1:touch {}/public_screen:}}10 %{{u#d56500}}%{{+u}}todo%{{-u}}%{{A}}",
                 runtime_dir.to_str().unwrap()
             )
         );
@@ -332,7 +332,7 @@ mod tests {
         assert_eq!(
             module.render(&state),
             format!(
-                "%{{F#eee8d5}}%{{F-}} %{{A1:touch {}/public_screen:}}10 %{{u#93a1a1}}%{{+u}}todo%{{-u}}%{{A}}",
+                "%{{F#f1e9d2}}%{{F-}} %{{A1:touch {}/public_screen:}}10 %{{u#8faaab}}%{{+u}}todo%{{-u}}%{{A}}",
                 runtime_dir.to_str().unwrap()
             )
         );
@@ -349,7 +349,7 @@ mod tests {
         assert_eq!(
             module.render(&state),
             format!(
-                "%{{F#eee8d5}}%{{F-}} %{{A1:touch {}/public_screen:}}10 %{{u#cb4b16}}%{{+u}}todo%{{-u}}%{{A}}",
+                "%{{F#f1e9d2}}%{{F-}} %{{A1:touch {}/public_screen:}}10 %{{u#d56500}}%{{+u}}todo%{{-u}}%{{A}}",
                 runtime_dir.to_str().unwrap()
             )
         );
@@ -368,7 +368,7 @@ mod tests {
         assert_eq!(
             module.render(&state),
             format!(
-                "%{{F#eee8d5}}%{{F-}} %{{A1:touch {}/public_screen:}}10 todo%{{A}}",
+                "%{{F#f1e9d2}}%{{F-}} %{{A1:touch {}/public_screen:}}10 todo%{{A}}",
                 runtime_dir.to_str().unwrap()
             )
         );
@@ -385,7 +385,7 @@ mod tests {
         assert_eq!(
             module.render(&state),
             format!(
-                "%{{F#eee8d5}}%{{F-}} %{{A1:touch {}/public_screen:}}101 to…%{{A}}",
+                "%{{F#f1e9d2}}%{{F-}} %{{A1:touch {}/public_screen:}}101 to…%{{A}}",
                 runtime_dir.to_str().unwrap()
             )
         );
@@ -402,7 +402,7 @@ mod tests {
         assert_eq!(
             module.render(&state),
             format!(
-                "%{{F#eee8d5}}%{{F-}} %{{A1:touch {}/public_screen:}}1011 t…%{{A}}",
+                "%{{F#f1e9d2}}%{{F-}} %{{A1:touch {}/public_screen:}}1011 t…%{{A}}",
                 runtime_dir.to_str().unwrap()
             )
         );
@@ -419,7 +419,7 @@ mod tests {
         assert_eq!(
             module.render(&state),
             format!(
-                "%{{F#eee8d5}}%{{F-}} %{{A1:touch {}/public_screen:}}10 tod…%{{A}}",
+                "%{{F#f1e9d2}}%{{F-}} %{{A1:touch {}/public_screen:}}10 tod…%{{A}}",
                 runtime_dir.to_str().unwrap()
             )
         );
@@ -428,7 +428,7 @@ mod tests {
         assert_eq!(
             module.render(&state),
             format!(
-                "%{{F#eee8d5}}%{{F-}} %{{A1:rm {}/public_screen:}}%{{A}}",
+                "%{{F#f1e9d2}}%{{F-}} %{{A1:rm {}/public_screen:}}%{{A}}",
                 runtime_dir.to_str().unwrap()
             )
         );
