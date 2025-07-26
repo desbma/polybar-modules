@@ -322,7 +322,6 @@ impl HomePowerModule {
                         .inspect_err(|e| log::warn!("Connecting to {:?} failed: {}", cfg.host, e))
                         .ok();
                 }
-                #[expect(clippy::return_and_then)]
                 if let Some(status) = dev.as_mut().and_then(|d| {
                     d.get_switch_status()
                         .inspect_err(|e| {
