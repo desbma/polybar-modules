@@ -1,14 +1,24 @@
 #[expect(dead_code, clippy::unreadable_literal)]
 #[derive(Clone)]
 pub(crate) enum Color {
-    Foreground = 0x93a1a1,
-    MainIcon = 0xeee8d5,
-    Focused = 0x2aa198,
-    Unfocused = 0x657b83,
-    Good = 0x859900,
-    Notice = 0xb58900,
-    Attention = 0xcb4b16,
-    Critical = 0xdc322f,
+    // // Solarized Dark
+    // Foreground = 0x93a1a1,
+    // MainIcon = 0xeee8d5,
+    // Focused = 0x2aa198,
+    // Unfocused = 0x657b83,
+    // Good = 0x859900,
+    // Notice = 0xb58900,
+    // Attention = 0xcb4b16,
+    // Critical = 0xdc322f,
+    // OKSolar
+    Foreground = 0x8faaab,
+    MainIcon = 0xf1e9d2,
+    Focused = 0x259d94,
+    Unfocused = 0x657377,
+    Good = 0x819500,
+    Notice = 0xac8300,
+    Attention = 0xd56500,
+    Critical = 0xf23749,
 }
 
 pub(crate) const ICON_WARNING: &str = "";
