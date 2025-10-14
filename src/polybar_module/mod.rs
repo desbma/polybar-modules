@@ -21,6 +21,7 @@ pub(crate) mod home_power;
 pub(crate) mod internet_bandwidth;
 pub(crate) mod market;
 pub(crate) mod network_status;
+pub(crate) mod notifications;
 pub(crate) mod player;
 pub(crate) mod progressbar_server;
 pub(crate) mod pulseaudio;
@@ -44,6 +45,7 @@ pub(crate) enum PolybarModule {
     InternetBandwidth(internet_bandwidth::InternetBandwidthModule),
     Market(market::MarketModule),
     NetworkStatus(network_status::NetworkStatusModule),
+    Notifications(notifications::NotificationsModule),
     Player(player::PlayerModule),
     ProgressBarServer(progressbar_server::ProgressBarServerModule),
     PulseAudio(pulseaudio::PulseAudioModule),

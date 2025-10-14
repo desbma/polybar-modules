@@ -105,6 +105,10 @@ fn main() -> anyhow::Result<()> {
                     .context("Failed to initialize network status module")?,
             )
         }
+        PolybarModuleName::notifications => polybar_module::PolybarModule::Notifications(
+            polybar_module::notifications::NotificationsModule::new()
+                .context("Failed to initialize notifications module")?,
+        ),
         PolybarModuleName::player { max_len } => polybar_module::PolybarModule::Player(
             polybar_module::player::PlayerModule::new(max_len)
                 .context("Failed to initialize player module")?,
@@ -156,6 +160,7 @@ fn main() -> anyhow::Result<()> {
         polybar_module::PolybarModule::InternetBandwidth(module) => render_loop(module),
         polybar_module::PolybarModule::Market(module) => render_loop(module),
         polybar_module::PolybarModule::NetworkStatus(module) => render_loop(module),
+        polybar_module::PolybarModule::Notifications(module) => render_loop(module),
         polybar_module::PolybarModule::Player(module) => render_loop(module),
         polybar_module::PolybarModule::ProgressBarServer(module) => render_loop(module),
         polybar_module::PolybarModule::PulseAudio(module) => render_loop(module),

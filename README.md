@@ -20,6 +20,7 @@ Rewrite of my personal Python [Polybar](https://polybar.github.io/) modules (and
 - [x] Mouse battery status
 - [x] Nvidia GPU status
 - [x] Network status
+- [x] Notifications status
 - [x] Player MPRIS status
 - [x] Progress bar server
 - [x] Pulse audio input/output device status & control

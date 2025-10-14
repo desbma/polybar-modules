@@ -29,6 +29,8 @@ pub(crate) enum PolybarModuleName {
     market,
     /// Start network status module
     network_status,
+    /// Start notifications status module
+    notifications,
     /// Start player status module
     player { max_len: usize },
     /// Start progress bar server module
