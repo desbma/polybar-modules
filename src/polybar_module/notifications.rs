@@ -35,8 +35,7 @@ impl RenderablePolybarModule for NotificationsModule {
             enabled: !Command::new("dunstctl")
                 .args(["is-paused", "-e"])
                 .status()
-                .map(|s| s.success())
-                .unwrap_or(true),
+                .map_or(true, |s| s.success()),
         }
     }
 

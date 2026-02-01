@@ -20,6 +20,49 @@ use crate::{
     theme::{self, ICON_WARNING},
 };
 
+/// `SunSpec` `NOT_IMPLEMENTED` sentinel for INT16 and SCALE registers (0x8000).
+/// When the inverter is starting up, shutting down, or sleeping, power registers
+/// return this value to indicate the data is unavailable.
+const SUNSPEC_NOT_IMPLEMENTED_I16: i16 = i16::MIN;
+
+/// `SolarEdge` inverter status values from `SunSpec` register.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u16)]
+enum InverterStatus {
+    Off = 1,
+    Sleeping = 2,
+    Starting = 3,
+    Producing = 4,
+    Throttled = 5,
+    ShuttingDown = 6,
+    Fault = 7,
+    Standby = 8,
+}
+
+impl TryFrom<u16> for InverterStatus {
+    type Error = ();
+
+    fn try_from(v: u16) -> Result<Self, Self::Error> {
+        match v {
+            1 => Ok(Self::Off),
+            2 => Ok(Self::Sleeping),
+            3 => Ok(Self::Starting),
+            4 => Ok(Self::Producing),
+            5 => Ok(Self::Throttled),
+            6 => Ok(Self::ShuttingDown),
+            7 => Ok(Self::Fault),
+            8 => Ok(Self::Standby),
+            _ => Err(()),
+        }
+    }
+}
+
+impl InverterStatus {
+    const fn is_producing(self) -> bool {
+        matches!(self, Self::Producing | Self::Throttled)
+    }
+}
+
 pub(crate) struct HomePowerModule {
     modbus_cfg: InverterModbusConfig,
     modbus_ctx: Option<tokio_modbus::client::sync::Context>,
@@ -260,16 +303,17 @@ impl HomePowerModule {
         ctx: &mut tokio_modbus::client::sync::Context,
         addr: u16,
     ) -> anyhow::Result<i16> {
-        #[expect(clippy::cast_possible_wrap)]
-        let v = ctx
+        let raw = ctx
             .read_holding_registers(addr, 1)??
             .into_iter()
             .at_most_one()
             .ok()
             .flatten()
-            .unwrap() as i16;
-        if v == i16::MAX {
-            anyhow::bail!("Invalid value for modbus register 0x{addr:02x}: 0x{v:02x}");
+            .unwrap();
+        #[expect(clippy::cast_possible_wrap)]
+        let v = raw as i16;
+        if v == SUNSPEC_NOT_IMPLEMENTED_I16 {
+            anyhow::bail!("SunSpec NOT_IMPLEMENTED for register 0x{addr:04x} (raw=0x{raw:04x})");
         }
         Ok(v)
     }
@@ -278,12 +322,27 @@ impl HomePowerModule {
         f64::from(raw) * 10_f64.powf(f64::from(scale_factor))
     }
 
+    fn modbus_read_holding_register_u16(
+        ctx: &mut tokio_modbus::client::sync::Context,
+        addr: u16,
+    ) -> anyhow::Result<u16> {
+        let v = ctx
+            .read_holding_registers(addr, 1)??
+            .into_iter()
+            .at_most_one()
+            .ok()
+            .flatten()
+            .unwrap();
+        Ok(v)
+    }
+
     fn try_update(&mut self) -> anyhow::Result<HomePowerModuleState> {
         // https://knowledge-center.solaredge.com/sites/kc/files/sunspec-implementation-technical-note.pdf
         // https://github.com/nmakel/solaredge_modbus/blob/fd3ce7ae32a259ee371c672dac3bcd75bfe51258/src/solaredge_modbus/__init__.py#L486
         // https://github.com/nmakel/solaredge_modbus/blob/fd3ce7ae32a259ee371c672dac3bcd75bfe51258/src/solaredge_modbus/__init__.py#L603
         const REG_ADDR_I_AC_POWER: u16 = 0x9c93;
         const REG_ADDR_I_AC_POWER_SF: u16 = 0x9c94;
+        const REG_ADDR_I_STATUS: u16 = 0x9cab;
         const REG_ADDR_M_AC_POWER: u16 = 0x9d0e;
         const REG_ADDR_M_AC_POWER_SF: u16 = 0x9d12;
 
@@ -300,10 +359,24 @@ impl HomePowerModule {
                 .context("Failed to connect to inverter")?
         };
 
-        let power_ac = Self::modbus_read_holding_register(&mut modbus_ctx, REG_ADDR_I_AC_POWER)?;
-        let power_ac_scale =
-            Self::modbus_read_holding_register(&mut modbus_ctx, REG_ADDR_I_AC_POWER_SF)?;
-        let solar_power = Self::modbus_decode_value(power_ac, power_ac_scale);
+        let status_raw =
+            Self::modbus_read_holding_register_u16(&mut modbus_ctx, REG_ADDR_I_STATUS)?;
+        let status = InverterStatus::try_from(status_raw).ok();
+
+        if status == Some(InverterStatus::Fault) {
+            anyhow::bail!("Inverter reports fault status");
+        }
+
+        let solar_power = if status.is_some_and(InverterStatus::is_producing) {
+            let power_ac =
+                Self::modbus_read_holding_register(&mut modbus_ctx, REG_ADDR_I_AC_POWER)?;
+            let power_ac_scale =
+                Self::modbus_read_holding_register(&mut modbus_ctx, REG_ADDR_I_AC_POWER_SF)?;
+            Self::modbus_decode_value(power_ac, power_ac_scale)
+        } else {
+            log::debug!("Inverter not producing ({status:?}), solar production assumed 0");
+            0.0
+        };
 
         let meter_ac_power =
             Self::modbus_read_holding_register(&mut modbus_ctx, REG_ADDR_M_AC_POWER)?;
@@ -322,7 +395,7 @@ impl HomePowerModule {
                         .inspect_err(|e| log::warn!("Connecting to {:?} failed: {}", cfg.host, e))
                         .ok();
                 }
-                if let Some(status) = dev.as_mut().and_then(|d| {
+                if let Some(switch_status) = dev.as_mut().and_then(|d| {
                     d.get_switch_status()
                         .inspect_err(|e| {
                             log::warn!("Getting status of {:?} failed: {}", cfg.host, e);
@@ -332,9 +405,9 @@ impl HomePowerModule {
                     HomeDevice {
                         name: cfg.name.clone(),
                         status: Some(HomeDeviceStatus {
-                            enabled: status.output,
+                            enabled: switch_status.output,
                             #[expect(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-                            power: status.apower.map_or(0, |v| v as u32),
+                            power: switch_status.apower.map_or(0, |v| v as u32),
                         }),
                     }
                 } else {
