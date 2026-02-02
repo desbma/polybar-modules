@@ -78,18 +78,18 @@ impl WttrModule {
 
         let sky_str = tokens
             .next()
-            .ok_or_else(|| anyhow::anyhow!("Error parsing string {:?}", text))?;
+            .ok_or_else(|| anyhow::anyhow!("Error parsing string {text:?}"))?;
         let sky = ICONS
             .get(sky_str)
             .copied()
-            .ok_or_else(|| anyhow::anyhow!("Error parsing string {:?}", text))?;
+            .ok_or_else(|| anyhow::anyhow!("Error parsing string {text:?}"))?;
 
         let temp_str = tokens
             .next()
-            .ok_or_else(|| anyhow::anyhow!("Error parsing string {:?}", text))?
+            .ok_or_else(|| anyhow::anyhow!("Error parsing string {text:?}"))?
             .split('°')
             .next()
-            .ok_or_else(|| anyhow::anyhow!("Error parsing string {:?}", text))?;
+            .ok_or_else(|| anyhow::anyhow!("Error parsing string {text:?}"))?;
         let temp = temp_str.parse()?;
 
         Ok(WttrModuleState { sky, temp })
