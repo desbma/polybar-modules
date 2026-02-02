@@ -20,12 +20,6 @@ use crate::{
     theme::{self, ICON_WARNING},
 };
 
-/// `SunSpec` `NOT_IMPLEMENTED` sentinel for INT16 and SCALE registers (0x8000).
-/// When the inverter is starting up, shutting down, or sleeping, power registers
-/// return this value to indicate the data is unavailable.
-const SUNSPEC_NOT_IMPLEMENTED_I16: i16 = i16::MIN;
-
-/// `SolarEdge` inverter status values from `SunSpec` register.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u16)]
 enum InverterStatus {
@@ -299,30 +293,7 @@ impl HomePowerModule {
         }
     }
 
-    fn modbus_read_holding_register(
-        ctx: &mut tokio_modbus::client::sync::Context,
-        addr: u16,
-    ) -> anyhow::Result<i16> {
-        let raw = ctx
-            .read_holding_registers(addr, 1)??
-            .into_iter()
-            .at_most_one()
-            .ok()
-            .flatten()
-            .unwrap();
-        #[expect(clippy::cast_possible_wrap)]
-        let v = raw as i16;
-        if v == SUNSPEC_NOT_IMPLEMENTED_I16 {
-            anyhow::bail!("SunSpec NOT_IMPLEMENTED for register 0x{addr:04x} (raw=0x{raw:04x})");
-        }
-        Ok(v)
-    }
-
-    fn modbus_decode_value(raw: i16, scale_factor: i16) -> f64 {
-        f64::from(raw) * 10_f64.powf(f64::from(scale_factor))
-    }
-
-    fn modbus_read_holding_register_u16(
+    fn modbus_read_value(
         ctx: &mut tokio_modbus::client::sync::Context,
         addr: u16,
     ) -> anyhow::Result<u16> {
@@ -334,6 +305,39 @@ impl HomePowerModule {
             .flatten()
             .unwrap();
         Ok(v)
+    }
+
+    /// Read a value register and its scale factor atomically in a single Modbus request
+    fn modbus_read_scaled_value(
+        ctx: &mut tokio_modbus::client::sync::Context,
+        value_addr: u16,
+        scale_factor_offset: u16,
+    ) -> anyhow::Result<f64> {
+        /// `SunSpec` `NOT_IMPLEMENTED` sentinel for INT16 and SCALE registers (0x8000)
+        const SUNSPEC_NOT_IMPLEMENTED_I16: i16 = i16::MIN;
+
+        let regs = ctx.read_holding_registers(value_addr, scale_factor_offset + 1)??;
+
+        let value = regs
+            .first()
+            .copied()
+            .ok_or_else(|| anyhow::anyhow!("No value register at 0x{value_addr:04x}"))?
+            .cast_signed();
+        anyhow::ensure!(value != SUNSPEC_NOT_IMPLEMENTED_I16);
+
+        let scale_factor = regs
+            .get(usize::from(scale_factor_offset))
+            .copied()
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "No SF register at 0x{:04x}",
+                    value_addr + scale_factor_offset
+                )
+            })?
+            .cast_signed();
+        anyhow::ensure!(scale_factor != SUNSPEC_NOT_IMPLEMENTED_I16);
+
+        Ok(f64::from(value) * 10_f64.powf(f64::from(scale_factor)))
     }
 
     fn try_update(&mut self) -> anyhow::Result<HomePowerModuleState> {
@@ -359,30 +363,26 @@ impl HomePowerModule {
                 .context("Failed to connect to inverter")?
         };
 
-        let status_raw =
-            Self::modbus_read_holding_register_u16(&mut modbus_ctx, REG_ADDR_I_STATUS)?;
-        let status = InverterStatus::try_from(status_raw).ok();
+        let status_raw = Self::modbus_read_value(&mut modbus_ctx, REG_ADDR_I_STATUS)?;
+        let status = InverterStatus::try_from(status_raw)
+            .map_err(|()| anyhow::anyhow!("Invalid status: {status_raw}"))?;
+        anyhow::ensure!(status != InverterStatus::Fault);
 
-        if status == Some(InverterStatus::Fault) {
-            anyhow::bail!("Inverter reports fault status");
-        }
-
-        let solar_power = if status.is_some_and(InverterStatus::is_producing) {
-            let power_ac =
-                Self::modbus_read_holding_register(&mut modbus_ctx, REG_ADDR_I_AC_POWER)?;
-            let power_ac_scale =
-                Self::modbus_read_holding_register(&mut modbus_ctx, REG_ADDR_I_AC_POWER_SF)?;
-            Self::modbus_decode_value(power_ac, power_ac_scale)
+        let solar_power = if status.is_producing() {
+            Self::modbus_read_scaled_value(
+                &mut modbus_ctx,
+                REG_ADDR_I_AC_POWER,
+                REG_ADDR_I_AC_POWER_SF - REG_ADDR_I_AC_POWER,
+            )?
         } else {
-            log::debug!("Inverter not producing ({status:?}), solar production assumed 0");
             0.0
         };
 
-        let meter_ac_power =
-            Self::modbus_read_holding_register(&mut modbus_ctx, REG_ADDR_M_AC_POWER)?;
-        let meter_ac_power_scale =
-            Self::modbus_read_holding_register(&mut modbus_ctx, REG_ADDR_M_AC_POWER_SF)?;
-        let grid_export = Self::modbus_decode_value(meter_ac_power, meter_ac_power_scale);
+        let grid_export = Self::modbus_read_scaled_value(
+            &mut modbus_ctx,
+            REG_ADDR_M_AC_POWER,
+            REG_ADDR_M_AC_POWER_SF - REG_ADDR_M_AC_POWER,
+        )?;
 
         let home_consumption_power = solar_power - grid_export;
 
