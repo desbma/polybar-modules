@@ -1,3 +1,5 @@
+/.claude
+/CLAUDE.md
 /arch-linux/
 !/arch-linux/PKGBUILD
 /target
