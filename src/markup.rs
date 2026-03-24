@@ -51,6 +51,10 @@ pub(crate) struct PolybarAction {
     pub command: String,
 }
 
+pub(crate) fn font_index(inner: &str, index: u8) -> String {
+    format!("%{{T{index}}}{inner}%{{T-}}")
+}
+
 pub(crate) fn action(inner: &str, action: PolybarAction) -> String {
     let cmd = action.command.replace(':', "\\:");
     format!("%{{A{}:{}:}}{}%{{A}}", action.type_ as u8, cmd, inner)

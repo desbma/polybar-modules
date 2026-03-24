@@ -83,6 +83,9 @@ fn main() -> anyhow::Result<()> {
                 polybar_module::home_power::HomePowerModule::new(&home_power_cfg),
             )
         }
+        PolybarModuleName::inference_usage => polybar_module::PolybarModule::InferenceUsage(
+            polybar_module::inference_usage::InferenceUsageModule::new(),
+        ),
         PolybarModuleName::internet_bandwidth => polybar_module::PolybarModule::InternetBandwidth(
             polybar_module::internet_bandwidth::InternetBandwidthModule::new(),
         ),
@@ -157,6 +160,7 @@ fn main() -> anyhow::Result<()> {
         polybar_module::PolybarModule::DebianUpdates(module) => render_loop(module),
         polybar_module::PolybarModule::GpuNvidia(module) => render_loop(module),
         polybar_module::PolybarModule::HomePower(module) => render_loop(module),
+        polybar_module::PolybarModule::InferenceUsage(module) => render_loop(module),
         polybar_module::PolybarModule::InternetBandwidth(module) => render_loop(module),
         polybar_module::PolybarModule::Market(module) => render_loop(module),
         polybar_module::PolybarModule::NetworkStatus(module) => render_loop(module),

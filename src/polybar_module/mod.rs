@@ -18,6 +18,7 @@ pub(crate) mod cpu_top;
 pub(crate) mod debian_updates;
 pub(crate) mod gpu_nvidia;
 pub(crate) mod home_power;
+pub(crate) mod inference_usage;
 pub(crate) mod internet_bandwidth;
 pub(crate) mod market;
 pub(crate) mod network_status;
@@ -42,6 +43,7 @@ pub(crate) enum PolybarModule {
     DebianUpdates(debian_updates::DebianUpdatesModule),
     GpuNvidia(gpu_nvidia::GpuNvidiaModule),
     HomePower(home_power::HomePowerModule),
+    InferenceUsage(inference_usage::InferenceUsageModule),
     InternetBandwidth(internet_bandwidth::InternetBandwidthModule),
     Market(market::MarketModule),
     NetworkStatus(network_status::NetworkStatusModule),

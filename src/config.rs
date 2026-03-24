@@ -23,6 +23,8 @@ pub(crate) enum PolybarModuleName {
     gpu_nvidia,
     /// Start home power module
     home_power,
+    /// Start inference usage module
+    inference_usage,
     /// Start low bandwidth button module
     internet_bandwidth,
     /// Start market trend module
