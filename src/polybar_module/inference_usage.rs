@@ -52,6 +52,7 @@ const RAMP_ICONS: [&str; 8] = ["▁", "▂", "▃", "▄", "▅", "▆", "▇", 
 const ICON_INFERENCE_USAGE: &str = "󱩅";
 const ICON_AMP: &str = "󰞍";
 const ICON_CLAUDE: &str = "";
+const ICON_UNAUTHORIZED: &str = "";
 
 enum ClaudeFetchError {
     AuthInvalid,
@@ -304,7 +305,7 @@ impl RenderablePolybarModule for InferenceUsageModule {
                 fragments.push(format!(
                     "{} {}",
                     ICON_CLAUDE,
-                    markup::Markup::new(ICON_WARNING).into_string(),
+                    markup::Markup::new(ICON_UNAUTHORIZED).into_string(),
                 ));
             }
             ClaudeUsageStatus::Error => {
@@ -427,7 +428,7 @@ mod tests {
         assert_eq!(
             module.render(&state),
             format!(
-                "{} {ICON_AMP} %{{T0}}%{{F#819500}}▄%{{F-}}%{{T-}} {ICON_CLAUDE} {ICON_WARNING}",
+                "{} {ICON_AMP} %{{T0}}%{{F#819500}}▄%{{F-}}%{{T-}} {ICON_CLAUDE} {ICON_UNAUTHORIZED}",
                 mi(ICON_INFERENCE_USAGE),
             )
         );
