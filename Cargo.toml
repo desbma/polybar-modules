@@ -2,7 +2,7 @@
 name = "polybar-modules"
 version = "0.1.0"
 authors = ["desbma <desbma@users.noreply.github.com>"]
-rust-version = "1.88"
+rust-version = "1.91"
 edition = "2024"
 
 [profile.release]
@@ -36,15 +36,13 @@ strip-ansi-escapes = { version = "0.2.1", default-features = false }
 sysinfo = { version = "0.38.4", default-features = false, features = ["network"] }
 tasks = { git = "https://github.com/desbma/todo", rev = "d559c94717c961fe41656e68e01863ce870c1ae0" }
 thiserror = { version = "2.0.18", default-features = false, features = ["std"] }
+tempfile = { version = "3.27.0", default-features = false }
 tokio-modbus = { version = "0.17.0", default-features = false, features = ["tcp-sync"] }
 toml = { version = "0.9.12", default-features = false, features = ["parse", "serde"] }
 tungstenite = { version = "0.28.0", default-features = false, features = ["native-tls", "handshake"] }
 ureq = { version = "3.2.0", default-features = false, features = ["gzip", "native-tls"] }
 url = { version = "2.5.8", default-features = false, features = ["std"] }
 xdg = { version = "3.0.0", default-features = false }
-
-[dev-dependencies]
-tempfile = { version = "3.27.0", default-features = false }
 
 [lints.rust]
 # https://doc.rust-lang.org/rustc/lints/listing/allowed-by-default.html

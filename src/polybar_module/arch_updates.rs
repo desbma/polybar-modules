@@ -37,8 +37,8 @@ impl ArchUpdatesModule {
         let server_error_backoff_builder = backon::ExponentialBuilder::default()
             .with_jitter()
             .with_factor(3.0)
-            .with_min_delay(Duration::from_secs(15 * 60))
-            .with_max_delay(Duration::from_secs(6 * 60 * 60))
+            .with_min_delay(Duration::from_mins(15))
+            .with_max_delay(Duration::from_hours(6))
             .without_max_times();
         let server_error_backoff = server_error_backoff_builder.build();
         Self {
@@ -139,7 +139,7 @@ impl RenderablePolybarModule for ArchUpdatesModule {
                 // Nominal
                 Some(_) => {
                     self.server_error_backoff = self.server_error_backoff_builder.build();
-                    Duration::from_secs(3 * 60 * 60)
+                    Duration::from_hours(3)
                 }
                 // Error occured
                 None => self.server_error_backoff.next().unwrap(),

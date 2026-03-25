@@ -77,7 +77,7 @@ impl MarketModule {
 
             // Don't try to be smart by computing absolute time to sleep until,
             // time shifts (NTP, DST...) could easily fuck that up
-            sleep(Duration::from_secs(60 * 60 * 8));
+            sleep(Duration::from_hours(8));
             did_wait = true;
         }
         did_wait
@@ -144,7 +144,7 @@ impl RenderablePolybarModule for MarketModule {
                 // Nominal
                 Some(_) => {
                     self.env.network_error_backoff = self.env.network_error_backoff_builder.build();
-                    Duration::from_secs(60 * 30)
+                    Duration::from_mins(30)
                 }
                 // Error occured
                 None => self.env.network_error_backoff.next().unwrap(),

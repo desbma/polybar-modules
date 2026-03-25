@@ -95,7 +95,7 @@ impl PolybarModuleEnv {
             .with_jitter()
             .with_factor(1.5)
             .with_min_delay(Duration::from_secs(3))
-            .with_max_delay(Duration::from_secs(60 * 60))
+            .with_max_delay(Duration::from_hours(1))
             .without_max_times();
         let network_error_backoff = network_error_backoff_builder.build();
         Self {
