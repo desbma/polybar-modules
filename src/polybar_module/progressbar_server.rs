@@ -32,8 +32,6 @@ pub(crate) struct ProgressBarServerModuleState {
     progress: Vec<u32>,
 }
 
-const RAMP_ICONS: [&str; 8] = ["▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"];
-
 impl ProgressBarServerModule {
     pub(crate) fn new(max_len: usize) -> anyhow::Result<Self> {
         let binary_name = env!("CARGO_PKG_NAME");
@@ -133,7 +131,8 @@ impl ProgressBarServerModule {
         assert!(progress <= 100);
         if len == 1 {
             #[expect(clippy::indexing_slicing)]
-            RAMP_ICONS[progress as usize / (100 / (RAMP_ICONS.len() - 1))].to_owned()
+            markup::RAMP_ICONS[progress as usize / (100 / (markup::RAMP_ICONS.len() - 1))]
+                .to_owned()
         } else {
             let progress_chars = len * progress as usize / 100;
             let remaining_chars = len - progress_chars;

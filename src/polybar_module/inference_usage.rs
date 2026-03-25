@@ -1,14 +1,16 @@
 use std::{
     env, fs,
     path::PathBuf,
-    process::{Command, Stdio},
+    process::{self, Child, Command, Stdio},
     thread::sleep,
-    time::{Duration, Instant, SystemTime},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
 use anyhow::Context as _;
 use regex::Regex;
 use serde::Deserialize;
+use tempfile::TempDir;
+use ureq::http::StatusCode;
 
 use crate::{
     markup,
@@ -23,6 +25,9 @@ pub(crate) struct InferenceUsageModule {
     token_path: PathBuf,
     claude_skip_until: Option<Instant>,
     claude_auth_failed_mtime: Option<SystemTime>,
+    chatgpt_h5_limit_re: Regex,
+    chatgpt_weekly_limit_re: Regex,
+    codex_session: Option<ChatGptSession>,
 }
 
 /// Claude usage fetch status
@@ -41,18 +46,154 @@ pub(crate) enum ClaudeUsageStatus {
     Error,
 }
 
+/// `ChatGPT` usage fetch status
+#[derive(Debug, PartialEq)]
+pub(crate) enum ChatGptUsageStatus {
+    /// Successfully fetched usage data
+    Available {
+        /// 5-hour remaining percentage
+        h5_left: f64,
+        /// Weekly remaining percentage
+        weekly_left: f64,
+    },
+    /// Generic error
+    Error,
+}
+
 /// Inference usage state
 #[derive(Debug, PartialEq)]
 pub(crate) struct InferenceUsageModuleState {
     amp_free_credit: Option<f64>,
     claude_status: ClaudeUsageStatus,
+    chatgpt_status: ChatGptUsageStatus,
 }
 
-const RAMP_ICONS: [&str; 8] = ["▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"];
 const ICON_INFERENCE_USAGE: &str = "󱩅";
 const ICON_AMP: &str = "󰞍";
 const ICON_CLAUDE: &str = "";
+const ICON_CHATGPT: &str = "󰫈";
 const ICON_UNAUTHORIZED: &str = "";
+const CHATGPT_POLL_INTERVAL: Duration = Duration::from_millis(100);
+const CHATGPT_MAX_TRIES: usize = 120;
+const CHATGPT_SEND_EVERY: usize = 7;
+const CHATGPT_TRUST_PROMPT: &str = "Do you trust the contents of this directory";
+
+struct ChatGptSession {
+    name: String,
+    _workdir: TempDir,
+    tty_child: Child,
+    next_is_status_cmd: bool,
+}
+
+impl ChatGptSession {
+    fn new() -> anyhow::Result<Self> {
+        let session_name = Self::session_name();
+        let workdir = tempfile::tempdir()?;
+
+        let session_start_status = Command::new("tmux")
+            .args([
+                "new-session",
+                "-d",
+                "-x",
+                "160",
+                "-y",
+                "48",
+                "-s",
+                &session_name,
+                "bash",
+                "-lc",
+                "cd \"$POLYBAR_CHATGPT_USAGE_WORKDIR\" && exec codex -a on-request -s workspace-write",
+            ])
+            .env("POLYBAR_CHATGPT_USAGE_WORKDIR", workdir.path())
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .context("Failed to start tmux session for ChatGPT usage")?;
+        session_start_status
+            .exit_ok()
+            .context("tmux new-session exited with error")?;
+
+        let attach_cmd = format!("tmux attach-session -t {session_name} -f read-only,ignore-size");
+        let tty_child = match Command::new("script")
+            .args(["-qefc", &attach_cmd, "/dev/null"])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+        {
+            Ok(child) => child,
+            Err(e) => {
+                let _ = Self::tmux_status(&["kill-session", "-t", &session_name]);
+                return Err(e.into());
+            }
+        };
+
+        Ok(Self {
+            name: session_name,
+            _workdir: workdir,
+            tty_child,
+            next_is_status_cmd: true,
+        })
+    }
+
+    fn tmux_status(args: &[&str]) -> anyhow::Result<()> {
+        let status = Command::new("tmux")
+            .args(args)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .context("Failed to run tmux")?;
+        status.exit_ok().context("tmux exited with error")?;
+        Ok(())
+    }
+
+    fn tmux_output(args: &[&str]) -> anyhow::Result<String> {
+        let output = Command::new("tmux")
+            .args(args)
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .output()
+            .context("Failed to run tmux")?;
+        output.status.exit_ok().context("tmux exited with error")?;
+        String::from_utf8(output.stdout).context("tmux output is not UTF-8")
+    }
+
+    fn session_name() -> String {
+        let ts = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .ok()
+            .map_or(0_u128, |d| d.as_millis());
+        format!("polybar_chatgpt_usage_{}_{}", process::id(), ts)
+    }
+
+    fn is_alive(&self) -> bool {
+        Command::new("tmux")
+            .args(["has-session", "-t", &self.name])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .is_ok_and(|s| s.success())
+    }
+
+    fn capture_pane(&self) -> anyhow::Result<String> {
+        Self::tmux_output(&["capture-pane", "-pJ", "-t", &self.name, "-S", "-500"])
+            .context("Failed to capture tmux pane")
+    }
+
+    fn send_keys(&self, keys: &str) -> anyhow::Result<()> {
+        Self::tmux_status(&["send-keys", "-t", &self.name, keys])
+    }
+
+    fn cleanup(&mut self) {
+        let _ = self.tty_child.kill();
+        let _ = self.tty_child.wait();
+        let _ = Self::tmux_status(&["kill-session", "-t", &self.name]);
+    }
+}
 
 enum ClaudeFetchError {
     AuthInvalid,
@@ -99,12 +240,122 @@ impl InferenceUsageModule {
         let amp_usage_re = Regex::new(r"\$([0-9]+\.?[0-9]*)").unwrap();
         let home = env::var("HOME").unwrap();
         let token_path = PathBuf::from(home).join(".claude/.credentials.json");
+        let chatgpt_h5_limit_re = Regex::new("5h limit:.* ([0-9]{1,3})% left").unwrap();
+        let chatgpt_weekly_limit_re = Regex::new("Weekly limit:.* ([0-9]{1,3})% left").unwrap();
         Self {
             client,
             amp_usage_re,
             token_path,
             claude_skip_until: None,
             claude_auth_failed_mtime: None,
+            chatgpt_h5_limit_re,
+            chatgpt_weekly_limit_re,
+            codex_session: None,
+        }
+    }
+
+    fn reset_codex_session(&mut self) {
+        if let Some(mut session) = self.codex_session.take() {
+            session.cleanup();
+        }
+    }
+
+    fn ensure_codex_session(&mut self) -> anyhow::Result<()> {
+        if self
+            .codex_session
+            .as_ref()
+            .is_some_and(ChatGptSession::is_alive)
+        {
+            return Ok(());
+        }
+        self.reset_codex_session();
+        self.codex_session = Some(ChatGptSession::new()?);
+        Ok(())
+    }
+
+    fn parse_chatgpt_left_pct(re: &Regex, output: &str, label: &str) -> anyhow::Result<u8> {
+        let cap = re
+            .captures_iter(output)
+            .last()
+            .ok_or_else(|| anyhow::anyhow!("Unable to find {label} usage in codex output"))?;
+        cap.get(1)
+            .ok_or_else(|| anyhow::anyhow!("Unable to capture {label} percentage"))?
+            .as_str()
+            .parse()
+            .context("Failed to parse ChatGPT usage percentage")
+    }
+
+    fn fetch_chatgpt_usage_once(&mut self) -> anyhow::Result<(f64, f64)> {
+        let raw_output = {
+            let session = self
+                .codex_session
+                .as_mut()
+                .ok_or_else(|| anyhow::anyhow!("Codex session missing"))?;
+            let mut raw_output = String::new();
+            let mut sent = false;
+            let mut last_send = 0;
+
+            for i in 0..CHATGPT_MAX_TRIES {
+                sleep(CHATGPT_POLL_INTERVAL);
+                raw_output = session.capture_pane()?;
+
+                if raw_output.contains(CHATGPT_TRUST_PROMPT) {
+                    session.send_keys("Enter")?;
+                }
+
+                if raw_output.contains("5h limit:") && raw_output.contains("Weekly limit:") {
+                    break;
+                }
+
+                if raw_output.contains("gpt-")
+                    && raw_output.contains("left")
+                    && (!sent || i.saturating_sub(last_send) >= CHATGPT_SEND_EVERY)
+                {
+                    session.send_keys("C-u")?;
+                    if session.next_is_status_cmd {
+                        session.send_keys("/status")?;
+                    } else {
+                        session.send_keys("/usage")?;
+                    }
+                    session.send_keys("Enter")?;
+                    session.next_is_status_cmd = !session.next_is_status_cmd;
+                    sent = true;
+                    last_send = i;
+                }
+            }
+
+            raw_output
+        };
+
+        if !(raw_output.contains("5h limit:") && raw_output.contains("Weekly limit:")) {
+            return Err(anyhow::anyhow!(
+                "Timed out waiting for ChatGPT usage in tmux session"
+            ));
+        }
+
+        let h5_left = f64::from(Self::parse_chatgpt_left_pct(
+            &self.chatgpt_h5_limit_re,
+            &raw_output,
+            "5h",
+        )?);
+        let weekly_left = f64::from(Self::parse_chatgpt_left_pct(
+            &self.chatgpt_weekly_limit_re,
+            &raw_output,
+            "weekly",
+        )?);
+        Ok((h5_left, weekly_left))
+    }
+
+    fn fetch_chatgpt_usage(&mut self) -> anyhow::Result<(f64, f64)> {
+        self.ensure_codex_session()?;
+        match self.fetch_chatgpt_usage_once() {
+            Ok(usage) => Ok(usage),
+            Err(e) => {
+                log::warn!("ChatGPT usage first attempt failed, restarting session: {e}");
+                self.reset_codex_session();
+                self.ensure_codex_session()?;
+                self.fetch_chatgpt_usage_once()
+            }
         }
     }
 
@@ -172,16 +423,16 @@ impl InferenceUsageModule {
             .call()
             .map_err(|e| ClaudeFetchError::Other(e.into()))?;
 
-        let status = response.status().as_u16();
-        if status == 401 {
+        let status = response.status();
+        if status == StatusCode::UNAUTHORIZED {
             self.claude_auth_failed_mtime = pre_request_mtime;
             return Err(ClaudeFetchError::AuthInvalid);
         }
-        if status == 429 {
-            self.claude_skip_until = Some(Instant::now() + Duration::from_secs(300));
+        if status == StatusCode::TOO_MANY_REQUESTS {
+            self.claude_skip_until = Some(Instant::now() + Duration::from_mins(10));
             return Err(ClaudeFetchError::RateLimited);
         }
-        if status >= 400 {
+        if status.is_client_error() || status.is_server_error() {
             return Err(ClaudeFetchError::Other(anyhow::anyhow!(
                 "HTTP status {status}"
             )));
@@ -206,7 +457,7 @@ impl InferenceUsageModule {
         #[expect(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
         let pct = utilization.clamp(0.0, 100.0) as usize;
         #[expect(clippy::indexing_slicing)]
-        let icon = RAMP_ICONS[pct.min(99) / (100 / (RAMP_ICONS.len() - 1))];
+        let icon = markup::RAMP_ICONS[pct.min(99) / (100 / (markup::RAMP_ICONS.len() - 1))];
         let color = if utilization > 30.0 {
             theme::Color::Good
         } else if utilization >= 10.0 {
@@ -218,12 +469,18 @@ impl InferenceUsageModule {
     }
 }
 
+impl Drop for InferenceUsageModule {
+    fn drop(&mut self) {
+        self.reset_codex_session();
+    }
+}
+
 impl RenderablePolybarModule for InferenceUsageModule {
     type State = InferenceUsageModuleState;
 
     fn wait_update(&mut self, prev_state: Option<&Self::State>) {
         if prev_state.is_some() {
-            sleep(Duration::from_secs(120));
+            sleep(Duration::from_mins(3));
         }
     }
 
@@ -256,9 +513,21 @@ impl RenderablePolybarModule for InferenceUsageModule {
             }
         };
 
+        let chatgpt_status = match self.fetch_chatgpt_usage() {
+            Ok((h5_left, weekly_left)) => ChatGptUsageStatus::Available {
+                h5_left,
+                weekly_left,
+            },
+            Err(e) => {
+                log::error!("ChatGPT usage: {e}");
+                ChatGptUsageStatus::Error
+            }
+        };
+
         InferenceUsageModuleState {
             amp_free_credit: amp_usage_dollars,
             claude_status,
+            chatgpt_status,
         }
     }
 
@@ -319,6 +588,29 @@ impl RenderablePolybarModule for InferenceUsageModule {
             }
         }
 
+        match &state.chatgpt_status {
+            ChatGptUsageStatus::Available {
+                h5_left,
+                weekly_left,
+            } => {
+                fragments.push(format!(
+                    "{} {}{}",
+                    ICON_CHATGPT,
+                    Self::render_ramp(*h5_left),
+                    Self::render_ramp(*weekly_left),
+                ));
+            }
+            ChatGptUsageStatus::Error => {
+                fragments.push(format!(
+                    "{} {}",
+                    ICON_CHATGPT,
+                    markup::Markup::new(ICON_WARNING)
+                        .fg(theme::Color::Attention)
+                        .into_string(),
+                ));
+            }
+        }
+
         fragments.join(" ")
     }
 }
@@ -369,11 +661,15 @@ mod tests {
         let state = InferenceUsageModuleState {
             amp_free_credit: Some(4.5),
             claude_status: ClaudeUsageStatus::Available { h5: 50.0, d7: 20.0 },
+            chatgpt_status: ChatGptUsageStatus::Available {
+                h5_left: 81.0,
+                weekly_left: 90.0,
+            },
         };
         assert_eq!(
             module.render(&state),
             format!(
-                "{} {ICON_AMP} %{{T0}}%{{F#819500}}▄%{{F-}}%{{T-}} {ICON_CLAUDE} %{{T0}}%{{F#819500}}▄%{{F-}}%{{T-}}%{{T0}}%{{F#819500}}▆%{{F-}}%{{T-}}",
+                "{} {ICON_AMP} %{{T0}}%{{F#819500}}▄%{{F-}}%{{T-}} {ICON_CLAUDE} %{{T0}}%{{F#819500}}▄%{{F-}}%{{T-}}%{{T0}}%{{F#819500}}▆%{{F-}}%{{T-}} {ICON_CHATGPT} %{{T0}}%{{F#819500}}▆%{{F-}}%{{T-}}%{{T0}}%{{F#819500}}▇%{{F-}}%{{T-}}",
                 mi(ICON_INFERENCE_USAGE),
             )
         );
@@ -382,12 +678,14 @@ mod tests {
         let state = InferenceUsageModuleState {
             amp_free_credit: None,
             claude_status: ClaudeUsageStatus::Error,
+            chatgpt_status: ChatGptUsageStatus::Error,
         };
         assert_eq!(
             module.render(&state),
             format!(
-                "{} {ICON_AMP} {} {ICON_CLAUDE} {}",
+                "{} {ICON_AMP} {} {ICON_CLAUDE} {} {ICON_CHATGPT} {}",
                 mi(ICON_INFERENCE_USAGE),
+                att_warn,
                 att_warn,
                 att_warn,
             )
@@ -397,12 +695,14 @@ mod tests {
         let state = InferenceUsageModuleState {
             amp_free_credit: Some(10.0),
             claude_status: ClaudeUsageStatus::Error,
+            chatgpt_status: ChatGptUsageStatus::Error,
         };
         assert_eq!(
             module.render(&state),
             format!(
-                "{} {ICON_AMP} %{{T0}}%{{F#819500}}█%{{F-}}%{{T-}} {ICON_CLAUDE} {}",
+                "{} {ICON_AMP} %{{T0}}%{{F#819500}}█%{{F-}}%{{T-}} {ICON_CLAUDE} {} {ICON_CHATGPT} {}",
                 mi(ICON_INFERENCE_USAGE),
+                att_warn,
                 att_warn,
             )
         );
@@ -411,11 +711,15 @@ mod tests {
         let state = InferenceUsageModuleState {
             amp_free_credit: Some(0.5),
             claude_status: ClaudeUsageStatus::Available { h5: 5.0, d7: 5.0 },
+            chatgpt_status: ChatGptUsageStatus::Available {
+                h5_left: 95.0,
+                weekly_left: 95.0,
+            },
         };
         assert_eq!(
             module.render(&state),
             format!(
-                "{} {ICON_AMP} %{{T0}}%{{F#d56500}}▁%{{F-}}%{{T-}} {ICON_CLAUDE} %{{T0}}%{{F#819500}}▇%{{F-}}%{{T-}}%{{T0}}%{{F#819500}}▇%{{F-}}%{{T-}}",
+                "{} {ICON_AMP} %{{T0}}%{{F#d56500}}▁%{{F-}}%{{T-}} {ICON_CLAUDE} %{{T0}}%{{F#819500}}▇%{{F-}}%{{T-}}%{{T0}}%{{F#819500}}▇%{{F-}}%{{T-}} {ICON_CHATGPT} %{{T0}}%{{F#819500}}▇%{{F-}}%{{T-}}%{{T0}}%{{F#819500}}▇%{{F-}}%{{T-}}",
                 mi(ICON_INFERENCE_USAGE),
             )
         );
@@ -424,13 +728,38 @@ mod tests {
         let state = InferenceUsageModuleState {
             amp_free_credit: Some(5.0),
             claude_status: ClaudeUsageStatus::AuthInvalid,
+            chatgpt_status: ChatGptUsageStatus::Available {
+                h5_left: 20.0,
+                weekly_left: 5.0,
+            },
         };
         assert_eq!(
             module.render(&state),
             format!(
-                "{} {ICON_AMP} %{{T0}}%{{F#819500}}▄%{{F-}}%{{T-}} {ICON_CLAUDE} {ICON_UNAUTHORIZED}",
+                "{} {ICON_AMP} %{{T0}}%{{F#819500}}▄%{{F-}}%{{T-}} {ICON_CLAUDE} {ICON_UNAUTHORIZED} {ICON_CHATGPT} %{{T0}}%{{F#ac8300}}▂%{{F-}}%{{T-}}%{{T0}}%{{F#d56500}}▁%{{F-}}%{{T-}}",
                 mi(ICON_INFERENCE_USAGE),
             )
+        );
+    }
+
+    #[test]
+    fn test_parse_chatgpt_usage_output() {
+        let module = InferenceUsageModule::new();
+        let output = "5h limit:             [████████████████░░░░] 81% left (resets 19:47)
+Weekly limit:         [██████████████████░░] 90% left (resets 19:45 on 30 Mar)";
+        assert_eq!(
+            InferenceUsageModule::parse_chatgpt_left_pct(&module.chatgpt_h5_limit_re, output, "5h")
+                .unwrap(),
+            81
+        );
+        assert_eq!(
+            InferenceUsageModule::parse_chatgpt_left_pct(
+                &module.chatgpt_weekly_limit_re,
+                output,
+                "weekly"
+            )
+            .unwrap(),
+            90
         );
     }
 }

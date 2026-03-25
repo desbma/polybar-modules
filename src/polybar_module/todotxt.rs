@@ -91,7 +91,7 @@ impl RenderablePolybarModule for TodoTxtModule {
     type State = Option<TodoTxtModuleState>;
 
     fn wait_update(&mut self, prev_state: Option<&Self::State>) {
-        const MAX_WAIT: Duration = Duration::from_secs(60 * 60);
+        const MAX_WAIT: Duration = Duration::from_hours(1);
         if let Some(prev_state) = prev_state {
             match prev_state {
                 // Nominal

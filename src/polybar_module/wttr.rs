@@ -105,7 +105,7 @@ impl RenderablePolybarModule for WttrModule {
                 // Nominal
                 Some(_) => {
                     self.env.network_error_backoff = self.env.network_error_backoff_builder.build();
-                    Duration::from_secs(60 * 5)
+                    Duration::from_mins(5)
                 }
                 // Error occured
                 None => self.env.network_error_backoff.next().unwrap(),

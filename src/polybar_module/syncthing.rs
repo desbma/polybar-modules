@@ -46,7 +46,7 @@ enum HttpError {
     Other(#[from] Box<ureq::Error>),
 }
 
-const REST_EVENT_TIMEOUT: Duration = Duration::from_secs(60 * 60);
+const REST_EVENT_TIMEOUT: Duration = Duration::from_hours(1);
 
 impl SyncthingModule {
     pub(crate) fn new(st_config_filepath: &Path) -> anyhow::Result<Self> {
