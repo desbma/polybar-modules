@@ -121,13 +121,9 @@ impl RenderablePolybarModule for XmonadModule {
                 .collect::<Vec<String>>()
                 .join(" ")
         } else {
-            markup::style(
-                ICON_WARNING,
-                Some(theme::Color::Attention),
-                None,
-                None,
-                None,
-            )
+            markup::Markup::new(ICON_WARNING)
+                .fg(theme::Color::Attention)
+                .into_string()
         }
     }
 }

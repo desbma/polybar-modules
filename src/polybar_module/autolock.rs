@@ -37,33 +37,26 @@ impl RenderablePolybarModule for AutolockModule {
 
     fn render(&self, state: &Self::State) -> String {
         if state.enabled {
-            markup::action(
-                ICON_AUTOLOCK_ENABLED,
-                markup::PolybarAction {
-                    type_: markup::PolybarActionType::ClickLeft,
-                    command: format!(
+            markup::Markup::new(ICON_AUTOLOCK_ENABLED)
+                .action(
+                    markup::PolybarActionType::ClickLeft,
+                    format!(
                         "systemctl --user stop autolock.service && pkill -USR1 -f '{} autolock$'",
                         env!("CARGO_PKG_NAME")
                     ),
-                },
-            )
+                )
+                .into_string()
         } else {
-            markup::action(
-                &markup::style(
-                    ICON_AUTOLOCK_DISABLED,
-                    None,
-                    Some(theme::Color::Notice),
-                    None,
-                    None,
-                ),
-                markup::PolybarAction {
-                    type_: markup::PolybarActionType::ClickLeft,
-                    command: format!(
+            markup::Markup::new(ICON_AUTOLOCK_DISABLED)
+                .underline(theme::Color::Notice)
+                .action(
+                    markup::PolybarActionType::ClickLeft,
+                    format!(
                         "systemctl --user start autolock.service && pkill -USR1 -f '{} autolock$'",
                         env!("CARGO_PKG_NAME")
                     ),
-                },
-            )
+                )
+                .into_string()
         }
     }
 }

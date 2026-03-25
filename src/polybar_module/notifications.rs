@@ -41,33 +41,26 @@ impl RenderablePolybarModule for NotificationsModule {
 
     fn render(&self, state: &Self::State) -> String {
         if state.enabled {
-            markup::action(
-                ICON_NOTIFICATIONS_ENABLED,
-                markup::PolybarAction {
-                    type_: markup::PolybarActionType::ClickLeft,
-                    command: format!(
+            markup::Markup::new(ICON_NOTIFICATIONS_ENABLED)
+                .action(
+                    markup::PolybarActionType::ClickLeft,
+                    format!(
                         "dunstctl set-paused true && pkill -USR1 -f '{} notifications$'",
                         env!("CARGO_PKG_NAME")
                     ),
-                },
-            )
+                )
+                .into_string()
         } else {
-            markup::action(
-                &markup::style(
-                    ICON_NOTIFICATIONS_DISABLED,
-                    None,
-                    Some(theme::Color::Notice),
-                    None,
-                    None,
-                ),
-                markup::PolybarAction {
-                    type_: markup::PolybarActionType::ClickLeft,
-                    command: format!(
+            markup::Markup::new(ICON_NOTIFICATIONS_DISABLED)
+                .underline(theme::Color::Notice)
+                .action(
+                    markup::PolybarActionType::ClickLeft,
+                    format!(
                         "dunstctl set-paused false && pkill -USR1 -f '{} notifications$'",
                         env!("CARGO_PKG_NAME")
                     ),
-                },
-            )
+                )
+                .into_string()
         }
     }
 }

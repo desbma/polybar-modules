@@ -24,6 +24,7 @@ Single-binary Rust CLI that outputs status lines for Polybar. Each module in `sr
   - For third-party crates, prefer importing at the crate or module level (e.g., `use anyhow::Context as _;`, `use clap::Parser;`) rather than deeply importing individual symbols, to keep the origin of symbols clear when reading code — only import deeper when needed to avoid very long fully-qualified namespaces
 - Prefer `log` macros for logging; no `dbg!` or `todo!`
 - Prefer `default-features = false` for dependencies
+- Do not add `derive` traits unless they are required by the current code (compile errors) or actively used by tests/runtime behavior
 - In tests:
   - Use `use super::*;` to import from the parent module
   - Prefer `unwrap()` over `expect()` for conciseness

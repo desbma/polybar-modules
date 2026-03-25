@@ -159,7 +159,9 @@ impl RenderablePolybarModule for TodoTxtModule {
             }) => {
                 let s1 = format!(
                     "{} ",
-                    markup::style(ICON_TODOTXT, Some(theme::Color::MainIcon), None, None, None)
+                    markup::Markup::new(ICON_TODOTXT)
+                        .fg(theme::Color::MainIcon)
+                        .into_string()
                 );
                 let s2 = format!("{pending_count} ");
                 let max_task_len = self.max_len.map(|max_len| max_len - s2.len());
@@ -171,64 +173,51 @@ impl RenderablePolybarModule for TodoTxtModule {
                 format!(
                     "{}{}",
                     s1,
-                    markup::action(
-                        &format!(
-                            "{}{}",
-                            s2,
-                            markup::style(
-                                &s3,
-                                None,
-                                if next_task
-                                    .as_ref()
-                                    .and_then(Task::due_date)
-                                    .is_some_and(|d| d <= chrono::Local::now().date_naive())
-                                {
-                                    Some(theme::Color::Attention)
-                                } else {
-                                    match next_task.as_ref().and_then(|t| t.priority) {
-                                        Some('A') => Some(theme::Color::Attention),
-                                        Some('B') => Some(theme::Color::Notice),
-                                        Some('C') => Some(theme::Color::Foreground),
-                                        _ => None,
-                                    }
-                                },
-                                None,
-                                None
-                            )
+                    markup::Markup::new(format!("{}{}", s2, {
+                        let mut markup = markup::Markup::new(&s3);
+                        if next_task
+                            .as_ref()
+                            .and_then(Task::due_date)
+                            .is_some_and(|d| d <= chrono::Local::now().date_naive())
+                        {
+                            markup = markup.underline(theme::Color::Attention);
+                        } else {
+                            match next_task.as_ref().and_then(|t| t.priority) {
+                                Some('A') => markup = markup.underline(theme::Color::Attention),
+                                Some('B') => markup = markup.underline(theme::Color::Notice),
+                                Some('C') => markup = markup.underline(theme::Color::Foreground),
+                                _ => {}
+                            }
+                        }
+                        markup.into_string()
+                    }))
+                    .action(
+                        markup::PolybarActionType::ClickLeft,
+                        format!(
+                            "touch {}",
+                            self.env.public_screen_filepath.to_str().unwrap()
                         ),
-                        markup::PolybarAction {
-                            type_: markup::PolybarActionType::ClickLeft,
-                            command: format!(
-                                "touch {}",
-                                self.env.public_screen_filepath.to_str().unwrap()
-                            ),
-                        },
-                    ),
+                    )
+                    .into_string(),
                 )
             }
             Some(TodoTxtModuleState::Paused) => {
                 format!(
                     "{} {}",
-                    markup::style(ICON_TODOTXT, Some(theme::Color::MainIcon), None, None, None),
-                    markup::action(
-                        &markup::style(ICON_TODOTXT_HIDDEN, None, None, None, None),
-                        markup::PolybarAction {
-                            type_: markup::PolybarActionType::ClickLeft,
-                            command: format!(
-                                "rm {}",
-                                self.env.public_screen_filepath.to_str().unwrap()
-                            ),
-                        },
-                    ),
+                    markup::Markup::new(ICON_TODOTXT)
+                        .fg(theme::Color::MainIcon)
+                        .into_string(),
+                    markup::Markup::new(ICON_TODOTXT_HIDDEN)
+                        .action(
+                            markup::PolybarActionType::ClickLeft,
+                            format!("rm {}", self.env.public_screen_filepath.to_str().unwrap()),
+                        )
+                        .into_string(),
                 )
             }
-            None => markup::style(
-                ICON_WARNING,
-                Some(theme::Color::Attention),
-                None,
-                None,
-                None,
-            ),
+            None => markup::Markup::new(ICON_WARNING)
+                .fg(theme::Color::Attention)
+                .into_string(),
         }
     }
 }

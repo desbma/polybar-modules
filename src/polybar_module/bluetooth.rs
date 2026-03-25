@@ -244,54 +244,38 @@ impl RenderablePolybarModule for BluetoothModule {
 
     fn render(&self, state: &Self::State) -> String {
         let mut fragments: Vec<String> = vec![if state.controller_powered {
-            markup::action(
-                &markup::style(
-                    ICON_BLUETOOTH_ENABLED,
-                    Some(theme::Color::MainIcon),
-                    None,
-                    None,
-                    None,
-                ),
-                markup::PolybarAction {
-                    type_: markup::PolybarActionType::ClickLeft,
-                    command: "bluetoothctl power off".to_owned(),
-                },
-            )
+            markup::Markup::new(ICON_BLUETOOTH_ENABLED)
+                .fg(theme::Color::MainIcon)
+                .action(
+                    markup::PolybarActionType::ClickLeft,
+                    "bluetoothctl power off",
+                )
+                .into_string()
         } else {
-            markup::action(
-                &markup::style(
-                    ICON_BLUETOOTH_DISABLED,
-                    Some(theme::Color::MainIcon),
-                    None,
-                    None,
-                    None,
-                ),
-                markup::PolybarAction {
-                    type_: markup::PolybarActionType::ClickLeft,
-                    command: "bluetoothctl power on".to_owned(),
-                },
-            )
+            markup::Markup::new(ICON_BLUETOOTH_DISABLED)
+                .fg(theme::Color::MainIcon)
+                .action(
+                    markup::PolybarActionType::ClickLeft,
+                    "bluetoothctl power on",
+                )
+                .into_string()
         }];
         for device in &state.devices {
             let name = theme::ellipsis(&theme::shorten_model_name(&device.name), Some(4));
-            let device_markup = markup::style(
-                &name,
-                None,
-                device.connected.then_some(theme::Color::Foreground),
-                None,
-                None,
-            );
-            let action_markup = markup::action(
-                &device_markup,
-                markup::PolybarAction {
-                    type_: markup::PolybarActionType::ClickLeft,
-                    command: format!(
+            let mut device_markup = markup::Markup::new(name);
+            if device.connected {
+                device_markup = device_markup.underline(theme::Color::Foreground);
+            }
+            let action_markup = device_markup
+                .action(
+                    markup::PolybarActionType::ClickLeft,
+                    format!(
                         "bluetoothctl {}connect {}",
                         if device.connected { "dis" } else { "" },
                         device.addr
                     ),
-                },
-            );
+                )
+                .into_string();
             fragments.push(action_markup);
         }
         fragments.join(" ")

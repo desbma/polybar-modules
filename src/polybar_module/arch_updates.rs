@@ -167,17 +167,16 @@ impl RenderablePolybarModule for ArchUpdatesModule {
                 } else {
                     let mut r = format!(
                         "{} {}",
-                        markup::style(ICON_UPDATE, Some(theme::Color::MainIcon), None, None, None),
+                        markup::Markup::new(ICON_UPDATE)
+                            .fg(theme::Color::MainIcon)
+                            .into_string(),
                         state.repo_update_count
                     );
                     if state.repo_security_update_count > 0 {
-                        r += &markup::style(
-                            &format!("({})", state.repo_security_update_count),
-                            Some(theme::Color::Attention),
-                            None,
-                            None,
-                            None,
-                        );
+                        r +=
+                            &markup::Markup::new(format!("({})", state.repo_security_update_count))
+                                .fg(theme::Color::Attention)
+                                .into_string();
                     }
                     if state.aur_update_count > 0 {
                         write!(r, "+{}", state.aur_update_count).unwrap();
@@ -185,13 +184,9 @@ impl RenderablePolybarModule for ArchUpdatesModule {
                     r
                 }
             }
-            None => markup::style(
-                ICON_WARNING,
-                Some(theme::Color::Attention),
-                None,
-                None,
-                None,
-            ),
+            None => markup::Markup::new(ICON_WARNING)
+                .fg(theme::Color::Attention)
+                .into_string(),
         }
     }
 }

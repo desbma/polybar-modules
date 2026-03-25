@@ -44,24 +44,17 @@ impl RenderablePolybarModule for InternetBandwidthModule {
 
     fn render(&self, state: &Self::State) -> String {
         match state.mode {
-            NetworkMode::Unrestricted => markup::action(
-                ICON_NETWORK_NORMAL,
-                markup::PolybarAction {
-                    type_: markup::PolybarActionType::ClickLeft,
-                    command: format!("touch {}", self.env.low_bw_filepath.to_str().unwrap()),
-                },
-            ),
-            NetworkMode::LowBandwith => markup::action(
-                &markup::style(
-                    ICON_NETWORK_LOW_BANDWIDTH,
-                    None,
-                    Some(theme::Color::Notice),
-                    None,
-                    None,
-                ),
-                markup::PolybarAction {
-                    type_: markup::PolybarActionType::ClickLeft,
-                    command: format!(
+            NetworkMode::Unrestricted => markup::Markup::new(ICON_NETWORK_NORMAL)
+                .action(
+                    markup::PolybarActionType::ClickLeft,
+                    format!("touch {}", self.env.low_bw_filepath.to_str().unwrap()),
+                )
+                .into_string(),
+            NetworkMode::LowBandwith => markup::Markup::new(ICON_NETWORK_LOW_BANDWIDTH)
+                .underline(theme::Color::Notice)
+                .action(
+                    markup::PolybarActionType::ClickLeft,
+                    format!(
                         "rm {}",
                         self.env
                             .low_bw_filepath
@@ -70,8 +63,8 @@ impl RenderablePolybarModule for InternetBandwidthModule {
                             .into_string()
                             .unwrap()
                     ),
-                },
-            ),
+                )
+                .into_string(),
         }
     }
 }

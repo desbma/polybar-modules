@@ -304,46 +304,36 @@ impl RenderablePolybarModule for PulseAudioModule {
             Some(state) => {
                 let mut fragments: Vec<String> = Vec::new();
                 if let Some(easyeffects) = state.easyeffects {
-                    let fragment = markup::action(
-                        &markup::style(
-                            ICON_AUDIO_EFFECTS,
-                            None,
-                            easyeffects.then_some(theme::Color::Foreground),
-                            None,
-                            None,
-                        ),
-                        markup::PolybarAction {
-                            type_: markup::PolybarActionType::ClickLeft,
-                            // Note: starting or stopping easyeffects will trigger a pactl subscribe event,
-                            // which will naturally update module to reflect service status
-                            command: if easyeffects {
-                                "systemctl --user -q --no-block stop easyeffects.service".to_owned()
-                            } else {
-                                "systemctl --user -q --no-block start easyeffects.service"
-                                    .to_owned()
-                            },
+                    let mut fragment = markup::Markup::new(ICON_AUDIO_EFFECTS);
+                    if easyeffects {
+                        fragment = fragment.underline(theme::Color::Foreground);
+                    }
+                    fragment = fragment.action(
+                        markup::PolybarActionType::ClickLeft,
+                        // Note: starting or stopping easyeffects will trigger a pactl subscribe event,
+                        // which will naturally update module to reflect service status
+                        if easyeffects {
+                            "systemctl --user -q --no-block stop easyeffects.service".to_owned()
+                        } else {
+                            "systemctl --user -q --no-block start easyeffects.service".to_owned()
                         },
                     );
+                    let fragment = fragment.into_string();
                     fragments.push(fragment);
                 }
                 if state.sinks.len() > 1 {
                     for sink in &state.sinks {
                         fragments.push(if sink.running {
-                            markup::style(
-                                &sink.name,
-                                None,
-                                Some(theme::Color::Foreground),
-                                None,
-                                None,
-                            )
+                            markup::Markup::new(&sink.name)
+                                .underline(theme::Color::Foreground)
+                                .into_string()
                         } else {
-                            markup::action(
-                                &sink.name,
-                                markup::PolybarAction {
-                                    type_: markup::PolybarActionType::ClickLeft,
-                                    command: format!("pactl set-default-sink {}", sink.id),
-                                },
-                            )
+                            markup::Markup::new(&sink.name)
+                                .action(
+                                    markup::PolybarActionType::ClickLeft,
+                                    format!("pactl set-default-sink {}", sink.id),
+                                )
+                                .into_string()
                         });
                     }
                     fragments.push(String::new());
@@ -351,42 +341,31 @@ impl RenderablePolybarModule for PulseAudioModule {
                     fragments.push(" ".to_owned());
                 }
                 if state.sources.len() > 1 {
-                    fragments.push(markup::style(
-                        ICON_MICROPHONE,
-                        Some(theme::Color::MainIcon),
-                        None,
-                        None,
-                        None,
-                    ));
+                    fragments.push(
+                        markup::Markup::new(ICON_MICROPHONE)
+                            .fg(theme::Color::MainIcon)
+                            .into_string(),
+                    );
                     for source in &state.sources {
                         fragments.push(if source.running {
-                            markup::style(
-                                &source.name,
-                                None,
-                                Some(theme::Color::Foreground),
-                                None,
-                                None,
-                            )
+                            markup::Markup::new(&source.name)
+                                .underline(theme::Color::Foreground)
+                                .into_string()
                         } else {
-                            markup::action(
-                                &source.name,
-                                markup::PolybarAction {
-                                    type_: markup::PolybarActionType::ClickLeft,
-                                    command: format!("pactl set-default-source {}", source.id),
-                                },
-                            )
+                            markup::Markup::new(&source.name)
+                                .action(
+                                    markup::PolybarActionType::ClickLeft,
+                                    format!("pactl set-default-source {}", source.id),
+                                )
+                                .into_string()
                         });
                     }
                 }
                 fragments.join(" ").trim_end().to_owned()
             }
-            None => markup::style(
-                ICON_WARNING,
-                Some(theme::Color::Attention),
-                None,
-                None,
-                None,
-            ),
+            None => markup::Markup::new(ICON_WARNING)
+                .fg(theme::Color::Attention)
+                .into_string(),
         }
     }
 }

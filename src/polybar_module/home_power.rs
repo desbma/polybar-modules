@@ -472,7 +472,9 @@ impl RenderablePolybarModule for HomePowerModule {
             Some(state) => {
                 format!(
                     "{} {}{:.1}{}{}{:.1}{}{}{:.1}kW{}",
-                    markup::style(ICON_POWER, Some(theme::Color::MainIcon), None, None, None),
+                    markup::Markup::new(ICON_POWER)
+                        .fg(theme::Color::MainIcon)
+                        .into_string(),
                     ICON_POWER_SOLAR,
                     f64::from(state.solar_power) / 1000.0,
                     if state.solar_power > 0 {
@@ -498,35 +500,25 @@ impl RenderablePolybarModule for HomePowerModule {
                                 .devices
                                 .iter()
                                 .map(|d| {
-                                    markup::style(
-                                        &d.name,
-                                        d.status.is_none().then_some(theme::Color::Unfocused),
-                                        if d.status
-                                            .as_ref()
-                                            .is_some_and(|s| s.enabled && s.power > 0)
-                                        {
-                                            Some(theme::Color::Notice)
-                                        } else if d.status.as_ref().is_some_and(|s| s.enabled) {
-                                            Some(theme::Color::Foreground)
-                                        } else {
-                                            None
-                                        },
-                                        None,
-                                        None,
-                                    )
+                                    let mut markup = markup::Markup::new(&d.name);
+                                    if d.status.is_none() {
+                                        markup = markup.fg(theme::Color::Unfocused);
+                                    }
+                                    if d.status.as_ref().is_some_and(|s| s.enabled && s.power > 0) {
+                                        markup = markup.underline(theme::Color::Notice);
+                                    } else if d.status.as_ref().is_some_and(|s| s.enabled) {
+                                        markup = markup.underline(theme::Color::Foreground);
+                                    }
+                                    markup.into_string()
                                 })
                                 .join(" ")
                         )
                     }
                 )
             }
-            None => markup::style(
-                ICON_WARNING,
-                Some(theme::Color::Attention),
-                None,
-                None,
-                None,
-            ),
+            None => markup::Markup::new(ICON_WARNING)
+                .fg(theme::Color::Attention)
+                .into_string(),
         }
     }
 }

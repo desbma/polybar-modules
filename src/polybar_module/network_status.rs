@@ -300,53 +300,41 @@ impl RenderablePolybarModule for NetworkStatusModule {
     fn render(&self, state: &Self::State) -> String {
         match state {
             Some(state) => {
-                let mut fragments: Vec<String> = vec![markup::style(
-                    ICON_NETWORK,
-                    Some(theme::Color::MainIcon),
-                    None,
-                    None,
-                    None,
-                )];
+                let mut fragments: Vec<String> = vec![
+                    markup::Markup::new(ICON_NETWORK)
+                        .fg(theme::Color::MainIcon)
+                        .into_string(),
+                ];
                 for (reachable, host_info) in state.reachable_hosts.iter().zip(&self.cfg.hosts) {
-                    fragments.push(markup::style(
-                        &host_info.name,
-                        (!reachable && host_info.warn_unreachable)
-                            .then_some(theme::Color::Attention),
-                        (*reachable).then_some(theme::Color::Foreground),
-                        None,
-                        None,
-                    ));
+                    let mut markup = markup::Markup::new(&host_info.name);
+                    if !reachable && host_info.warn_unreachable {
+                        markup = markup.fg(theme::Color::Attention);
+                    }
+                    if *reachable {
+                        markup = markup.underline(theme::Color::Foreground);
+                    }
+                    fragments.push(markup.into_string());
                 }
                 if !state.vpn.is_empty() {
                     fragments.push(format!(
                         " {}",
-                        markup::style(
-                            ICON_NETWORK_VPN,
-                            Some(theme::Color::MainIcon),
-                            None,
-                            None,
-                            None,
-                        )
+                        markup::Markup::new(ICON_NETWORK_VPN)
+                            .fg(theme::Color::MainIcon)
+                            .into_string()
                     ));
                     for wireguard_interface in &state.vpn {
-                        fragments.push(markup::style(
-                            wireguard_interface,
-                            None,
-                            Some(theme::Color::Foreground),
-                            None,
-                            None,
-                        ));
+                        fragments.push(
+                            markup::Markup::new(wireguard_interface)
+                                .underline(theme::Color::Foreground)
+                                .into_string(),
+                        );
                     }
                 }
                 fragments.join(" ")
             }
-            None => markup::style(
-                ICON_WARNING,
-                Some(theme::Color::Attention),
-                None,
-                None,
-                None,
-            ),
+            None => markup::Markup::new(ICON_WARNING)
+                .fg(theme::Color::Attention)
+                .into_string(),
         }
     }
 }

@@ -125,34 +125,24 @@ impl RenderablePolybarModule for CpuFreqModule {
                 let freq_load = f64::from(100 * (state.avg_freq - self.freq_range.0))
                     / f64::from(self.freq_range.1 - self.freq_range.0);
                 log::debug!("freq_load={freq_load}");
-                markup::style(
-                    &format!(
-                        "{:.1}/{:.1}/{:.1} GHz",
-                        f64::from(state.min_freq) / 1_000_000.0,
-                        f64::from(state.avg_freq) / 1_000_000.0,
-                        f64::from(state.max_freq) / 1_000_000.0
-                    ),
-                    if freq_load > 100.0 {
-                        Some(theme::Color::Attention)
-                    } else if freq_load > 80.0 {
-                        Some(theme::Color::Notice)
-                    } else if freq_load < 50.0 {
-                        Some(theme::Color::Good)
-                    } else {
-                        None
-                    },
-                    None,
-                    None,
-                    None,
-                )
+                let mut markup = markup::Markup::new(format!(
+                    "{:.1}/{:.1}/{:.1} GHz",
+                    f64::from(state.min_freq) / 1_000_000.0,
+                    f64::from(state.avg_freq) / 1_000_000.0,
+                    f64::from(state.max_freq) / 1_000_000.0
+                ));
+                if freq_load > 100.0 {
+                    markup = markup.fg(theme::Color::Attention);
+                } else if freq_load > 80.0 {
+                    markup = markup.fg(theme::Color::Notice);
+                } else if freq_load < 50.0 {
+                    markup = markup.fg(theme::Color::Good);
+                }
+                markup.into_string()
             }
-            None => markup::style(
-                ICON_WARNING,
-                Some(theme::Color::Attention),
-                None,
-                None,
-                None,
-            ),
+            None => markup::Markup::new(ICON_WARNING)
+                .fg(theme::Color::Attention)
+                .into_string(),
         }
     }
 }

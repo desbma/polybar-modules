@@ -183,26 +183,18 @@ impl RenderablePolybarModule for ProgressBarServerModule {
                 } else if let Ok(Some(progress)) = state.progress.iter().at_most_one() {
                     format!(
                         "{} {} {}",
-                        markup::style(
-                            ICON_PROGRESSBAR_SERVER,
-                            Some(theme::Color::MainIcon),
-                            None,
-                            None,
-                            None
-                        ),
+                        markup::Markup::new(ICON_PROGRESSBAR_SERVER)
+                            .fg(theme::Color::MainIcon)
+                            .into_string(),
                         state.progress.len(),
                         Self::render_progress(*progress, self.max_len - 2)
                     )
                 } else if let Some((progress1, progress2)) = state.progress.iter().collect_tuple() {
                     format!(
                         "{} {} {} {}",
-                        markup::style(
-                            ICON_PROGRESSBAR_SERVER,
-                            Some(theme::Color::MainIcon),
-                            None,
-                            None,
-                            None
-                        ),
+                        markup::Markup::new(ICON_PROGRESSBAR_SERVER)
+                            .fg(theme::Color::MainIcon)
+                            .into_string(),
                         state.progress.len(),
                         Self::render_progress(*progress1, (self.max_len - 3) / 2),
                         Self::render_progress(*progress2, (self.max_len - 3) / 2),
@@ -211,13 +203,9 @@ impl RenderablePolybarModule for ProgressBarServerModule {
                     // Average progress, then maximum
                     format!(
                         "{} {} {} {}",
-                        markup::style(
-                            ICON_PROGRESSBAR_SERVER,
-                            Some(theme::Color::MainIcon),
-                            None,
-                            None,
-                            None
-                        ),
+                        markup::Markup::new(ICON_PROGRESSBAR_SERVER)
+                            .fg(theme::Color::MainIcon)
+                            .into_string(),
                         state.progress.len(),
                         Self::render_progress(
                             state.progress.iter().sum::<u32>() / state.progress.len() as u32,
@@ -230,13 +218,9 @@ impl RenderablePolybarModule for ProgressBarServerModule {
                     )
                 }
             }
-            None => markup::style(
-                ICON_WARNING,
-                Some(theme::Color::Attention),
-                None,
-                None,
-                None,
-            ),
+            None => markup::Markup::new(ICON_WARNING)
+                .fg(theme::Color::Attention)
+                .into_string(),
         }
     }
 }

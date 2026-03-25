@@ -181,42 +181,30 @@ impl RenderablePolybarModule for MarketModule {
             Some(state) => {
                 format!(
                     "{} {:.0} {}",
-                    markup::style(
-                        if state.ma50 >= state.ma100 {
-                            ICON_MARKET_UP
-                        } else {
-                            ICON_MARKET_DOWN
-                        },
-                        Some(theme::Color::MainIcon),
-                        None,
-                        None,
-                        None
-                    ),
+                    markup::Markup::new(if state.ma50 >= state.ma100 {
+                        ICON_MARKET_UP
+                    } else {
+                        ICON_MARKET_DOWN
+                    })
+                    .fg(theme::Color::MainIcon)
+                    .into_string(),
                     state.val,
-                    markup::style(
-                        &format!("{:+.2}%", state.delta_prct),
+                    {
+                        let mut markup = markup::Markup::new(format!("{:+.2}%", state.delta_prct));
                         if state.delta_prct > 1.0 {
-                            Some(theme::Color::Good)
+                            markup = markup.fg(theme::Color::Good);
                         } else if state.delta_prct < -2.0 {
-                            Some(theme::Color::Attention)
+                            markup = markup.fg(theme::Color::Attention);
                         } else if state.delta_prct < -1.0 {
-                            Some(theme::Color::Notice)
-                        } else {
-                            None
-                        },
-                        None,
-                        None,
-                        None
-                    ),
+                            markup = markup.fg(theme::Color::Notice);
+                        }
+                        markup.into_string()
+                    },
                 )
             }
-            None => markup::style(
-                ICON_WARNING,
-                Some(theme::Color::Attention),
-                None,
-                None,
-                None,
-            ),
+            None => markup::Markup::new(ICON_WARNING)
+                .fg(theme::Color::Attention)
+                .into_string(),
         }
     }
 }

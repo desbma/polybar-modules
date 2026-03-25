@@ -148,28 +148,22 @@ impl RenderablePolybarModule for DebianUpdatesModule {
                 } else {
                     let mut r = format!(
                         "{} {}",
-                        markup::style(ICON_UPDATE, Some(theme::Color::MainIcon), None, None, None),
+                        markup::Markup::new(ICON_UPDATE)
+                            .fg(theme::Color::MainIcon)
+                            .into_string(),
                         state.update_count
                     );
                     if state.security_update_count > 0 {
-                        r += &markup::style(
-                            &format!("({})", state.security_update_count),
-                            Some(theme::Color::Attention),
-                            None,
-                            None,
-                            None,
-                        );
+                        r += &markup::Markup::new(format!("({})", state.security_update_count))
+                            .fg(theme::Color::Attention)
+                            .into_string();
                     }
                     r
                 }
             }
-            None => markup::style(
-                ICON_WARNING,
-                Some(theme::Color::Attention),
-                None,
-                None,
-                None,
-            ),
+            None => markup::Markup::new(ICON_WARNING)
+                .fg(theme::Color::Attention)
+                .into_string(),
         }
     }
 }

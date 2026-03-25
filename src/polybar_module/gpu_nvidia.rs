@@ -125,16 +125,14 @@ impl GpuNvidiaModule {
         ];
         for (i, (icon, color)) in icons.iter().enumerate() {
             if prct as usize <= 100 / icons.len() * (i + 1) {
-                return markup::style(icon, Some(color.to_owned()), None, None, None);
+                return markup::Markup::new(*icon)
+                    .fg(color.to_owned())
+                    .into_string();
             }
         }
-        markup::style(
-            icons.last().unwrap().0,
-            Some(icons.last().unwrap().1.clone()),
-            None,
-            None,
-            None,
-        )
+        markup::Markup::new(icons.last().unwrap().0)
+            .fg(icons.last().unwrap().1)
+            .into_string()
     }
 }
 
@@ -181,20 +179,19 @@ impl RenderablePolybarModule for GpuNvidiaModule {
             #[expect(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
             Some(state) => {
                 let temp_str = if state.throttle || state.temp >= OVERHEAT_TEMP_THRESHOLD {
-                    markup::style(
-                        &format!("{}°C", state.temp),
-                        Some(theme::Color::Critical),
-                        Some(theme::Color::Critical),
-                        None,
-                        None,
-                    )
+                    markup::Markup::new(format!("{}°C", state.temp))
+                        .fg(theme::Color::Critical)
+                        .underline(theme::Color::Critical)
+                        .into_string()
                 } else {
                     format!("{}°C", state.temp)
                 };
                 let mem_prct = 100.0 * f32::from(state.mem_used) / f32::from(state.mem_total);
                 format!(
                     "{} {:2.0}% {} {:4}+{:4}MHz {} {:3}W",
-                    markup::style(ICON_GPU, Some(theme::Color::MainIcon), None, None, None),
+                    markup::Markup::new(ICON_GPU)
+                        .fg(theme::Color::MainIcon)
+                        .into_string(),
                     mem_prct,
                     Self::ramp_prct(mem_prct as u8),
                     state.freq_graphics,
@@ -203,13 +200,9 @@ impl RenderablePolybarModule for GpuNvidiaModule {
                     state.power_draw
                 )
             }
-            None => markup::style(
-                ICON_WARNING,
-                Some(theme::Color::Attention),
-                None,
-                None,
-                None,
-            ),
+            None => markup::Markup::new(ICON_WARNING)
+                .fg(theme::Color::Attention)
+                .into_string(),
         }
     }
 }

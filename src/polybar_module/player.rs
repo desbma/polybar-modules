@@ -145,15 +145,15 @@ impl RenderablePolybarModule for PlayerModule {
                     let (first_tokens, other_tokens) = tokens.split_at(sep_idx);
                     s = format!(
                         "{} {} {}",
-                        markup::style(ICON_PLAYER, Some(theme::Color::MainIcon), None, None, None),
+                        markup::Markup::new(ICON_PLAYER)
+                            .fg(theme::Color::MainIcon)
+                            .into_string(),
                         first_tokens.join(" "),
-                        other_tokens.join(&markup::style(
-                            " / ",
-                            Some(theme::Color::Unfocused),
-                            None,
-                            None,
-                            None
-                        ))
+                        other_tokens.join(
+                            &markup::Markup::new(" / ")
+                                .fg(theme::Color::Unfocused)
+                                .into_string(),
+                        )
                     );
                     if s.len() <= self.max_len {
                         return s;

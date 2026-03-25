@@ -130,17 +130,15 @@ impl RenderablePolybarModule for WttrModule {
             Some(state) => {
                 format!(
                     "{} {}°C",
-                    markup::style(state.sky, Some(theme::Color::MainIcon), None, None, None),
+                    markup::Markup::new(state.sky)
+                        .fg(theme::Color::MainIcon)
+                        .into_string(),
                     state.temp
                 )
             }
-            None => markup::style(
-                ICON_WARNING,
-                Some(theme::Color::Attention),
-                None,
-                None,
-                None,
-            ),
+            None => markup::Markup::new(ICON_WARNING)
+                .fg(theme::Color::Attention)
+                .into_string(),
         }
     }
 }

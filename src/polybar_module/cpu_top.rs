@@ -106,33 +106,25 @@ impl RenderablePolybarModule for CpuTopModule {
     fn render(&self, state: &Self::State) -> String {
         let max_proc_len = self.max_len.map(|v| v - 4);
         match state {
-            Some(state) => markup::style(
-                &format!(
+            Some(state) => {
+                let mut markup = markup::Markup::new(format!(
                     "{: >2}% {}",
                     state.cpu_prct,
                     theme::pad(
                         &theme::ellipsis(&state.process_name, max_proc_len),
                         max_proc_len
                     ),
-                ),
+                ));
                 if state.cpu_prct >= 90 {
-                    Some(theme::Color::Attention)
+                    markup = markup.fg(theme::Color::Attention);
                 } else if state.cpu_prct >= 50 {
-                    Some(theme::Color::Notice)
-                } else {
-                    None
-                },
-                None,
-                None,
-                None,
-            ),
-            None => markup::style(
-                ICON_WARNING,
-                Some(theme::Color::Attention),
-                None,
-                None,
-                None,
-            ),
+                    markup = markup.fg(theme::Color::Notice);
+                }
+                markup.into_string()
+            }
+            None => markup::Markup::new(ICON_WARNING)
+                .fg(theme::Color::Attention)
+                .into_string(),
         }
     }
 }

@@ -237,38 +237,29 @@ impl RenderablePolybarModule for SyncthingModule {
 
     fn render(&self, state: &Self::State) -> String {
         match state {
-            Some(state) => markup::action(
-                &format!(
-                    "{} {} {} {} {}/{} {}{} {}{}",
-                    markup::style(
-                        ICON_SYNCTHING,
-                        Some(theme::Color::MainIcon),
-                        None,
-                        None,
-                        None
-                    ),
-                    ICON_SYNCTHING_FOLDER,
-                    state.folder_count,
-                    ICON_SYNCTHING_DEVICE,
-                    state.device_connected_count,
-                    state.remote_device_count,
-                    ICON_SYNCTHING_DOWNLOADING,
-                    state.folders_syncing_down_count,
-                    ICON_SYNCTHING_UPLOADING,
-                    state.device_syncing_to_count
-                ),
-                markup::PolybarAction {
-                    type_: markup::PolybarActionType::ClickLeft,
-                    command: "firefox --new-tab 'http://127.0.0.1:8384/'".to_owned(),
-                },
-            ),
-            None => markup::style(
-                ICON_WARNING,
-                Some(theme::Color::Attention),
-                None,
-                None,
-                None,
-            ),
+            Some(state) => markup::Markup::new(format!(
+                "{} {} {} {} {}/{} {}{} {}{}",
+                markup::Markup::new(ICON_SYNCTHING)
+                    .fg(theme::Color::MainIcon)
+                    .into_string(),
+                ICON_SYNCTHING_FOLDER,
+                state.folder_count,
+                ICON_SYNCTHING_DEVICE,
+                state.device_connected_count,
+                state.remote_device_count,
+                ICON_SYNCTHING_DOWNLOADING,
+                state.folders_syncing_down_count,
+                ICON_SYNCTHING_UPLOADING,
+                state.device_syncing_to_count
+            ))
+            .action(
+                markup::PolybarActionType::ClickLeft,
+                "firefox --new-tab 'http://127.0.0.1:8384/'",
+            )
+            .into_string(),
+            None => markup::Markup::new(ICON_WARNING)
+                .fg(theme::Color::Attention)
+                .into_string(),
         }
     }
 }

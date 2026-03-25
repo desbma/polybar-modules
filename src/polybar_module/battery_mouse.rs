@@ -80,28 +80,22 @@ impl RenderablePolybarModule for BatteryMouseModule {
     fn render(&self, state: &Self::State) -> String {
         let mut fragments: Vec<String> = Vec::new();
         if !state.levels.is_empty() {
-            fragments.push(markup::style(
-                ICON_MOUSE,
-                Some(theme::Color::MainIcon),
-                None,
-                None,
-                None,
-            ));
+            fragments.push(
+                markup::Markup::new(ICON_MOUSE)
+                    .fg(theme::Color::MainIcon)
+                    .into_string(),
+            );
             for (name, level) in &state.levels {
                 fragments.push(match level {
-                    Some(level) => markup::style(
-                        &format!("{name} {level}%"),
+                    Some(level) => {
+                        let mut markup = markup::Markup::new(format!("{name} {level}%"));
                         if level < &40 {
-                            Some(theme::Color::Attention)
+                            markup = markup.fg(theme::Color::Attention);
                         } else if level < &50 {
-                            Some(theme::Color::Notice)
-                        } else {
-                            None
-                        },
-                        None,
-                        None,
-                        None,
-                    ),
+                            markup = markup.fg(theme::Color::Notice);
+                        }
+                        markup.into_string()
+                    }
                     None => format!("{name} ?"),
                 });
             }

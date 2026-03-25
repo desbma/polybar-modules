@@ -1,40 +1,9 @@
+use std::fmt::Write as _;
+
 use crate::theme;
 
-pub(crate) fn style(
-    inner: &str,
-    foreground_color: Option<theme::Color>,
-    underline_color: Option<theme::Color>,
-    overline_color: Option<theme::Color>,
-    background_color: Option<theme::Color>,
-) -> String {
-    let mut r = inner.to_owned();
-    if let Some(foreground_color) = foreground_color {
-        r = color_markup(&r, 'F', foreground_color);
-    }
-    if let Some(underline_color) = underline_color {
-        r = color_markup2(&r, 'u', underline_color);
-    }
-    if let Some(overline_color) = overline_color {
-        r = color_markup2(&r, 'o', overline_color);
-    }
-    if let Some(background_color) = background_color {
-        r = color_markup(&r, 'b', background_color);
-    }
-    r
-}
-
-fn color_markup(s: &str, letter: char, color: theme::Color) -> String {
-    format!("%{{{}#{:6x}}}{}%{{{}-}}", letter, color as u32, s, letter)
-}
-
-fn color_markup2(s: &str, letter: char, color: theme::Color) -> String {
-    format!(
-        "%{{{}#{:06x}}}%{{+{}}}{}%{{-{}}}",
-        letter, color as u32, letter, s, letter
-    )
-}
-
 #[expect(dead_code)]
+#[derive(Clone, Copy)]
 pub(crate) enum PolybarActionType {
     ClickLeft = 1,
     ClickMiddle = 2,
@@ -46,18 +15,112 @@ pub(crate) enum PolybarActionType {
     DoubleClickRight = 8,
 }
 
-pub(crate) struct PolybarAction {
-    pub type_: PolybarActionType,
-    pub command: String,
+enum MarkupOp {
+    Foreground(theme::Color),
+    Underline(theme::Color),
+    Overline(theme::Color),
+    Background(theme::Color),
+    Font(u8),
+    Action {
+        type_: PolybarActionType,
+        command: String,
+    },
 }
 
-pub(crate) fn font_index(inner: &str, index: u8) -> String {
-    format!("%{{T{index}}}{inner}%{{T-}}")
+pub(crate) struct Markup {
+    inner: String,
+    ops: Vec<MarkupOp>,
 }
 
-pub(crate) fn action(inner: &str, action: PolybarAction) -> String {
-    let cmd = action.command.replace(':', "\\:");
-    format!("%{{A{}:{}:}}{}%{{A}}", action.type_ as u8, cmd, inner)
+impl Markup {
+    pub(crate) fn new<S>(inner: S) -> Self
+    where
+        S: Into<String>,
+    {
+        Self {
+            inner: inner.into(),
+            ops: Vec::new(),
+        }
+    }
+
+    pub(crate) fn fg(mut self, color: theme::Color) -> Self {
+        self.ops.push(MarkupOp::Foreground(color));
+        self
+    }
+
+    pub(crate) fn underline(mut self, color: theme::Color) -> Self {
+        self.ops.push(MarkupOp::Underline(color));
+        self
+    }
+
+    #[expect(dead_code)]
+    pub(crate) fn overline(mut self, color: theme::Color) -> Self {
+        self.ops.push(MarkupOp::Overline(color));
+        self
+    }
+
+    #[expect(dead_code)]
+    pub(crate) fn bg(mut self, color: theme::Color) -> Self {
+        self.ops.push(MarkupOp::Background(color));
+        self
+    }
+
+    pub(crate) fn font(mut self, index: u8) -> Self {
+        self.ops.push(MarkupOp::Font(index));
+        self
+    }
+
+    pub(crate) fn action<S>(mut self, type_: PolybarActionType, command: S) -> Self
+    where
+        S: Into<String>,
+    {
+        self.ops.push(MarkupOp::Action {
+            type_,
+            command: command.into(),
+        });
+        self
+    }
+
+    pub(crate) fn into_string(self) -> String {
+        let mut r = String::new();
+        for op in self.ops.iter().rev() {
+            match op {
+                MarkupOp::Foreground(color) => {
+                    let _ = write!(r, "%{{F#{:6x}}}", *color as u32);
+                }
+                MarkupOp::Underline(color) => {
+                    let _ = write!(r, "%{{u#{:06x}}}%{{+u}}", *color as u32);
+                }
+                MarkupOp::Overline(color) => {
+                    let _ = write!(r, "%{{o#{:06x}}}%{{+o}}", *color as u32);
+                }
+                MarkupOp::Background(color) => {
+                    let _ = write!(r, "%{{b#{:6x}}}", *color as u32);
+                }
+                MarkupOp::Font(index) => {
+                    let _ = write!(r, "%{{T{index}}}");
+                }
+                MarkupOp::Action { type_, command } => {
+                    let command_escaped = command.replace(':', "\\:");
+                    let _ = write!(r, "%{{A{}:{}:}}", *type_ as u8, command_escaped);
+                }
+            }
+        }
+
+        r.push_str(&self.inner);
+
+        for op in &self.ops {
+            match op {
+                MarkupOp::Foreground(_) => r.push_str("%{F-}"),
+                MarkupOp::Underline(_) => r.push_str("%{-u}"),
+                MarkupOp::Overline(_) => r.push_str("%{-o}"),
+                MarkupOp::Background(_) => r.push_str("%{b-}"),
+                MarkupOp::Font(_) => r.push_str("%{T-}"),
+                MarkupOp::Action { .. } => r.push_str("%{A}"),
+            }
+        }
+        r
+    }
 }
 
 #[cfg(test)]
@@ -65,9 +128,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_style() {
+    fn test_markup() {
         assert_eq!(
-            style("", Some(theme::Color::MainIcon), None, None, None),
+            Markup::new("").fg(theme::Color::MainIcon).into_string(),
             "%{F#f1e9d2}%{F-}"
         );
     }
@@ -75,13 +138,12 @@ mod tests {
     #[test]
     fn test_action() {
         assert_eq!(
-            action(
-                ":)",
-                PolybarAction {
-                    type_: PolybarActionType::ClickRight,
-                    command: "this contains a : and ; and \\".to_owned()
-                }
-            ),
+            Markup::new(":)")
+                .action(
+                    PolybarActionType::ClickRight,
+                    "this contains a : and ; and \\"
+                )
+                .into_string(),
             "%{A3:this contains a \\: and ; and \\:}:)%{A}"
         );
     }

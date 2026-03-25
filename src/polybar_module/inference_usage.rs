@@ -207,13 +207,13 @@ impl InferenceUsageModule {
         #[expect(clippy::indexing_slicing)]
         let icon = RAMP_ICONS[pct.min(99) / (100 / (RAMP_ICONS.len() - 1))];
         let color = if utilization > 30.0 {
-            Some(theme::Color::Good)
+            theme::Color::Good
         } else if utilization >= 10.0 {
-            Some(theme::Color::Notice)
+            theme::Color::Notice
         } else {
-            Some(theme::Color::Attention)
+            theme::Color::Attention
         };
-        markup::font_index(&markup::style(icon, color, None, None, None), 0)
+        markup::Markup::new(icon).fg(color).font(0).into_string()
     }
 }
 
@@ -264,13 +264,11 @@ impl RenderablePolybarModule for InferenceUsageModule {
     fn render(&self, state: &Self::State) -> String {
         let mut fragments: Vec<String> = Vec::new();
 
-        fragments.push(markup::style(
-            ICON_INFERENCE_USAGE,
-            Some(theme::Color::MainIcon),
-            None,
-            None,
-            None,
-        ));
+        fragments.push(
+            markup::Markup::new(ICON_INFERENCE_USAGE)
+                .fg(theme::Color::MainIcon)
+                .into_string(),
+        );
 
         // AMP ($10 = 100%)
         match state.amp_free_credit {
@@ -285,13 +283,9 @@ impl RenderablePolybarModule for InferenceUsageModule {
                 fragments.push(format!(
                     "{} {}",
                     ICON_AMP,
-                    markup::style(
-                        ICON_WARNING,
-                        Some(theme::Color::Attention),
-                        None,
-                        None,
-                        None
-                    ),
+                    markup::Markup::new(ICON_WARNING)
+                        .fg(theme::Color::Attention)
+                        .into_string(),
                 ));
             }
         }
@@ -310,20 +304,16 @@ impl RenderablePolybarModule for InferenceUsageModule {
                 fragments.push(format!(
                     "{} {}",
                     ICON_CLAUDE,
-                    markup::style(ICON_WARNING, None, None, None, None),
+                    markup::Markup::new(ICON_WARNING).into_string(),
                 ));
             }
             ClaudeUsageStatus::Error => {
                 fragments.push(format!(
                     "{} {}",
                     ICON_CLAUDE,
-                    markup::style(
-                        ICON_WARNING,
-                        Some(theme::Color::Attention),
-                        None,
-                        None,
-                        None
-                    ),
+                    markup::Markup::new(ICON_WARNING)
+                        .fg(theme::Color::Attention)
+                        .into_string(),
                 ));
             }
         }
@@ -365,14 +355,14 @@ mod tests {
     fn test_render() {
         let module = InferenceUsageModule::new();
 
-        let mi = |s| markup::style(s, Some(theme::Color::MainIcon), None, None, None);
-        let att_warn = markup::style(
-            ICON_WARNING,
-            Some(theme::Color::Attention),
-            None,
-            None,
-            None,
-        );
+        let mi = |s| {
+            markup::Markup::new(s)
+                .fg(theme::Color::MainIcon)
+                .into_string()
+        };
+        let att_warn = markup::Markup::new(ICON_WARNING)
+            .fg(theme::Color::Attention)
+            .into_string();
 
         // AMP $4.50 = 45%, Claude 5h=50% used (50% remaining) 7d=20% used (80% remaining)
         let state = InferenceUsageModuleState {
