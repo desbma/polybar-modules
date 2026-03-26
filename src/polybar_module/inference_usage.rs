@@ -1,5 +1,6 @@
 use std::{
-    env, fs,
+    env, fs, io,
+    os::unix::fs::OpenOptionsExt as _,
     path::PathBuf,
     process::{self, Child, Command, Stdio},
     thread::sleep,
@@ -7,8 +8,9 @@ use std::{
 };
 
 use anyhow::Context as _;
+use backon::BackoffBuilder as _;
 use regex::Regex;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tempfile::TempDir;
 use ureq::http::StatusCode;
 
@@ -23,6 +25,8 @@ pub(crate) struct InferenceUsageModule {
     client: ureq::Agent,
     amp_usage_re: Regex,
     token_path: PathBuf,
+    claude_rate_limit_backoff_builder: backon::ExponentialBuilder,
+    claude_rate_limit_backoff: backon::ExponentialBackoff,
     claude_skip_until: Option<Instant>,
     claude_auth_failed_mtime: Option<SystemTime>,
     chatgpt_h5_limit_re: Regex,
@@ -77,6 +81,7 @@ const CHATGPT_POLL_INTERVAL: Duration = Duration::from_millis(100);
 const CHATGPT_MAX_TRIES: usize = 120;
 const CHATGPT_SEND_EVERY: usize = 7;
 const CHATGPT_TRUST_PROMPT: &str = "Do you trust the contents of this directory";
+const CLAUDE_OAUTH_CLIENT_ID: &str = "9d1c250a-e61b-44d9-88ed-5944d1962f5e";
 
 struct ChatGptSession {
     name: String,
@@ -201,16 +206,21 @@ enum ClaudeFetchError {
     Other(anyhow::Error),
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct ClaudeCredentials {
     claude_ai_oauth: ClaudeOauth,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct ClaudeOauth {
     access_token: String,
+    refresh_token: String,
+    expires_at: u64,
+    scopes: Vec<String>,
+    subscription_type: String,
+    rate_limit_tier: String,
 }
 
 #[derive(Deserialize)]
@@ -222,6 +232,21 @@ struct ClaudeUsageResponse {
 #[derive(Deserialize)]
 struct ClaudeUsageWindow {
     utilization: f64,
+}
+
+#[derive(Serialize)]
+struct ClaudeTokenRequest {
+    grant_type: &'static str,
+    refresh_token: String,
+    client_id: &'static str,
+    scope: String,
+}
+
+#[derive(Deserialize)]
+struct ClaudeTokenResponse {
+    access_token: String,
+    refresh_token: Option<String>,
+    expires_in: u64,
 }
 
 impl InferenceUsageModule {
@@ -242,10 +267,18 @@ impl InferenceUsageModule {
         let token_path = PathBuf::from(home).join(".claude/.credentials.json");
         let chatgpt_h5_limit_re = Regex::new("5h limit:.* ([0-9]{1,3})% left").unwrap();
         let chatgpt_weekly_limit_re = Regex::new("Weekly limit:.* ([0-9]{1,3})% left").unwrap();
+        let claude_rate_limit_backoff_builder = backon::ExponentialBuilder::default()
+            .with_jitter()
+            .with_min_delay(Duration::from_mins(5))
+            .with_max_delay(Duration::from_hours(1))
+            .without_max_times();
+        let claude_rate_limit_backoff = claude_rate_limit_backoff_builder.build();
         Self {
             client,
             amp_usage_re,
             token_path,
+            claude_rate_limit_backoff_builder,
+            claude_rate_limit_backoff,
             claude_skip_until: None,
             claude_auth_failed_mtime: None,
             chatgpt_h5_limit_re,
@@ -387,25 +420,7 @@ impl InferenceUsageModule {
             .ok()
     }
 
-    fn skip_claude_update(&self) -> Option<ClaudeUsageStatus> {
-        if let Some(failed_mtime) = self.claude_auth_failed_mtime
-            && self.claude_token_mtime() == Some(failed_mtime)
-        {
-            log::debug!("Skipping Claude usage: auth invalid, token unchanged");
-            return Some(ClaudeUsageStatus::AuthInvalid);
-        }
-        if self.claude_skip_until.is_some_and(|t| Instant::now() < t) {
-            log::debug!("Skipping Claude usage: rate limited");
-            return Some(ClaudeUsageStatus::Error);
-        }
-        None
-    }
-
-    fn fetch_claude_usage(&mut self) -> Result<(f64, f64), ClaudeFetchError> {
-        // Capture mtime before reading the file to avoid a race where a login
-        // refreshes the token between our read and the mtime probe
-        let pre_request_mtime = self.claude_token_mtime();
-
+    fn fetch_claude_usage(&self) -> Result<(f64, f64), ClaudeFetchError> {
         let creds_data = fs::read_to_string(&self.token_path)
             .context("Failed to read credentials")
             .map_err(ClaudeFetchError::Other)?;
@@ -425,11 +440,9 @@ impl InferenceUsageModule {
 
         let status = response.status();
         if status == StatusCode::UNAUTHORIZED {
-            self.claude_auth_failed_mtime = pre_request_mtime;
             return Err(ClaudeFetchError::AuthInvalid);
         }
         if status == StatusCode::TOO_MANY_REQUESTS {
-            self.claude_skip_until = Some(Instant::now() + Duration::from_mins(10));
             return Err(ClaudeFetchError::RateLimited);
         }
         if status.is_client_error() || status.is_server_error() {
@@ -446,11 +459,131 @@ impl InferenceUsageModule {
         )
         .map_err(|e| ClaudeFetchError::Other(e.into()))?;
 
-        // Successful fetch clears any previous error state
-        self.claude_auth_failed_mtime = None;
-        self.claude_skip_until = None;
-
         Ok((body.five_hour.utilization, body.seven_day.utilization))
+    }
+
+    fn update_claude_status(&mut self) -> ClaudeUsageStatus {
+        // Skip if auth failed and token file unchanged, or if rate-limit backoff active
+        if let Some(failed_mtime) = self.claude_auth_failed_mtime
+            && self.claude_token_mtime() == Some(failed_mtime)
+        {
+            log::debug!("Skipping Claude usage: auth invalid, token unchanged");
+            return ClaudeUsageStatus::AuthInvalid;
+        }
+        if self.claude_skip_until.is_some_and(|t| Instant::now() < t) {
+            log::debug!("Skipping Claude usage: rate limited");
+            return ClaudeUsageStatus::Error;
+        }
+
+        // Capture mtime before fetching to avoid a race where a login
+        // refreshes the token between our read and the mtime probe
+        let pre_fetch_mtime = self.claude_token_mtime();
+
+        match self.fetch_claude_usage() {
+            Ok((h5, d7)) => {
+                self.claude_auth_failed_mtime = None;
+                self.claude_skip_until = None;
+                self.claude_rate_limit_backoff = self.claude_rate_limit_backoff_builder.build();
+                ClaudeUsageStatus::Available { h5, d7 }
+            }
+            Err(ClaudeFetchError::AuthInvalid) => {
+                log::warn!("Claude usage: authentication invalid (401), attempting token refresh");
+                if let Err(e) = self.refresh_claude_token() {
+                    log::error!("Claude token refresh failed: {e}");
+                    self.claude_auth_failed_mtime = pre_fetch_mtime;
+                    return ClaudeUsageStatus::AuthInvalid;
+                }
+                match self.fetch_claude_usage() {
+                    Ok((h5, d7)) => {
+                        self.claude_auth_failed_mtime = None;
+                        ClaudeUsageStatus::Available { h5, d7 }
+                    }
+                    Err(ClaudeFetchError::AuthInvalid) => {
+                        log::error!("Claude usage still unauthorized after refresh");
+                        self.claude_auth_failed_mtime = self.claude_token_mtime();
+                        ClaudeUsageStatus::AuthInvalid
+                    }
+                    Err(ClaudeFetchError::RateLimited) => {
+                        log::warn!("Claude usage rate limited after refresh");
+                        self.apply_claude_rate_limit_backoff()
+                    }
+                    Err(ClaudeFetchError::Other(e)) => {
+                        log::error!("Claude usage after refresh: {e}");
+                        ClaudeUsageStatus::Error
+                    }
+                }
+            }
+            Err(ClaudeFetchError::RateLimited) => {
+                log::warn!("Claude usage: rate limited");
+                self.apply_claude_rate_limit_backoff()
+            }
+            Err(ClaudeFetchError::Other(e)) => {
+                log::error!("Claude usage: {e}");
+                ClaudeUsageStatus::Error
+            }
+        }
+    }
+
+    fn apply_claude_rate_limit_backoff(&mut self) -> ClaudeUsageStatus {
+        let delay = self.claude_rate_limit_backoff.next().unwrap();
+        log::warn!("Claude rate limited, backing off for {delay:?}");
+        self.claude_skip_until = Some(Instant::now() + delay);
+        ClaudeUsageStatus::Error
+    }
+
+    fn refresh_claude_token(&self) -> anyhow::Result<()> {
+        let creds_data = fs::read_to_string(&self.token_path)
+            .context("Failed to read credentials for refresh")?;
+        let mut creds: ClaudeCredentials =
+            serde_json::from_str(&creds_data).context("Failed to deserialize credentials")?;
+
+        let request_body = ClaudeTokenRequest {
+            grant_type: "refresh_token",
+            refresh_token: creds.claude_ai_oauth.refresh_token.clone(),
+            client_id: CLAUDE_OAUTH_CLIENT_ID,
+            scope: creds.claude_ai_oauth.scopes.join(" "),
+        };
+        let request_str = serde_json::to_string(&request_body)?;
+
+        let response = self
+            .client
+            .post("https://platform.claude.com/v1/oauth/token")
+            .header("Content-Type", "application/json")
+            .send(&*request_str)?;
+
+        if !response.status().is_success() {
+            anyhow::bail!("Token refresh failed with status {}", response.status());
+        }
+
+        let tok: ClaudeTokenResponse =
+            serde_json::from_str(&response.into_body().read_to_string()?)?;
+
+        creds.claude_ai_oauth.access_token = tok.access_token;
+        if let Some(new_refresh) = tok.refresh_token {
+            creds.claude_ai_oauth.refresh_token = new_refresh;
+        }
+        #[expect(clippy::cast_possible_truncation)]
+        let expires_at = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64
+            + tok.expires_in * 1000;
+        creds.claude_ai_oauth.expires_at = expires_at;
+
+        let new_data = serde_json::to_string(&creds)?;
+        fs::OpenOptions::new()
+            .write(true)
+            .truncate(true)
+            .mode(0o600)
+            .open(&self.token_path)
+            .and_then(|file| io::Write::write_all(&mut &file, new_data.as_bytes()))
+            .context("Failed to write refreshed credentials")?;
+
+        log::info!(
+            "Claude token refreshed, expires in {} seconds",
+            tok.expires_in
+        );
+        Ok(())
     }
 
     fn render_ramp(utilization: f64) -> String {
@@ -493,25 +626,7 @@ impl RenderablePolybarModule for InferenceUsageModule {
             }
         };
 
-        let claude_status = if let Some(skipped) = self.skip_claude_update() {
-            skipped
-        } else {
-            match self.fetch_claude_usage() {
-                Ok((h5, d7)) => ClaudeUsageStatus::Available { h5, d7 },
-                Err(ClaudeFetchError::AuthInvalid) => {
-                    log::warn!("Claude usage: authentication invalid (401)");
-                    ClaudeUsageStatus::AuthInvalid
-                }
-                Err(ClaudeFetchError::RateLimited) => {
-                    log::warn!("Claude usage: rate limited");
-                    ClaudeUsageStatus::Error
-                }
-                Err(ClaudeFetchError::Other(e)) => {
-                    log::error!("Claude usage: {e}");
-                    ClaudeUsageStatus::Error
-                }
-            }
-        };
+        let claude_status = self.update_claude_status();
 
         let chatgpt_status = match self.fetch_chatgpt_usage() {
             Ok((h5_left, weekly_left)) => ChatGptUsageStatus::Available {
