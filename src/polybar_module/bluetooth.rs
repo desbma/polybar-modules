@@ -243,14 +243,13 @@ impl RenderablePolybarModule for BluetoothModule {
     }
 
     fn render(&self, state: &Self::State) -> String {
-        let mut fragments: Vec<String> = vec![if state.controller_powered {
+        let mut fragments = vec![if state.controller_powered {
             markup::Markup::new(ICON_BLUETOOTH_ENABLED)
                 .fg(theme::Color::MainIcon)
                 .action(
                     markup::PolybarActionType::ClickLeft,
                     "bluetoothctl power off",
                 )
-                .into_string()
         } else {
             markup::Markup::new(ICON_BLUETOOTH_DISABLED)
                 .fg(theme::Color::MainIcon)
@@ -258,7 +257,6 @@ impl RenderablePolybarModule for BluetoothModule {
                     markup::PolybarActionType::ClickLeft,
                     "bluetoothctl power on",
                 )
-                .into_string()
         }];
         for device in &state.devices {
             let name = theme::ellipsis(&theme::shorten_model_name(&device.name), Some(4));
@@ -266,19 +264,21 @@ impl RenderablePolybarModule for BluetoothModule {
             if device.connected {
                 device_markup = device_markup.underline(theme::Color::Foreground);
             }
-            let action_markup = device_markup
-                .action(
-                    markup::PolybarActionType::ClickLeft,
-                    format!(
-                        "bluetoothctl {}connect {}",
-                        if device.connected { "dis" } else { "" },
-                        device.addr
-                    ),
-                )
-                .into_string();
+            let action_markup = device_markup.action(
+                markup::PolybarActionType::ClickLeft,
+                format!(
+                    "bluetoothctl {}connect {}",
+                    if device.connected { "dis" } else { "" },
+                    device.addr
+                ),
+            );
             fragments.push(action_markup);
         }
-        fragments.join(" ")
+        fragments
+            .into_iter()
+            .map(markup::Markup::into_string)
+            .collect::<Vec<_>>()
+            .join(" ")
     }
 }
 
