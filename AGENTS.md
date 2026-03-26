@@ -22,6 +22,7 @@ Single-binary Rust CLI that outputs status lines for Polybar. Each module in `sr
   - Never use fully-qualified paths (e.g., `std::path::Path` or `crate::ui::foo()`) in code; always import namespaces via `use` statements and refer to symbols by their short name
   - Import deep `std` namespaces aggressively (e.g., `use std::path::PathBuf;`, `use std::collections::HashMap;`), except for namespaces like `io` or `fs` whose symbols have very common names that may collide — import those at the module level instead (e.g., `use std::fs;`)
   - For third-party crates, prefer importing at the crate or module level (e.g., `use anyhow::Context as _;`, `use clap::Parser;`) rather than deeply importing individual symbols, to keep the origin of symbols clear when reading code — only import deeper when needed to avoid very long fully-qualified namespaces
+  - Never use inline imports (e.g., `use` inside a function body or block), unless the code block is gated by conditional compilation (e.g., `#[cfg(test)]`)
 - Prefer `log` macros for logging; no `dbg!` or `todo!`
 - Prefer `default-features = false` for dependencies
 - Do not add `derive` traits unless they are required by the current code (compile errors) or actively used by tests/runtime behavior
