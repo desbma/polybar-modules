@@ -77,6 +77,9 @@ const ICON_AMP: &str = "󰞍";
 const ICON_CLAUDE: &str = "";
 const ICON_CHATGPT: &str = "󰫈";
 const ICON_UNAUTHORIZED: &str = "";
+const AMP_USAGE_URL: &str = "https://ampcode.com/settings";
+const CLAUDE_USAGE_URL: &str = "https://claude.ai/settings/usage";
+const CHATGPT_USAGE_URL: &str = "https://chatgpt.com/codex/settings/usage";
 const CHATGPT_POLL_INTERVAL: Duration = Duration::from_millis(100);
 const CHATGPT_MAX_TRIES: usize = 120;
 const CHATGPT_SEND_EVERY: usize = 7;
@@ -600,6 +603,16 @@ impl InferenceUsageModule {
         };
         markup::Markup::new(icon).fg(color).font(0).into_string()
     }
+
+    fn provider_markup<S>(label: &str, usage: S, url: &str) -> markup::Markup
+    where
+        S: Into<String>,
+    {
+        markup::Markup::new(format!("{} {}", label, usage.into())).action(
+            markup::PolybarActionType::ClickLeft,
+            format!("firefox --new-tab '{url}'"),
+        )
+    }
 }
 
 impl Drop for InferenceUsageModule {
@@ -647,30 +660,23 @@ impl RenderablePolybarModule for InferenceUsageModule {
     }
 
     fn render(&self, state: &Self::State) -> String {
-        let mut fragments: Vec<String> = Vec::new();
-
-        fragments.push(
-            markup::Markup::new(ICON_INFERENCE_USAGE)
-                .fg(theme::Color::MainIcon)
-                .into_string(),
-        );
+        let mut fragments =
+            vec![markup::Markup::new(ICON_INFERENCE_USAGE).fg(theme::Color::MainIcon)];
 
         // AMP ($10 = 100%)
         match state.amp_free_credit {
             Some(dollars) => {
-                fragments.push(format!(
-                    "{} {}",
+                fragments.push(Self::provider_markup(
                     ICON_AMP,
                     Self::render_ramp(dollars / 10.0 * 100.0),
+                    AMP_USAGE_URL,
                 ));
             }
             None => {
-                fragments.push(format!(
-                    "{} {}",
+                fragments.push(Self::provider_markup(
                     ICON_AMP,
-                    markup::Markup::new(ICON_WARNING)
-                        .fg(theme::Color::Attention)
-                        .into_string(),
+                    markup::Markup::new(ICON_WARNING).fg(theme::Color::Attention),
+                    AMP_USAGE_URL,
                 ));
             }
         }
@@ -678,27 +684,28 @@ impl RenderablePolybarModule for InferenceUsageModule {
         // Claude
         match &state.claude_status {
             ClaudeUsageStatus::Available { h5, d7 } => {
-                fragments.push(format!(
-                    "{} {}{}",
+                fragments.push(Self::provider_markup(
                     ICON_CLAUDE,
-                    Self::render_ramp(100.0 - h5),
-                    Self::render_ramp(100.0 - d7),
+                    format!(
+                        "{}{}",
+                        Self::render_ramp(100.0 - h5),
+                        Self::render_ramp(100.0 - d7),
+                    ),
+                    CLAUDE_USAGE_URL,
                 ));
             }
             ClaudeUsageStatus::AuthInvalid => {
-                fragments.push(format!(
-                    "{} {}",
+                fragments.push(Self::provider_markup(
                     ICON_CLAUDE,
-                    markup::Markup::new(ICON_UNAUTHORIZED).into_string(),
+                    markup::Markup::new(ICON_UNAUTHORIZED),
+                    CLAUDE_USAGE_URL,
                 ));
             }
             ClaudeUsageStatus::Error => {
-                fragments.push(format!(
-                    "{} {}",
+                fragments.push(Self::provider_markup(
                     ICON_CLAUDE,
-                    markup::Markup::new(ICON_WARNING)
-                        .fg(theme::Color::Attention)
-                        .into_string(),
+                    markup::Markup::new(ICON_WARNING).fg(theme::Color::Attention),
+                    CLAUDE_USAGE_URL,
                 ));
             }
         }
@@ -708,25 +715,30 @@ impl RenderablePolybarModule for InferenceUsageModule {
                 h5_left,
                 weekly_left,
             } => {
-                fragments.push(format!(
-                    "{} {}{}",
+                fragments.push(Self::provider_markup(
                     ICON_CHATGPT,
-                    Self::render_ramp(*h5_left),
-                    Self::render_ramp(*weekly_left),
+                    format!(
+                        "{}{}",
+                        Self::render_ramp(*h5_left),
+                        Self::render_ramp(*weekly_left),
+                    ),
+                    CHATGPT_USAGE_URL,
                 ));
             }
             ChatGptUsageStatus::Error => {
-                fragments.push(format!(
-                    "{} {}",
+                fragments.push(Self::provider_markup(
                     ICON_CHATGPT,
-                    markup::Markup::new(ICON_WARNING)
-                        .fg(theme::Color::Attention)
-                        .into_string(),
+                    markup::Markup::new(ICON_WARNING).fg(theme::Color::Attention),
+                    CHATGPT_USAGE_URL,
                 ));
             }
         }
 
-        fragments.join(" ")
+        fragments
+            .into_iter()
+            .map(markup::Markup::into_string)
+            .collect::<Vec<_>>()
+            .join(" ")
     }
 }
 
@@ -759,6 +771,7 @@ mod tests {
         );
     }
 
+    #[expect(clippy::too_many_lines)]
     #[test]
     fn test_render() {
         let module = InferenceUsageModule::new();
@@ -766,6 +779,14 @@ mod tests {
         let mi = |s| {
             markup::Markup::new(s)
                 .fg(theme::Color::MainIcon)
+                .into_string()
+        };
+        let provider = |label, usage, url| {
+            markup::Markup::new(format!("{label} {usage}"))
+                .action(
+                    markup::PolybarActionType::ClickLeft,
+                    format!("firefox --new-tab '{url}'"),
+                )
                 .into_string()
         };
         let att_warn = markup::Markup::new(ICON_WARNING)
@@ -784,8 +805,19 @@ mod tests {
         assert_eq!(
             module.render(&state),
             format!(
-                "{} {ICON_AMP} %{{T0}}%{{F#819500}}▄%{{F-}}%{{T-}} {ICON_CLAUDE} %{{T0}}%{{F#819500}}▄%{{F-}}%{{T-}}%{{T0}}%{{F#819500}}▆%{{F-}}%{{T-}} {ICON_CHATGPT} %{{T0}}%{{F#819500}}▆%{{F-}}%{{T-}}%{{T0}}%{{F#819500}}▇%{{F-}}%{{T-}}",
+                "{} {} {} {}",
                 mi(ICON_INFERENCE_USAGE),
+                provider(ICON_AMP, "%{T0}%{F#819500}▄%{F-}%{T-}", AMP_USAGE_URL,),
+                provider(
+                    ICON_CLAUDE,
+                    "%{T0}%{F#819500}▄%{F-}%{T-}%{T0}%{F#819500}▆%{F-}%{T-}",
+                    CLAUDE_USAGE_URL,
+                ),
+                provider(
+                    ICON_CHATGPT,
+                    "%{T0}%{F#819500}▆%{F-}%{T-}%{T0}%{F#819500}▇%{F-}%{T-}",
+                    CHATGPT_USAGE_URL,
+                ),
             )
         );
 
@@ -798,11 +830,11 @@ mod tests {
         assert_eq!(
             module.render(&state),
             format!(
-                "{} {ICON_AMP} {} {ICON_CLAUDE} {} {ICON_CHATGPT} {}",
+                "{} {} {} {}",
                 mi(ICON_INFERENCE_USAGE),
-                att_warn,
-                att_warn,
-                att_warn,
+                provider(ICON_AMP, &att_warn, AMP_USAGE_URL),
+                provider(ICON_CLAUDE, &att_warn, CLAUDE_USAGE_URL),
+                provider(ICON_CHATGPT, &att_warn, CHATGPT_USAGE_URL),
             )
         );
 
@@ -815,10 +847,11 @@ mod tests {
         assert_eq!(
             module.render(&state),
             format!(
-                "{} {ICON_AMP} %{{T0}}%{{F#819500}}█%{{F-}}%{{T-}} {ICON_CLAUDE} {} {ICON_CHATGPT} {}",
+                "{} {} {} {}",
                 mi(ICON_INFERENCE_USAGE),
-                att_warn,
-                att_warn,
+                provider(ICON_AMP, "%{T0}%{F#819500}█%{F-}%{T-}", AMP_USAGE_URL,),
+                provider(ICON_CLAUDE, &att_warn, CLAUDE_USAGE_URL),
+                provider(ICON_CHATGPT, &att_warn, CHATGPT_USAGE_URL),
             )
         );
 
@@ -834,8 +867,19 @@ mod tests {
         assert_eq!(
             module.render(&state),
             format!(
-                "{} {ICON_AMP} %{{T0}}%{{F#d56500}}▁%{{F-}}%{{T-}} {ICON_CLAUDE} %{{T0}}%{{F#819500}}▇%{{F-}}%{{T-}}%{{T0}}%{{F#819500}}▇%{{F-}}%{{T-}} {ICON_CHATGPT} %{{T0}}%{{F#819500}}▇%{{F-}}%{{T-}}%{{T0}}%{{F#819500}}▇%{{F-}}%{{T-}}",
+                "{} {} {} {}",
                 mi(ICON_INFERENCE_USAGE),
+                provider(ICON_AMP, "%{T0}%{F#d56500}▁%{F-}%{T-}", AMP_USAGE_URL,),
+                provider(
+                    ICON_CLAUDE,
+                    "%{T0}%{F#819500}▇%{F-}%{T-}%{T0}%{F#819500}▇%{F-}%{T-}",
+                    CLAUDE_USAGE_URL,
+                ),
+                provider(
+                    ICON_CHATGPT,
+                    "%{T0}%{F#819500}▇%{F-}%{T-}%{T0}%{F#819500}▇%{F-}%{T-}",
+                    CHATGPT_USAGE_URL,
+                ),
             )
         );
 
@@ -851,8 +895,15 @@ mod tests {
         assert_eq!(
             module.render(&state),
             format!(
-                "{} {ICON_AMP} %{{T0}}%{{F#819500}}▄%{{F-}}%{{T-}} {ICON_CLAUDE} {ICON_UNAUTHORIZED} {ICON_CHATGPT} %{{T0}}%{{F#ac8300}}▂%{{F-}}%{{T-}}%{{T0}}%{{F#d56500}}▁%{{F-}}%{{T-}}",
+                "{} {} {} {}",
                 mi(ICON_INFERENCE_USAGE),
+                provider(ICON_AMP, "%{T0}%{F#819500}▄%{F-}%{T-}", AMP_USAGE_URL,),
+                provider(ICON_CLAUDE, ICON_UNAUTHORIZED, CLAUDE_USAGE_URL),
+                provider(
+                    ICON_CHATGPT,
+                    "%{T0}%{F#ac8300}▂%{F-}%{T-}%{T0}%{F#d56500}▁%{F-}%{T-}",
+                    CHATGPT_USAGE_URL,
+                ),
             )
         );
     }
