@@ -125,6 +125,12 @@ impl Markup {
     }
 }
 
+impl From<Markup> for String {
+    fn from(val: Markup) -> Self {
+        val.into_string()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
