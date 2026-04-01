@@ -110,7 +110,7 @@ impl ChatGptSession {
                 &session_name,
                 "bash",
                 "-lc",
-                "cd \"$POLYBAR_CHATGPT_USAGE_WORKDIR\" && exec codex -a on-request -s workspace-write",
+                "cd \"$POLYBAR_CHATGPT_USAGE_WORKDIR\" && exec codex",
             ])
             .env("POLYBAR_CHATGPT_USAGE_WORKDIR", workdir.path())
             .stdin(Stdio::null())
