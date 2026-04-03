@@ -601,7 +601,7 @@ impl InferenceUsageModule {
         } else {
             theme::Color::Attention
         };
-        markup::Markup::new(icon).fg(color).font(0).into_string()
+        markup::Markup::new(icon).fg(color).font(4).into_string()
     }
 
     fn provider_markup<S>(label: &str, usage: S, url: &str) -> markup::Markup
@@ -751,23 +751,23 @@ mod tests {
     fn test_render_ramp() {
         assert_eq!(
             InferenceUsageModule::render_ramp(50.0),
-            "%{T0}%{F#819500}▄%{F-}%{T-}"
+            "%{T4}%{F#819500}▄%{F-}%{T-}"
         );
         assert_eq!(
             InferenceUsageModule::render_ramp(20.0),
-            "%{T0}%{F#ac8300}▂%{F-}%{T-}"
+            "%{T4}%{F#ac8300}▂%{F-}%{T-}"
         );
         assert_eq!(
             InferenceUsageModule::render_ramp(5.0),
-            "%{T0}%{F#d56500}▁%{F-}%{T-}"
+            "%{T4}%{F#d56500}▁%{F-}%{T-}"
         );
         assert_eq!(
             InferenceUsageModule::render_ramp(100.0),
-            "%{T0}%{F#819500}█%{F-}%{T-}"
+            "%{T4}%{F#819500}█%{F-}%{T-}"
         );
         assert_eq!(
             InferenceUsageModule::render_ramp(0.0),
-            "%{T0}%{F#d56500}▁%{F-}%{T-}"
+            "%{T4}%{F#d56500}▁%{F-}%{T-}"
         );
     }
 
@@ -807,15 +807,15 @@ mod tests {
             format!(
                 "{} {} {} {}",
                 mi(ICON_INFERENCE_USAGE),
-                provider(ICON_AMP, "%{T0}%{F#819500}▄%{F-}%{T-}", AMP_USAGE_URL,),
+                provider(ICON_AMP, "%{T4}%{F#819500}▄%{F-}%{T-}", AMP_USAGE_URL,),
                 provider(
                     ICON_CLAUDE,
-                    "%{T0}%{F#819500}▄%{F-}%{T-}%{T0}%{F#819500}▆%{F-}%{T-}",
+                    "%{T4}%{F#819500}▄%{F-}%{T-}%{T4}%{F#819500}▆%{F-}%{T-}",
                     CLAUDE_USAGE_URL,
                 ),
                 provider(
                     ICON_CHATGPT,
-                    "%{T0}%{F#819500}▆%{F-}%{T-}%{T0}%{F#819500}▇%{F-}%{T-}",
+                    "%{T4}%{F#819500}▆%{F-}%{T-}%{T4}%{F#819500}▇%{F-}%{T-}",
                     CHATGPT_USAGE_URL,
                 ),
             )
@@ -849,7 +849,7 @@ mod tests {
             format!(
                 "{} {} {} {}",
                 mi(ICON_INFERENCE_USAGE),
-                provider(ICON_AMP, "%{T0}%{F#819500}█%{F-}%{T-}", AMP_USAGE_URL,),
+                provider(ICON_AMP, "%{T4}%{F#819500}█%{F-}%{T-}", AMP_USAGE_URL,),
                 provider(ICON_CLAUDE, &att_warn, CLAUDE_USAGE_URL),
                 provider(ICON_CHATGPT, &att_warn, CHATGPT_USAGE_URL),
             )
@@ -869,15 +869,15 @@ mod tests {
             format!(
                 "{} {} {} {}",
                 mi(ICON_INFERENCE_USAGE),
-                provider(ICON_AMP, "%{T0}%{F#d56500}▁%{F-}%{T-}", AMP_USAGE_URL,),
+                provider(ICON_AMP, "%{T4}%{F#d56500}▁%{F-}%{T-}", AMP_USAGE_URL,),
                 provider(
                     ICON_CLAUDE,
-                    "%{T0}%{F#819500}▇%{F-}%{T-}%{T0}%{F#819500}▇%{F-}%{T-}",
+                    "%{T4}%{F#819500}▇%{F-}%{T-}%{T4}%{F#819500}▇%{F-}%{T-}",
                     CLAUDE_USAGE_URL,
                 ),
                 provider(
                     ICON_CHATGPT,
-                    "%{T0}%{F#819500}▇%{F-}%{T-}%{T0}%{F#819500}▇%{F-}%{T-}",
+                    "%{T4}%{F#819500}▇%{F-}%{T-}%{T4}%{F#819500}▇%{F-}%{T-}",
                     CHATGPT_USAGE_URL,
                 ),
             )
@@ -897,11 +897,11 @@ mod tests {
             format!(
                 "{} {} {} {}",
                 mi(ICON_INFERENCE_USAGE),
-                provider(ICON_AMP, "%{T0}%{F#819500}▄%{F-}%{T-}", AMP_USAGE_URL,),
+                provider(ICON_AMP, "%{T4}%{F#819500}▄%{F-}%{T-}", AMP_USAGE_URL,),
                 provider(ICON_CLAUDE, ICON_UNAUTHORIZED, CLAUDE_USAGE_URL),
                 provider(
                     ICON_CHATGPT,
-                    "%{T0}%{F#ac8300}▂%{F-}%{T-}%{T0}%{F#d56500}▁%{F-}%{T-}",
+                    "%{T4}%{F#ac8300}▂%{F-}%{T-}%{T4}%{F#d56500}▁%{F-}%{T-}",
                     CHATGPT_USAGE_URL,
                 ),
             )
