@@ -67,6 +67,7 @@ impl Markup {
         self
     }
 
+    #[expect(dead_code)]
     pub(crate) fn font(mut self, index: u8) -> Self {
         self.ops.push(MarkupOp::Font(index));
         self

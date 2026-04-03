@@ -77,6 +77,17 @@ const ICON_AMP: &str = "󰞍";
 const ICON_CLAUDE: &str = "";
 const ICON_CHATGPT: &str = "󰫈";
 const ICON_UNAUTHORIZED: &str = "";
+const PROGRESS_ICONS: [&str; 9] = [
+    "󰗖", // nf-md-alert_circle_outline
+    "󰪞", // nf-md-circle_slice_1
+    "󰪟", // nf-md-circle_slice_2
+    "󰪠", // nf-md-circle_slice_3
+    "󰪡", // nf-md-circle_slice_4
+    "󰪢", // nf-md-circle_slice_5
+    "󰪣", // nf-md-circle_slice_6
+    "󰪤", // nf-md-circle_slice_7
+    "󰪥", // nf-md-circle_slice_8
+];
 const AMP_USAGE_URL: &str = "https://ampcode.com/settings";
 const CLAUDE_USAGE_URL: &str = "https://claude.ai/settings/usage";
 const CHATGPT_USAGE_URL: &str = "https://chatgpt.com/codex/settings/usage";
@@ -589,11 +600,16 @@ impl InferenceUsageModule {
         Ok(())
     }
 
-    fn render_ramp(utilization: f64) -> String {
+    fn render_progress(utilization: f64) -> String {
         #[expect(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
         let pct = utilization.clamp(0.0, 100.0) as usize;
         #[expect(clippy::indexing_slicing)]
-        let icon = markup::RAMP_ICONS[pct.min(99) / (100 / (markup::RAMP_ICONS.len() - 1))];
+        let icon = if pct == 0 {
+            PROGRESS_ICONS[0]
+        } else {
+            // Map 1–100% linearly to slice_1 (index 1) through slice_8 (index 8)
+            PROGRESS_ICONS[1 + (pct - 1) * 7 / 99]
+        };
         let color = if utilization > 30.0 {
             theme::Color::Good
         } else if utilization >= 10.0 {
@@ -601,7 +617,7 @@ impl InferenceUsageModule {
         } else {
             theme::Color::Attention
         };
-        markup::Markup::new(icon).fg(color).font(4).into_string()
+        markup::Markup::new(icon).fg(color).into_string()
     }
 
     fn provider_markup<S>(label: &str, usage: S, url: &str) -> markup::Markup
@@ -668,7 +684,7 @@ impl RenderablePolybarModule for InferenceUsageModule {
             Some(dollars) => {
                 fragments.push(Self::provider_markup(
                     ICON_AMP,
-                    Self::render_ramp(dollars / 10.0 * 100.0),
+                    Self::render_progress(dollars / 10.0 * 100.0),
                     AMP_USAGE_URL,
                 ));
             }
@@ -688,8 +704,8 @@ impl RenderablePolybarModule for InferenceUsageModule {
                     ICON_CLAUDE,
                     format!(
                         "{}{}",
-                        Self::render_ramp(100.0 - h5),
-                        Self::render_ramp(100.0 - d7),
+                        Self::render_progress(100.0 - h5),
+                        Self::render_progress(100.0 - d7),
                     ),
                     CLAUDE_USAGE_URL,
                 ));
@@ -719,8 +735,8 @@ impl RenderablePolybarModule for InferenceUsageModule {
                     ICON_CHATGPT,
                     format!(
                         "{}{}",
-                        Self::render_ramp(*h5_left),
-                        Self::render_ramp(*weekly_left),
+                        Self::render_progress(*h5_left),
+                        Self::render_progress(*weekly_left),
                     ),
                     CHATGPT_USAGE_URL,
                 ));
@@ -748,26 +764,58 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_render_ramp() {
+    fn test_render_progress() {
         assert_eq!(
-            InferenceUsageModule::render_ramp(50.0),
-            "%{T4}%{F#819500}▄%{F-}%{T-}"
+            InferenceUsageModule::render_progress(0.0),
+            "%{F#d56500}󰗖%{F-}"
         );
         assert_eq!(
-            InferenceUsageModule::render_ramp(20.0),
-            "%{T4}%{F#ac8300}▂%{F-}%{T-}"
+            InferenceUsageModule::render_progress(1.0),
+            "%{F#d56500}󰪞%{F-}"
         );
         assert_eq!(
-            InferenceUsageModule::render_ramp(5.0),
-            "%{T4}%{F#d56500}▁%{F-}%{T-}"
+            InferenceUsageModule::render_progress(5.0),
+            "%{F#d56500}󰪞%{F-}"
         );
         assert_eq!(
-            InferenceUsageModule::render_ramp(100.0),
-            "%{T4}%{F#819500}█%{F-}%{T-}"
+            InferenceUsageModule::render_progress(10.0),
+            "%{F#ac8300}󰪞%{F-}"
         );
         assert_eq!(
-            InferenceUsageModule::render_ramp(0.0),
-            "%{T4}%{F#d56500}▁%{F-}%{T-}"
+            InferenceUsageModule::render_progress(20.0),
+            "%{F#ac8300}󰪟%{F-}"
+        );
+        assert_eq!(
+            InferenceUsageModule::render_progress(30.0),
+            "%{F#ac8300}󰪠%{F-}"
+        );
+        assert_eq!(
+            InferenceUsageModule::render_progress(40.0),
+            "%{F#819500}󰪠%{F-}"
+        );
+        assert_eq!(
+            InferenceUsageModule::render_progress(50.0),
+            "%{F#819500}󰪡%{F-}"
+        );
+        assert_eq!(
+            InferenceUsageModule::render_progress(60.0),
+            "%{F#819500}󰪢%{F-}"
+        );
+        assert_eq!(
+            InferenceUsageModule::render_progress(70.0),
+            "%{F#819500}󰪢%{F-}"
+        );
+        assert_eq!(
+            InferenceUsageModule::render_progress(80.0),
+            "%{F#819500}󰪣%{F-}"
+        );
+        assert_eq!(
+            InferenceUsageModule::render_progress(90.0),
+            "%{F#819500}󰪤%{F-}"
+        );
+        assert_eq!(
+            InferenceUsageModule::render_progress(100.0),
+            "%{F#819500}󰪥%{F-}"
         );
     }
 
@@ -807,15 +855,15 @@ mod tests {
             format!(
                 "{} {} {} {}",
                 mi(ICON_INFERENCE_USAGE),
-                provider(ICON_AMP, "%{T4}%{F#819500}▄%{F-}%{T-}", AMP_USAGE_URL,),
+                provider(ICON_AMP, "%{F#819500}󰪡%{F-}", AMP_USAGE_URL,),
                 provider(
                     ICON_CLAUDE,
-                    "%{T4}%{F#819500}▄%{F-}%{T-}%{T4}%{F#819500}▆%{F-}%{T-}",
+                    "%{F#819500}󰪡%{F-}%{F#819500}󰪣%{F-}",
                     CLAUDE_USAGE_URL,
                 ),
                 provider(
                     ICON_CHATGPT,
-                    "%{T4}%{F#819500}▆%{F-}%{T-}%{T4}%{F#819500}▇%{F-}%{T-}",
+                    "%{F#819500}󰪣%{F-}%{F#819500}󰪤%{F-}",
                     CHATGPT_USAGE_URL,
                 ),
             )
@@ -849,7 +897,7 @@ mod tests {
             format!(
                 "{} {} {} {}",
                 mi(ICON_INFERENCE_USAGE),
-                provider(ICON_AMP, "%{T4}%{F#819500}█%{F-}%{T-}", AMP_USAGE_URL,),
+                provider(ICON_AMP, "%{F#819500}󰪥%{F-}", AMP_USAGE_URL,),
                 provider(ICON_CLAUDE, &att_warn, CLAUDE_USAGE_URL),
                 provider(ICON_CHATGPT, &att_warn, CHATGPT_USAGE_URL),
             )
@@ -869,15 +917,15 @@ mod tests {
             format!(
                 "{} {} {} {}",
                 mi(ICON_INFERENCE_USAGE),
-                provider(ICON_AMP, "%{T4}%{F#d56500}▁%{F-}%{T-}", AMP_USAGE_URL,),
+                provider(ICON_AMP, "%{F#d56500}󰪞%{F-}", AMP_USAGE_URL,),
                 provider(
                     ICON_CLAUDE,
-                    "%{T4}%{F#819500}▇%{F-}%{T-}%{T4}%{F#819500}▇%{F-}%{T-}",
+                    "%{F#819500}󰪤%{F-}%{F#819500}󰪤%{F-}",
                     CLAUDE_USAGE_URL,
                 ),
                 provider(
                     ICON_CHATGPT,
-                    "%{T4}%{F#819500}▇%{F-}%{T-}%{T4}%{F#819500}▇%{F-}%{T-}",
+                    "%{F#819500}󰪤%{F-}%{F#819500}󰪤%{F-}",
                     CHATGPT_USAGE_URL,
                 ),
             )
@@ -897,11 +945,11 @@ mod tests {
             format!(
                 "{} {} {} {}",
                 mi(ICON_INFERENCE_USAGE),
-                provider(ICON_AMP, "%{T4}%{F#819500}▄%{F-}%{T-}", AMP_USAGE_URL,),
+                provider(ICON_AMP, "%{F#819500}󰪡%{F-}", AMP_USAGE_URL,),
                 provider(ICON_CLAUDE, ICON_UNAUTHORIZED, CLAUDE_USAGE_URL),
                 provider(
                     ICON_CHATGPT,
-                    "%{T4}%{F#ac8300}▂%{F-}%{T-}%{T4}%{F#d56500}▁%{F-}%{T-}",
+                    "%{F#ac8300}󰪟%{F-}%{F#d56500}󰪞%{F-}",
                     CHATGPT_USAGE_URL,
                 ),
             )
