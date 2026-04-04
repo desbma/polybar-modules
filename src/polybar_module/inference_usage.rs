@@ -9,10 +9,6 @@ use std::{
 
 use anyhow::Context as _;
 use backon::BackoffBuilder as _;
-use regex::Regex;
-use serde::{Deserialize, Serialize};
-use tempfile::TempDir;
-use ureq::http::StatusCode;
 
 use crate::{
     markup,
@@ -23,15 +19,16 @@ use crate::{
 /// Inference API usage module
 pub(crate) struct InferenceUsageModule {
     client: ureq::Agent,
-    amp_usage_re: Regex,
+    amp_usage_re: regex::Regex,
     token_path: PathBuf,
     claude_rate_limit_backoff_builder: backon::ExponentialBuilder,
     claude_rate_limit_backoff: backon::ExponentialBackoff,
     claude_skip_until: Option<Instant>,
     claude_auth_failed_mtime: Option<SystemTime>,
-    chatgpt_h5_limit_re: Regex,
-    chatgpt_weekly_limit_re: Regex,
-    codex_session: Option<ChatGptSession>,
+    chatgpt_h5_limit_re: regex::Regex,
+    chatgpt_weekly_limit_re: regex::Regex,
+    codex_session: Option<CodexSession>,
+    amp_workdir: tempfile::TempDir,
 }
 
 /// Claude usage fetch status
@@ -97,14 +94,14 @@ const CHATGPT_SEND_EVERY: usize = 7;
 const CHATGPT_TRUST_PROMPT: &str = "Do you trust the contents of this directory";
 const CLAUDE_OAUTH_CLIENT_ID: &str = "9d1c250a-e61b-44d9-88ed-5944d1962f5e";
 
-struct ChatGptSession {
+struct CodexSession {
     name: String,
-    _workdir: TempDir,
+    _workdir: tempfile::TempDir,
     tty_child: Child,
     next_is_status_cmd: bool,
 }
 
-impl ChatGptSession {
+impl CodexSession {
     fn new() -> anyhow::Result<Self> {
         let session_name = Self::session_name();
         let workdir = tempfile::tempdir()?;
@@ -119,11 +116,9 @@ impl ChatGptSession {
                 "48",
                 "-s",
                 &session_name,
-                "bash",
-                "-lc",
-                "cd \"$WORKDIR\" && exec codex",
+                "codex",
             ])
-            .env("WORKDIR", workdir.path())
+            .current_dir(workdir.path())
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null())
@@ -220,13 +215,13 @@ enum ClaudeFetchError {
     Other(anyhow::Error),
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(serde::Deserialize, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 struct ClaudeCredentials {
     claude_ai_oauth: ClaudeOauth,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(serde::Deserialize, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 struct ClaudeOauth {
     access_token: String,
@@ -237,18 +232,18 @@ struct ClaudeOauth {
     rate_limit_tier: String,
 }
 
-#[derive(Deserialize)]
+#[derive(serde::Deserialize)]
 struct ClaudeUsageResponse {
     five_hour: ClaudeUsageWindow,
     seven_day: ClaudeUsageWindow,
 }
 
-#[derive(Deserialize)]
+#[derive(serde::Deserialize)]
 struct ClaudeUsageWindow {
     utilization: f64,
 }
 
-#[derive(Serialize)]
+#[derive(serde::Serialize)]
 struct ClaudeTokenRequest {
     grant_type: &'static str,
     refresh_token: String,
@@ -256,7 +251,7 @@ struct ClaudeTokenRequest {
     scope: String,
 }
 
-#[derive(Deserialize)]
+#[derive(serde::Deserialize)]
 struct ClaudeTokenResponse {
     access_token: String,
     refresh_token: Option<String>,
@@ -276,17 +271,19 @@ impl InferenceUsageModule {
                 .http_status_as_error(false)
                 .build(),
         );
-        let amp_usage_re = Regex::new(r"\$([0-9]+\.?[0-9]*)").unwrap();
+        let amp_usage_re = regex::Regex::new(r"\$([0-9]+\.?[0-9]*)").unwrap();
         let home = env::var("HOME").unwrap();
         let token_path = PathBuf::from(home).join(".config/claude/.credentials.json");
-        let chatgpt_h5_limit_re = Regex::new("5h limit:.* ([0-9]{1,3})% left").unwrap();
-        let chatgpt_weekly_limit_re = Regex::new("Weekly limit:.* ([0-9]{1,3})% left").unwrap();
+        let chatgpt_h5_limit_re = regex::Regex::new("5h limit:.* ([0-9]{1,3})% left").unwrap();
+        let chatgpt_weekly_limit_re =
+            regex::Regex::new("Weekly limit:.* ([0-9]{1,3})% left").unwrap();
         let claude_rate_limit_backoff_builder = backon::ExponentialBuilder::default()
             .with_jitter()
             .with_min_delay(Duration::from_mins(5))
             .with_max_delay(Duration::from_hours(1))
             .without_max_times();
         let claude_rate_limit_backoff = claude_rate_limit_backoff_builder.build();
+        let amp_workdir = tempfile::tempdir().unwrap();
         Self {
             client,
             amp_usage_re,
@@ -298,6 +295,7 @@ impl InferenceUsageModule {
             chatgpt_h5_limit_re,
             chatgpt_weekly_limit_re,
             codex_session: None,
+            amp_workdir,
         }
     }
 
@@ -311,16 +309,16 @@ impl InferenceUsageModule {
         if self
             .codex_session
             .as_ref()
-            .is_some_and(ChatGptSession::is_alive)
+            .is_some_and(CodexSession::is_alive)
         {
             return Ok(());
         }
         self.reset_codex_session();
-        self.codex_session = Some(ChatGptSession::new()?);
+        self.codex_session = Some(CodexSession::new()?);
         Ok(())
     }
 
-    fn parse_chatgpt_left_pct(re: &Regex, output: &str, label: &str) -> anyhow::Result<u8> {
+    fn parse_chatgpt_left_pct(re: &regex::Regex, output: &str, label: &str) -> anyhow::Result<u8> {
         let cap = re
             .captures_iter(output)
             .last()
@@ -409,6 +407,7 @@ impl InferenceUsageModule {
     fn fetch_amp_usage(&self) -> anyhow::Result<f64> {
         let output = Command::new("amp")
             .arg("usage")
+            .current_dir(self.amp_workdir.path())
             .stdin(Stdio::null())
             .stderr(Stdio::null())
             .output()
@@ -453,10 +452,10 @@ impl InferenceUsageModule {
             .map_err(|e| ClaudeFetchError::Other(e.into()))?;
 
         let status = response.status();
-        if status == StatusCode::UNAUTHORIZED {
+        if status == ureq::http::StatusCode::UNAUTHORIZED {
             return Err(ClaudeFetchError::AuthInvalid);
         }
-        if status == StatusCode::TOO_MANY_REQUESTS {
+        if status == ureq::http::StatusCode::TOO_MANY_REQUESTS {
             return Err(ClaudeFetchError::RateLimited);
         }
         if status.is_client_error() || status.is_server_error() {
