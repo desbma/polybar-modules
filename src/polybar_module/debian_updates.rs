@@ -11,6 +11,7 @@ use crate::{
     markup,
     polybar_module::{
         NetworkMode, PolybarModuleEnv, RenderablePolybarModule, arch_updates::ICON_UPDATE,
+        wait_network_ready,
     },
     theme::{self, ICON_WARNING},
 };
@@ -126,6 +127,8 @@ impl RenderablePolybarModule for DebianUpdatesModule {
                 None => self.env.network_error_backoff.next().unwrap(),
             };
             sleep(sleep_duration);
+        } else {
+            wait_network_ready().unwrap();
         }
         self.env.wait_network_mode(&NetworkMode::Unrestricted);
     }

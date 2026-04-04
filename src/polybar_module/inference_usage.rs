@@ -16,7 +16,7 @@ use ureq::http::StatusCode;
 
 use crate::{
     markup,
-    polybar_module::{RenderablePolybarModule, TCP_REMOTE_TIMEOUT},
+    polybar_module::{RenderablePolybarModule, TCP_REMOTE_TIMEOUT, wait_network_ready},
     theme::{self, ICON_WARNING},
 };
 
@@ -643,6 +643,8 @@ impl RenderablePolybarModule for InferenceUsageModule {
     fn wait_update(&mut self, prev_state: Option<&Self::State>) {
         if prev_state.is_some() {
             sleep(Duration::from_mins(3));
+        } else {
+            wait_network_ready().unwrap();
         }
     }
 

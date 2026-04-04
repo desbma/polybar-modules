@@ -11,7 +11,7 @@ use backon::BackoffBuilder as _;
 
 use crate::{
     markup,
-    polybar_module::{NetworkMode, PolybarModuleEnv, RenderablePolybarModule},
+    polybar_module::{NetworkMode, PolybarModuleEnv, RenderablePolybarModule, wait_network_ready},
     theme::{self, ICON_WARNING},
 };
 
@@ -145,6 +145,8 @@ impl RenderablePolybarModule for ArchUpdatesModule {
                 None => self.server_error_backoff.next().unwrap(),
             };
             sleep(sleep_duration);
+        } else {
+            wait_network_ready().unwrap();
         }
         self.env.wait_network_mode(&NetworkMode::Unrestricted);
     }

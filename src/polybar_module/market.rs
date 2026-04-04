@@ -6,7 +6,10 @@ use chrono::Datelike as _;
 
 use crate::{
     markup,
-    polybar_module::{NetworkMode, PolybarModuleEnv, RenderablePolybarModule, TCP_REMOTE_TIMEOUT},
+    polybar_module::{
+        NetworkMode, PolybarModuleEnv, RenderablePolybarModule, TCP_REMOTE_TIMEOUT,
+        wait_network_ready,
+    },
     theme::{self, ICON_WARNING},
 };
 
@@ -150,6 +153,8 @@ impl RenderablePolybarModule for MarketModule {
                 None => self.env.network_error_backoff.next().unwrap(),
             };
             sleep(sleep_duration);
+        } else {
+            wait_network_ready().unwrap();
         }
         loop {
             let did_wait_mode = self.env.wait_network_mode(&NetworkMode::Unrestricted);

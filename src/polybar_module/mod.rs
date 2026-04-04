@@ -1,8 +1,10 @@
 use std::{
     fmt::Debug,
+    fs,
     path::PathBuf,
     process::{Command, Stdio},
     sync::mpsc::channel,
+    thread::sleep,
     time::Duration,
 };
 
@@ -151,6 +153,33 @@ impl PolybarModuleEnv {
         }
         did_wait
     }
+}
+
+/// Block until network is ready (a default route exists in `/proc/net/route`)
+pub(crate) fn wait_network_ready() -> anyhow::Result<()> {
+    let backoff = backon::ExponentialBuilder::default()
+        .with_factor(1.5)
+        .with_min_delay(Duration::from_millis(10))
+        .with_max_delay(Duration::from_secs(2))
+        .without_max_times()
+        .build();
+    for delay in backoff {
+        let routes = fs::read_to_string("/proc/net/route")?;
+        let has_default_route = routes.lines().skip(1).any(|line| {
+            line.split_ascii_whitespace()
+                .nth(1)
+                .is_some_and(|dest| dest == "00000000")
+        });
+        if has_default_route {
+            break;
+        }
+        log::debug!(
+            "No default route found, retrying in {}ms...",
+            delay.as_millis()
+        );
+        sleep(delay);
+    }
+    Ok(())
 }
 
 pub(crate) fn is_systemd_user_unit_running(name: &str) -> bool {
