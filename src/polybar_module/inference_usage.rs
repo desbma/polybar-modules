@@ -106,7 +106,7 @@ impl CodexSession {
         let session_name = Self::session_name();
         let workdir = tempfile::tempdir()?;
 
-        let session_start_status = Command::new("tmux")
+        Command::new("tmux")
             .args([
                 "new-session",
                 "-d",
@@ -123,8 +123,7 @@ impl CodexSession {
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .status()
-            .context("Failed to start tmux session for ChatGPT usage")?;
-        session_start_status
+            .context("Failed to start tmux session for ChatGPT usage")?
             .exit_ok()
             .context("tmux new-session exited with error")?;
 
