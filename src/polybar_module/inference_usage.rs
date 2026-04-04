@@ -278,7 +278,7 @@ impl InferenceUsageModule {
         );
         let amp_usage_re = Regex::new(r"\$([0-9]+\.?[0-9]*)").unwrap();
         let home = env::var("HOME").unwrap();
-        let token_path = PathBuf::from(home).join(".claude/.credentials.json");
+        let token_path = PathBuf::from(home).join(".config/claude/.credentials.json");
         let chatgpt_h5_limit_re = Regex::new("5h limit:.* ([0-9]{1,3})% left").unwrap();
         let chatgpt_weekly_limit_re = Regex::new("Weekly limit:.* ([0-9]{1,3})% left").unwrap();
         let claude_rate_limit_backoff_builder = backon::ExponentialBuilder::default()
