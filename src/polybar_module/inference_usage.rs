@@ -121,9 +121,9 @@ impl ChatGptSession {
                 &session_name,
                 "bash",
                 "-lc",
-                "cd \"$POLYBAR_CHATGPT_USAGE_WORKDIR\" && exec codex",
+                "cd \"$WORKDIR\" && exec codex",
             ])
-            .env("POLYBAR_CHATGPT_USAGE_WORKDIR", workdir.path())
+            .env("WORKDIR", workdir.path())
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null())
@@ -407,7 +407,7 @@ impl InferenceUsageModule {
     }
 
     fn fetch_amp_usage(&self) -> anyhow::Result<f64> {
-        let output = Command::new("/usr/bin/amp")
+        let output = Command::new("amp")
             .arg("usage")
             .stdin(Stdio::null())
             .stderr(Stdio::null())
