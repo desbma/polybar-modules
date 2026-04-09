@@ -329,12 +329,21 @@ impl InferenceUsageModule {
             .context("Failed to parse ChatGPT usage percentage")
     }
 
-    fn fetch_chatgpt_usage_once(&mut self) -> anyhow::Result<(f64, f64)> {
+    fn fetch_chatgpt_usage_once(&mut self, clear_history: bool) -> anyhow::Result<(f64, f64)> {
         let raw_output = {
             let session = self
                 .codex_session
                 .as_mut()
                 .ok_or_else(|| anyhow::anyhow!("Codex session missing"))?;
+
+            // Clear the visible pane and scrollback so stale usage output
+            // from previous runs is not mistaken for fresh data
+            if clear_history {
+                session.send_keys("C-l")?;
+                sleep(CHATGPT_POLL_INTERVAL);
+                CodexSession::tmux_status(&["clear-history", "-t", &session.name])?;
+            }
+
             let mut raw_output = String::new();
             let mut sent = false;
             let mut last_send = 0;
@@ -392,13 +401,13 @@ impl InferenceUsageModule {
 
     fn fetch_chatgpt_usage(&mut self) -> anyhow::Result<(f64, f64)> {
         self.ensure_codex_session()?;
-        match self.fetch_chatgpt_usage_once() {
+        match self.fetch_chatgpt_usage_once(true) {
             Ok(usage) => Ok(usage),
             Err(e) => {
                 log::warn!("ChatGPT usage first attempt failed, restarting session: {e}");
                 self.reset_codex_session();
                 self.ensure_codex_session()?;
-                self.fetch_chatgpt_usage_once()
+                self.fetch_chatgpt_usage_once(false)
             }
         }
     }
