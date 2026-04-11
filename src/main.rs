@@ -116,12 +116,10 @@ fn main() -> anyhow::Result<()> {
             polybar_module::player::PlayerModule::new(max_len)
                 .context("Failed to initialize player module")?,
         ),
-        PolybarModuleName::progressbar_server { max_len } => {
-            polybar_module::PolybarModule::ProgressBarServer(
-                polybar_module::progressbar_server::ProgressBarServerModule::new(max_len)
-                    .context("Failed to initialize progress bar server module")?,
-            )
-        }
+        PolybarModuleName::progressbar_server => polybar_module::PolybarModule::ProgressBarServer(
+            polybar_module::progressbar_server::ProgressBarServerModule::new()
+                .context("Failed to initialize progress bar server module")?,
+        ),
         PolybarModuleName::pulseaudio => polybar_module::PolybarModule::PulseAudio(
             polybar_module::pulseaudio::PulseAudioModule::new()
                 .context("Failed to initialize Pulseaudio module")?,

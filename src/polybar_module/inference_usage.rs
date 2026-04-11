@@ -610,12 +610,11 @@ impl InferenceUsageModule {
     fn render_progress(utilization: f64) -> String {
         #[expect(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
         let pct = utilization.clamp(0.0, 100.0) as usize;
-        #[expect(clippy::indexing_slicing)]
         let icon = if pct == 0 {
             PROGRESS_ICONS[0]
         } else {
-            // Map 1–100% linearly to slice_1 (index 1) through slice_8 (index 8)
-            PROGRESS_ICONS[1 + (pct - 1) * 7 / 99]
+            #[expect(clippy::indexing_slicing)]
+            PROGRESS_ICONS[1 + (pct - 1) * (PROGRESS_ICONS.len() - 2) / 99]
         };
         let color = if utilization > 30.0 {
             theme::Color::Good

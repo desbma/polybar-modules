@@ -2,8 +2,6 @@ use std::fmt::Write as _;
 
 use crate::theme;
 
-pub(crate) const RAMP_ICONS: [&str; 8] = ["▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"];
-
 #[expect(dead_code)]
 #[derive(Clone, Copy)]
 pub(crate) enum PolybarActionType {

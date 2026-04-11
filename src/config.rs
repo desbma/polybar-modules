@@ -36,7 +36,7 @@ pub(crate) enum PolybarModuleName {
     /// Start player status module
     player { max_len: usize },
     /// Start progress bar server module
-    progressbar_server { max_len: usize },
+    progressbar_server,
     /// Start PulseAudio module
     pulseaudio,
     /// Start Syncthing module
