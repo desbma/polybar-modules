@@ -1,8 +1,8 @@
 use std::{
     env, fs, io,
     os::unix::fs::OpenOptionsExt as _,
-    path::PathBuf,
-    process::{self, Child, Command, Stdio},
+    path::{Path, PathBuf},
+    process::{self, Command, Stdio},
     thread::sleep,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
@@ -87,24 +87,20 @@ const PROGRESS_ICONS: [&str; 9] = [
 ];
 const AMP_USAGE_URL: &str = "https://ampcode.com/settings";
 const CLAUDE_USAGE_URL: &str = "https://claude.ai/settings/usage";
-const CHATGPT_USAGE_URL: &str = "https://chatgpt.com/codex/settings/usage";
-const CHATGPT_POLL_INTERVAL: Duration = Duration::from_millis(100);
-const CHATGPT_MAX_TRIES: usize = 120;
-const CHATGPT_SEND_EVERY: usize = 7;
-const CHATGPT_TRUST_PROMPT: &str = "Do you trust the contents of this directory";
 const CLAUDE_OAUTH_CLIENT_ID: &str = "9d1c250a-e61b-44d9-88ed-5944d1962f5e";
+const CHATGPT_USAGE_URL: &str = "https://chatgpt.com/codex/settings/usage";
+const CHATGPT_CODEX_POLL_INTERVAL: Duration = Duration::from_millis(100);
+const CHATGPT_CODEX_MAX_TRIES: usize = 120;
+const CHATGPT_CODEX_RETRY_INTERVAL: usize = 7;
+const CHATGPT_CODEX_TRUST_PROMPT: &str = "Do you trust the contents of this directory";
 
 struct CodexSession {
     name: String,
-    _workdir: tempfile::TempDir,
-    tty_child: Child,
-    next_is_status_cmd: bool,
 }
 
 impl CodexSession {
-    fn new() -> anyhow::Result<Self> {
+    fn new(workdir: &Path) -> anyhow::Result<Self> {
         let session_name = Self::session_name();
-        let workdir = tempfile::tempdir()?;
 
         Command::new("tmux")
             .args([
@@ -118,7 +114,7 @@ impl CodexSession {
                 &session_name,
                 "codex",
             ])
-            .current_dir(workdir.path())
+            .current_dir(workdir)
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null())
@@ -127,27 +123,7 @@ impl CodexSession {
             .exit_ok()
             .context("tmux new-session exited with error")?;
 
-        let attach_cmd = format!("tmux attach-session -t {session_name} -f read-only,ignore-size");
-        let tty_child = match Command::new("script")
-            .args(["-qefc", &attach_cmd, "/dev/null"])
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn()
-        {
-            Ok(child) => child,
-            Err(e) => {
-                let _ = Self::tmux_status(&["kill-session", "-t", &session_name]);
-                return Err(e.into());
-            }
-        };
-
-        Ok(Self {
-            name: session_name,
-            _workdir: workdir,
-            tty_child,
-            next_is_status_cmd: true,
-        })
+        Ok(Self { name: session_name })
     }
 
     fn tmux_status(args: &[&str]) -> anyhow::Result<()> {
@@ -201,9 +177,7 @@ impl CodexSession {
         Self::tmux_status(&["send-keys", "-t", &self.name, keys])
     }
 
-    fn cleanup(&mut self) {
-        let _ = self.tty_child.kill();
-        let _ = self.tty_child.wait();
+    fn cleanup(&self) {
         let _ = Self::tmux_status(&["kill-session", "-t", &self.name]);
     }
 }
@@ -299,7 +273,7 @@ impl InferenceUsageModule {
     }
 
     fn reset_codex_session(&mut self) {
-        if let Some(mut session) = self.codex_session.take() {
+        if let Some(session) = self.codex_session.take() {
             session.cleanup();
         }
     }
@@ -313,7 +287,7 @@ impl InferenceUsageModule {
             return Ok(());
         }
         self.reset_codex_session();
-        self.codex_session = Some(CodexSession::new()?);
+        self.codex_session = Some(CodexSession::new(self.amp_workdir.path())?);
         Ok(())
     }
 
@@ -329,87 +303,106 @@ impl InferenceUsageModule {
             .context("Failed to parse ChatGPT usage percentage")
     }
 
-    fn fetch_chatgpt_usage_once(&mut self, clear_history: bool) -> anyhow::Result<(f64, f64)> {
-        let raw_output = {
-            let session = self
-                .codex_session
-                .as_mut()
-                .ok_or_else(|| anyhow::anyhow!("Codex session missing"))?;
-
-            // Clear the visible pane and scrollback so stale usage output
-            // from previous runs is not mistaken for fresh data
-            if clear_history {
-                session.send_keys("C-l")?;
-                sleep(CHATGPT_POLL_INTERVAL);
-                CodexSession::tmux_status(&["clear-history", "-t", &session.name])?;
+    /// Poll the codex tmux pane until `pred` matches the captured output,
+    /// or `attempts` tries are exhausted. Returns the matching output and
+    /// the number of tries consumed (including the successful one).
+    fn poll_codex_pane(
+        session: &CodexSession,
+        attempts: usize,
+        pred: impl Fn(&str) -> bool,
+    ) -> anyhow::Result<(String, usize)> {
+        for i in 0..attempts {
+            let output = session.capture_pane()?;
+            if pred(&output) {
+                return Ok((output, i + 1));
             }
-
-            let mut raw_output = String::new();
-            let mut sent = false;
-            let mut last_send = 0;
-
-            for i in 0..CHATGPT_MAX_TRIES {
-                sleep(CHATGPT_POLL_INTERVAL);
-                raw_output = session.capture_pane()?;
-
-                if raw_output.contains(CHATGPT_TRUST_PROMPT) {
-                    session.send_keys("Enter")?;
-                }
-
-                if raw_output.contains("5h limit:") && raw_output.contains("Weekly limit:") {
-                    break;
-                }
-
-                if raw_output.contains("gpt-")
-                    && raw_output.contains("left")
-                    && (!sent || i.saturating_sub(last_send) >= CHATGPT_SEND_EVERY)
-                {
-                    session.send_keys("C-u")?;
-                    if session.next_is_status_cmd {
-                        session.send_keys("/status")?;
-                    } else {
-                        session.send_keys("/usage")?;
-                    }
-                    session.send_keys("Enter")?;
-                    session.next_is_status_cmd = !session.next_is_status_cmd;
-                    sent = true;
-                    last_send = i;
-                }
-            }
-
-            raw_output
-        };
-
-        if !(raw_output.contains("5h limit:") && raw_output.contains("Weekly limit:")) {
-            return Err(anyhow::anyhow!(
-                "Timed out waiting for ChatGPT usage in tmux session"
-            ));
+            sleep(CHATGPT_CODEX_POLL_INTERVAL);
         }
-
-        let h5_left = f64::from(Self::parse_chatgpt_left_pct(
-            &self.chatgpt_h5_limit_re,
-            &raw_output,
-            "5h",
-        )?);
-        let weekly_left = f64::from(Self::parse_chatgpt_left_pct(
-            &self.chatgpt_weekly_limit_re,
-            &raw_output,
-            "weekly",
-        )?);
-        Ok((h5_left, weekly_left))
+        Err(anyhow::anyhow!(
+            "Timed out polling codex pane ({attempts} attempts)"
+        ))
     }
 
     fn fetch_chatgpt_usage(&mut self) -> anyhow::Result<(f64, f64)> {
         self.ensure_codex_session()?;
-        match self.fetch_chatgpt_usage_once(true) {
-            Ok(usage) => Ok(usage),
-            Err(e) => {
-                log::warn!("ChatGPT usage first attempt failed, restarting session: {e}");
-                self.reset_codex_session();
-                self.ensure_codex_session()?;
-                self.fetch_chatgpt_usage_once(false)
+
+        let result = self.fetch_chatgpt_usage_inner();
+        if let Err(e) = &result {
+            log::warn!("ChatGPT usage first attempt failed, restarting session: {e}");
+            self.reset_codex_session();
+            self.ensure_codex_session()?;
+            return self.fetch_chatgpt_usage_inner();
+        }
+        result
+    }
+
+    fn fetch_chatgpt_usage_inner(&mut self) -> anyhow::Result<(f64, f64)> {
+        let session = self
+            .codex_session
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("Codex session missing"))?;
+
+        // Phase 1: Clear stale output, handle trust prompt if present,
+        // and wait for the codex prompt to appear
+        session.send_keys("C-l")?;
+        sleep(CHATGPT_CODEX_POLL_INTERVAL);
+        CodexSession::tmux_status(&["clear-history", "-t", &session.name])?;
+
+        let (pane, mut used) = Self::poll_codex_pane(session, CHATGPT_CODEX_MAX_TRIES, |p| {
+            p.contains("gpt-") || p.contains(CHATGPT_CODEX_TRUST_PROMPT)
+        })?;
+
+        if pane.contains(CHATGPT_CODEX_TRUST_PROMPT) {
+            session.send_keys("Enter")?;
+            sleep(CHATGPT_CODEX_POLL_INTERVAL);
+            CodexSession::tmux_status(&["clear-history", "-t", &session.name])?;
+
+            let (_, phase1_used) = Self::poll_codex_pane(
+                session,
+                CHATGPT_CODEX_MAX_TRIES.saturating_sub(used),
+                |p| p.contains("gpt-"),
+            )?;
+            used += phase1_used;
+        }
+
+        // Phase 2: Send /status command and wait for usage output,
+        // retrying periodically if it does not appear
+        let mut remaining = CHATGPT_CODEX_MAX_TRIES.saturating_sub(used);
+        while remaining > 0 {
+            session.send_keys("C-u")?;
+            session.send_keys("/status")?;
+            session.send_keys("Enter")?;
+
+            let batch = remaining.min(CHATGPT_CODEX_RETRY_INTERVAL);
+            match Self::poll_codex_pane(session, batch, |p| {
+                p.contains("5h limit:") && p.contains("Weekly limit:")
+            }) {
+                Ok((raw_output, _)) => {
+                    return self.parse_chatgpt_usage(&raw_output);
+                }
+                Err(_) => {
+                    remaining = remaining.saturating_sub(batch);
+                }
             }
         }
+
+        Err(anyhow::anyhow!(
+            "Timed out waiting for ChatGPT usage in tmux session"
+        ))
+    }
+
+    fn parse_chatgpt_usage(&self, raw_output: &str) -> anyhow::Result<(f64, f64)> {
+        let h5_left = f64::from(Self::parse_chatgpt_left_pct(
+            &self.chatgpt_h5_limit_re,
+            raw_output,
+            "5h",
+        )?);
+        let weekly_left = f64::from(Self::parse_chatgpt_left_pct(
+            &self.chatgpt_weekly_limit_re,
+            raw_output,
+            "weekly",
+        )?);
+        Ok((h5_left, weekly_left))
     }
 
     fn fetch_amp_usage(&self) -> anyhow::Result<f64> {
