@@ -7,30 +7,33 @@ Rewrite of my personal Python [Polybar](https://polybar.github.io/) modules (and
 
 ## Module status
 
-- [x] Arch Linux updates
-- [x] Bluetooth devices status & control
-- [x] CPU frequency
-- [x] CPU top process
-- [x] Debian updates
-- [ ] ~~i3 layout status & control~~ I'm now using Xmonad instead
-- [x] Home power (consumption & solar panel production)
-- [x] LLM inference plan usage/credits
-- [x] Low bandwidth button
-- [x] Market trend
-- [ ] ~~Mount device control~~ I'm now using Udiskie instead
-- [x] Mouse battery status
-- [x] Nvidia GPU status
-- [x] Network status
-- [x] Notifications status
-- [x] Player MPRIS status
-- [x] Progress bar server
-- [x] Pulse audio input/output device status & control
-- [x] Screen autolock status & control
-- [x] Syncthing status
-- [ ] ~~Taskwarrior next task~~ Replaced by Todo.txt module
-- [x] Todo.txt next task
-- [x] Xmonad current layout
-- [x] Weather
+- Arch Linux updates
+- Bluetooth devices status & control
+- CPU frequency
+- CPU top process
+- Debian updates
+- Home power (consumption & solar panel production)
+- LLM inference plan usage/credits
+- Low bandwidth button
+- Market trend
+- Mouse battery status
+- Nvidia GPU status
+- Network status
+- Notifications status
+- Player MPRIS status
+- Progress bar server
+- Pulse audio input/output device status & control
+- Screen autolock status & control
+- Syncthing status
+- Todo.txt next task
+- Xmonad current layout
+- Weather
+
+Retired modules :
+
+- ~~i3 layout status & control~~ I'm now using Xmonad instead
+- ~~Mount device control~~ I'm now using Udiskie instead
+- ~~Taskwarrior next task~~ Replaced by Todo.txt module
 
 ## License
 
