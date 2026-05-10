@@ -44,7 +44,7 @@ pub(crate) enum PolybarModuleName {
     /// Start Todo.txt module
     todotxt { max_len: Option<usize> },
     /// Start weather module
-    wttr { location: Option<String> },
+    weather,
     /// Start Xmonad module
     xmonad,
 }
@@ -66,6 +66,13 @@ pub(crate) struct Config {
 pub(crate) struct ModuleConfig {
     pub home_power: Option<HomePowerModuleConfig>,
     pub network_status: Option<NetworkStatusModuleConfig>,
+    pub weather: Option<WeatherModuleConfig>,
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+pub(crate) struct WeatherModuleConfig {
+    pub latitude: f64,
+    pub longitude: f64,
 }
 
 #[derive(Debug, serde::Deserialize)]

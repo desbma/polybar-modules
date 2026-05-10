@@ -31,7 +31,7 @@ pub(crate) mod pulseaudio;
 pub(crate) mod syncthing;
 mod syncthing_rest;
 pub(crate) mod todotxt;
-pub(crate) mod wttr;
+pub(crate) mod weather;
 pub(crate) mod xmonad;
 
 #[expect(clippy::large_enum_variant)]
@@ -55,7 +55,7 @@ pub(crate) enum PolybarModule {
     PulseAudio(pulseaudio::PulseAudioModule),
     Syncthing(syncthing::SyncthingModule),
     TodoTxt(todotxt::TodoTxtModule),
-    Wttr(wttr::WttrModule),
+    Weather(weather::WeatherModule),
     Xmonad(xmonad::XmonadModule),
 }
 

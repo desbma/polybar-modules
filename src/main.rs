@@ -138,9 +138,15 @@ fn main() -> anyhow::Result<()> {
             polybar_module::todotxt::TodoTxtModule::new(max_len)
                 .context("Failed to initialize Todo.txt module")?,
         ),
-        PolybarModuleName::wttr { location } => polybar_module::PolybarModule::Wttr(
-            polybar_module::wttr::WttrModule::new(location.as_ref()),
-        ),
+        PolybarModuleName::weather => {
+            let weather_cfg = cfg?
+                .module
+                .and_then(|m| m.weather)
+                .context("Missing 'module.weather' config section")?;
+            polybar_module::PolybarModule::Weather(polybar_module::weather::WeatherModule::new(
+                &weather_cfg,
+            ))
+        }
         PolybarModuleName::xmonad => polybar_module::PolybarModule::Xmonad(
             polybar_module::xmonad::XmonadModule::new()
                 .context("Failed to initialize Xmonad module")?,
@@ -168,7 +174,7 @@ fn main() -> anyhow::Result<()> {
         polybar_module::PolybarModule::PulseAudio(module) => render_loop(module),
         polybar_module::PolybarModule::Syncthing(module) => render_loop(module),
         polybar_module::PolybarModule::TodoTxt(module) => render_loop(module),
-        polybar_module::PolybarModule::Wttr(module) => render_loop(module),
+        polybar_module::PolybarModule::Weather(module) => render_loop(module),
         polybar_module::PolybarModule::Xmonad(module) => render_loop(module),
     }
 }
