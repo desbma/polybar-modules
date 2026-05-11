@@ -50,11 +50,11 @@ fn weather_icon(
 ) -> anyhow::Result<&'static str> {
     let windy = wind_speed >= WIND_STRONG_KMH || wind_gusts >= WIND_GUST_STRONG_KMH;
     Ok(match (code, is_day, windy) {
-        (0 | 1, _, true) => "",      // nf-weather-windy
-        (0 | 1, true, false) => "",  // nf-weather-day_sunny
-        (0 | 1, false, false) => "", // nf-weather-night_clear
-        (2, true, _) => "",          // nf-weather-day_cloudy
-        (2, false, _) => "",         // nf-weather-night_alt_cloudy
+        (0 | 1, _, true) => "󰖝",      // nf-md-weather_windy
+        (0 | 1, true, false) => "󰖙",  // nf-md-weather_sunny
+        (0 | 1, false, false) => "󰖔", // nf-md-weather_night
+        (2, true, _) => "󰖕",          // nf-md-weather_partly_cloudy
+        (2, false, _) => "󰼱",         // nf-md-weather_night_partly_cloudy
         (3, ..) => "󰖐",               // nf-md-weather_cloudy
         (45 | 48, ..) => "󰖑",         // nf-md-weather_fog
         (51 | 53 | 55, ..) => "󰖗",    // nf-md-weather_rainy
@@ -65,8 +65,7 @@ fn weather_icon(
         (71 | 73, ..) => "󰖘",         // nf-md-weather_snowy
         (75, ..) => "󰼶",              // nf-md-weather_snowy_heavy
         (77, ..) => "󰖘",              // nf-md-weather_snowy
-        (80 | 81, true, _) => "",    // nf-weather-day_showers
-        (80 | 81, false, _) => "",   // nf-weather-night_alt_showers
+        (80 | 81, ..) => "󰖗",         // nf-md-weather_rainy
         (82, ..) => "󰖖",              // nf-md-weather_pouring
         (85, ..) => "󰖘",              // nf-md-weather_snowy
         (86, ..) => "󰼶",              // nf-md-weather_snowy_heavy
@@ -251,21 +250,19 @@ longitude = 2.3522
 
     #[test]
     fn test_weather_icon_day_night() {
-        assert_eq!(weather_icon(0, true, 0.0, 0.0).unwrap(), "");
-        assert_eq!(weather_icon(0, false, 0.0, 0.0).unwrap(), "");
-        assert_eq!(weather_icon(1, true, 0.0, 0.0).unwrap(), "");
-        assert_eq!(weather_icon(1, false, 0.0, 0.0).unwrap(), "");
-        assert_eq!(weather_icon(2, true, 0.0, 0.0).unwrap(), "");
-        assert_eq!(weather_icon(2, false, 0.0, 0.0).unwrap(), "");
-        assert_eq!(weather_icon(80, true, 0.0, 0.0).unwrap(), "");
-        assert_eq!(weather_icon(80, false, 0.0, 0.0).unwrap(), "");
+        assert_eq!(weather_icon(0, true, 0.0, 0.0).unwrap(), "󰖙");
+        assert_eq!(weather_icon(0, false, 0.0, 0.0).unwrap(), "󰖔");
+        assert_eq!(weather_icon(1, true, 0.0, 0.0).unwrap(), "󰖙");
+        assert_eq!(weather_icon(1, false, 0.0, 0.0).unwrap(), "󰖔");
+        assert_eq!(weather_icon(2, true, 0.0, 0.0).unwrap(), "󰖕");
+        assert_eq!(weather_icon(2, false, 0.0, 0.0).unwrap(), "󰼱");
     }
 
     #[test]
     fn test_weather_icon_wind_override() {
-        assert_eq!(weather_icon(0, true, 50.0, 0.0).unwrap(), "");
-        assert_eq!(weather_icon(0, false, 0.0, 70.0).unwrap(), "");
-        assert_eq!(weather_icon(0, true, 39.0, 59.0).unwrap(), "");
+        assert_eq!(weather_icon(0, true, 50.0, 0.0).unwrap(), "󰖝");
+        assert_eq!(weather_icon(0, false, 0.0, 70.0).unwrap(), "󰖝");
+        assert_eq!(weather_icon(0, true, 39.0, 59.0).unwrap(), "󰖙");
         assert_eq!(weather_icon(3, true, 100.0, 100.0).unwrap(), "󰖐");
     }
 
@@ -289,6 +286,8 @@ longitude = 2.3522
             (73, "󰖘"),
             (75, "󰼶"),
             (77, "󰖘"),
+            (80, "󰖗"),
+            (81, "󰖗"),
             (82, "󰖖"),
             (85, "󰖘"),
             (86, "󰼶"),
