@@ -64,7 +64,7 @@ pub(crate) enum ChatGptUsageStatus {
 /// Inference usage state
 #[derive(Debug, PartialEq)]
 pub(crate) struct InferenceUsageModuleState {
-    amp_free_credit: Option<f64>,
+    amp_free_pct: Option<f64>,
     claude_status: ClaudeUsageStatus,
     chatgpt_status: ChatGptUsageStatus,
 }
@@ -244,7 +244,8 @@ impl InferenceUsageModule {
                 .http_status_as_error(false)
                 .build(),
         );
-        let amp_usage_re = regex::Regex::new(r"\$([0-9]+\.?[0-9]*)").unwrap();
+        let amp_usage_re =
+            regex::Regex::new(r"Amp Free: \$([0-9]+\.?[0-9]*)/\$([0-9]+\.?[0-9]*)").unwrap();
         let home = env::var("HOME").unwrap();
         let token_path = PathBuf::from(home).join(".config/claude/.credentials.json");
         let chatgpt_h5_limit_re = regex::Regex::new("5h limit:.* ([0-9]{1,3})% left").unwrap();
@@ -415,17 +416,27 @@ impl InferenceUsageModule {
             .context("Failed to run amp usage")?;
         output.status.exit_ok()?;
         let stdout = String::from_utf8(output.stdout)?;
-        let cap = self
-            .amp_usage_re
-            .captures(&stdout)
-            .ok_or_else(|| anyhow::anyhow!("No dollar amount found in amp usage output"))?;
-        let amount: f64 = cap
+        Self::parse_amp_usage(&self.amp_usage_re, &stdout)
+    }
+
+    /// Parse the free credit percentage from the `Amp Free: $X/$Y remaining` line
+    fn parse_amp_usage(re: &regex::Regex, usage: &str) -> anyhow::Result<f64> {
+        let cap = re
+            .captures(usage)
+            .ok_or_else(|| anyhow::anyhow!("No Amp Free credit found in amp usage output"))?;
+        let remaining: f64 = cap
             .get(1)
             .unwrap()
             .as_str()
             .parse()
-            .context("Failed to parse dollar amount")?;
-        Ok(amount)
+            .context("Failed to parse remaining Amp credit")?;
+        let total: f64 = cap
+            .get(2)
+            .unwrap()
+            .as_str()
+            .parse()
+            .context("Failed to parse total Amp credit")?;
+        Ok(remaining / total * 100.0)
     }
 
     fn claude_token_mtime(&self) -> Option<SystemTime> {
@@ -648,7 +659,7 @@ impl RenderablePolybarModule for InferenceUsageModule {
     }
 
     fn update(&mut self) -> Self::State {
-        let amp_usage_dollars = match self.fetch_amp_usage() {
+        let amp_free_pct = match self.fetch_amp_usage() {
             Ok(v) => Some(v),
             Err(e) => {
                 log::error!("AMP usage: {e}");
@@ -670,7 +681,7 @@ impl RenderablePolybarModule for InferenceUsageModule {
         };
 
         InferenceUsageModuleState {
-            amp_free_credit: amp_usage_dollars,
+            amp_free_pct,
             claude_status,
             chatgpt_status,
         }
@@ -680,12 +691,11 @@ impl RenderablePolybarModule for InferenceUsageModule {
         let mut fragments =
             vec![markup::Markup::new(ICON_INFERENCE_USAGE).fg(theme::Color::MainIcon)];
 
-        // AMP ($10 = 100%)
-        match state.amp_free_credit {
-            Some(dollars) => {
+        match state.amp_free_pct {
+            Some(pct) => {
                 fragments.push(Self::provider_markup(
                     ICON_AMP,
-                    Self::render_progress(dollars / 10.0 * 100.0),
+                    Self::render_progress(pct),
                     AMP_USAGE_URL,
                 ));
             }
@@ -842,9 +852,8 @@ mod tests {
             .fg(theme::Color::Attention)
             .into_string();
 
-        // AMP $4.50 = 45%, Claude 5h=50% used (50% remaining) 7d=20% used (80% remaining)
         let state = InferenceUsageModuleState {
-            amp_free_credit: Some(4.5),
+            amp_free_pct: Some(45.0),
             claude_status: ClaudeUsageStatus::Available { h5: 50.0, d7: 20.0 },
             chatgpt_status: ChatGptUsageStatus::Available {
                 h5_left: 81.0,
@@ -872,7 +881,7 @@ mod tests {
 
         // All errors
         let state = InferenceUsageModuleState {
-            amp_free_credit: None,
+            amp_free_pct: None,
             claude_status: ClaudeUsageStatus::Error,
             chatgpt_status: ChatGptUsageStatus::Error,
         };
@@ -887,9 +896,8 @@ mod tests {
             )
         );
 
-        // AMP $10 = 100% (full ramp), Claude error
         let state = InferenceUsageModuleState {
-            amp_free_credit: Some(10.0),
+            amp_free_pct: Some(100.0),
             claude_status: ClaudeUsageStatus::Error,
             chatgpt_status: ChatGptUsageStatus::Error,
         };
@@ -904,9 +912,8 @@ mod tests {
             )
         );
 
-        // AMP $0.50 = 5% (low/Attention), Claude 5% used (95% remaining)
         let state = InferenceUsageModuleState {
-            amp_free_credit: Some(0.5),
+            amp_free_pct: Some(5.0),
             claude_status: ClaudeUsageStatus::Available { h5: 5.0, d7: 5.0 },
             chatgpt_status: ChatGptUsageStatus::Available {
                 h5_left: 95.0,
@@ -934,7 +941,7 @@ mod tests {
 
         // Claude auth invalid (401)
         let state = InferenceUsageModuleState {
-            amp_free_credit: Some(5.0),
+            amp_free_pct: Some(50.0),
             claude_status: ClaudeUsageStatus::AuthInvalid,
             chatgpt_status: ChatGptUsageStatus::Available {
                 h5_left: 20.0,
@@ -954,6 +961,31 @@ mod tests {
                     CHATGPT_USAGE_URL,
                 ),
             )
+        );
+    }
+
+    #[test]
+    #[expect(clippy::float_cmp)]
+    fn test_parse_amp_usage() {
+        let module = InferenceUsageModule::new();
+        let output = "Signed in as user@example.com (user)
+Amp Free: $5/$5 remaining (replenishes +$0.21/hour) - https://ampcode.com/settings#amp-free
+Individual credits: $0.58 remaining (set up automatic top-up to avoid running out) - https://ampcode.com/settings";
+        assert_eq!(
+            InferenceUsageModule::parse_amp_usage(&module.amp_usage_re, output).unwrap(),
+            100.0
+        );
+
+        let output = "Amp Free: $10/$10 remaining (replenishes +$0.21/hour)";
+        assert_eq!(
+            InferenceUsageModule::parse_amp_usage(&module.amp_usage_re, output).unwrap(),
+            100.0
+        );
+
+        let output = "Amp Free: $2.50/$5 remaining (replenishes +$0.21/hour)";
+        assert_eq!(
+            InferenceUsageModule::parse_amp_usage(&module.amp_usage_re, output).unwrap(),
+            50.0
         );
     }
 
