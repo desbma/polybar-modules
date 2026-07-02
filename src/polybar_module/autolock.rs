@@ -73,17 +73,15 @@ mod tests {
         let state = AutolockModuleState { enabled: true };
         assert_eq!(
             module.render(&state),
-            format!(
-                "%{{A1:systemctl --user stop autolock.service && pkill -USR1 -f \'polybar-modules autolock$\':}}󱫗%{{A}}",
-            )
+            "%{A1:systemctl --user stop autolock.service && pkill -USR1 -f \'polybar-modules autolock$\':}󱫗%{A}"
+                .to_owned()
         );
 
         let state = AutolockModuleState { enabled: false };
         assert_eq!(
             module.render(&state),
-            format!(
-                "%{{A1:systemctl --user start autolock.service && pkill -USR1 -f \'polybar-modules autolock$\':}}%{{u#ac8300}}%{{+u}}󱫕%{{-u}}%{{A}}",
-            )
+            "%{A1:systemctl --user start autolock.service && pkill -USR1 -f \'polybar-modules autolock$\':}%{u#ac8300}%{+u}󱫕%{-u}%{A}"
+                .to_owned()
         );
     }
 }

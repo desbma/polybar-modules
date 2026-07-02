@@ -43,9 +43,7 @@ pub(crate) struct PulseAudioModuleState {
 }
 
 fn easyeffects_installed() -> bool {
-    fs::metadata("/usr/bin/easyeffects")
-        .ok()
-        .is_some_and(|p| (p.permissions().mode() & 0o001) != 0)
+    fs::metadata("/usr/bin/easyeffects").is_ok_and(|p| (p.permissions().mode() & 0o001) != 0)
 }
 
 impl PulseAudioModule {
