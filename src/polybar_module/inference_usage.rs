@@ -244,8 +244,7 @@ impl InferenceUsageModule {
                 .http_status_as_error(false)
                 .build(),
         );
-        let amp_usage_re =
-            regex::Regex::new(r"Amp Free: \$([0-9]+\.?[0-9]*)/\$([0-9]+\.?[0-9]*)").unwrap();
+        let amp_usage_re = regex::Regex::new(r"Amp Free: ([0-9]+\.?[0-9]*)% remaining").unwrap();
         let home = env::var("HOME").unwrap();
         let token_path = PathBuf::from(home).join(".config/claude/.credentials.json");
         let chatgpt_h5_limit_re = regex::Regex::new("5h limit:.* ([0-9]{1,3})% left").unwrap();
@@ -419,24 +418,16 @@ impl InferenceUsageModule {
         Self::parse_amp_usage(&self.amp_usage_re, &stdout)
     }
 
-    /// Parse the free credit percentage from the `Amp Free: $X/$Y remaining` line
+    /// Parse the free credit percentage from the `Amp Free: N% remaining` line
     fn parse_amp_usage(re: &regex::Regex, usage: &str) -> anyhow::Result<f64> {
         let cap = re
             .captures(usage)
             .ok_or_else(|| anyhow::anyhow!("No Amp Free credit found in amp usage output"))?;
-        let remaining: f64 = cap
-            .get(1)
+        cap.get(1)
             .unwrap()
             .as_str()
             .parse()
-            .context("Failed to parse remaining Amp credit")?;
-        let total: f64 = cap
-            .get(2)
-            .unwrap()
-            .as_str()
-            .parse()
-            .context("Failed to parse total Amp credit")?;
-        Ok(remaining / total * 100.0)
+            .context("Failed to parse remaining Amp credit percentage")
     }
 
     fn claude_token_mtime(&self) -> Option<SystemTime> {
@@ -969,20 +960,14 @@ mod tests {
     fn test_parse_amp_usage() {
         let module = InferenceUsageModule::new();
         let output = "Signed in as user@example.com (user)
-Amp Free: $5/$5 remaining (replenishes +$0.21/hour) - https://ampcode.com/settings#amp-free
-Individual credits: $0.58 remaining (set up automatic top-up to avoid running out) - https://ampcode.com/settings";
+Amp Free: 100% remaining today (resets daily) - https://ampcode.com/settings#amp-free
+Individual credits: $5.56 remaining (set up automatic top-up to avoid running out) - https://ampcode.com/settings";
         assert_eq!(
             InferenceUsageModule::parse_amp_usage(&module.amp_usage_re, output).unwrap(),
             100.0
         );
 
-        let output = "Amp Free: $10/$10 remaining (replenishes +$0.21/hour)";
-        assert_eq!(
-            InferenceUsageModule::parse_amp_usage(&module.amp_usage_re, output).unwrap(),
-            100.0
-        );
-
-        let output = "Amp Free: $2.50/$5 remaining (replenishes +$0.21/hour)";
+        let output = "Amp Free: 50% remaining today (resets daily)";
         assert_eq!(
             InferenceUsageModule::parse_amp_usage(&module.amp_usage_re, output).unwrap(),
             50.0
