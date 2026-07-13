@@ -76,31 +76,27 @@ impl SyncthingModule {
     fn try_update(&mut self) -> anyhow::Result<SyncthingModuleState> {
         let system_config = match &self.system_config {
             None => {
-                let system_config_str = self.syncthing_rest_call("system/config", &[])?;
-                self.system_config = Some(serde_json::from_str(&system_config_str)?);
+                self.system_config = Some(self.syncthing_rest_call("system/config", &[])?);
                 self.system_config.as_ref().unwrap()
             }
             Some(c) => c,
         };
 
-        let system_connections_str = self.syncthing_rest_call("system/connections", &[])?;
         let system_connections: syncthing_rest::SystemConnections =
-            serde_json::from_str(&system_connections_str)?;
+            self.syncthing_rest_call("system/connections", &[])?;
 
         let mut device_syncing_to_count = 0;
         for (device_id, device) in &system_connections.connections {
             if device.connected {
-                let db_completion_str =
+                let db_completion: syncthing_rest::DbCompletion =
                     match self.syncthing_rest_call("db/completion", &[("device", device_id)]) {
-                        Ok(s) => s,
+                        Ok(c) => c,
                         Err(HttpError::Status(404, _)) => {
                             // Paused devices return 404
                             continue;
                         }
                         Err(e) => return Err(e.into()),
                     };
-                let db_completion: syncthing_rest::DbCompletion =
-                    serde_json::from_str(&db_completion_str)?;
                 if (db_completion.need_bytes > 0)
                     || (db_completion.need_items > 0)
                     || (db_completion.need_deletes > 0)
@@ -146,17 +142,15 @@ impl SyncthingModule {
             "HTTP response {}",
             response.status()
         );
-        let json_str = response.into_body().read_to_string()?;
-        log::trace!("{json_str}");
-        let events: Vec<syncthing_rest::Event> = serde_json::from_str(&json_str)?;
+        let events: Vec<syncthing_rest::Event> = response.into_body().read_json()?;
         Ok(events)
     }
 
-    fn syncthing_rest_call(
+    fn syncthing_rest_call<T: serde::de::DeserializeOwned>(
         &self,
         path: &str,
         params: &[(&str, &str)],
-    ) -> Result<String, HttpError> {
+    ) -> Result<T, HttpError> {
         let base_url = url::Url::parse("http://127.0.0.1:8384/rest/")?;
         let mut url = base_url.join(path)?;
         for (param_key, param_val) in params {
@@ -182,9 +176,7 @@ impl SyncthingModule {
                     .to_owned(),
             ));
         }
-        let json_str = response.into_body().read_to_string().map_err(Box::new)?;
-        log::trace!("{json_str}");
-        Ok(json_str)
+        Ok(response.into_body().read_json().map_err(Box::new)?)
     }
 }
 

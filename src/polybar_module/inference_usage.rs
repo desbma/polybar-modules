@@ -1,14 +1,14 @@
 use std::{
-    env, fs, io,
-    os::unix::fs::OpenOptionsExt as _,
+    env, fs,
     path::{Path, PathBuf},
-    process::{self, Command, Stdio},
+    process::{Command, Stdio},
     thread::sleep,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
 use anyhow::Context as _;
 use backon::BackoffBuilder as _;
+use itertools::Itertools as _;
 
 use crate::{
     markup,
@@ -25,9 +25,7 @@ pub(crate) struct InferenceUsageModule {
     claude_rate_limit_backoff: backon::ExponentialBackoff,
     claude_skip_until: Option<Instant>,
     claude_auth_failed_mtime: Option<SystemTime>,
-    chatgpt_h5_limit_re: regex::Regex,
-    chatgpt_weekly_limit_re: regex::Regex,
-    codex_session: Option<CodexSession>,
+    codex_auth_path: PathBuf,
     amp_workdir: tempfile::TempDir,
 }
 
@@ -47,26 +45,12 @@ pub(crate) enum ClaudeUsageStatus {
     Error,
 }
 
-/// `ChatGPT` usage fetch status
-#[derive(Debug, PartialEq)]
-pub(crate) enum ChatGptUsageStatus {
-    /// Successfully fetched usage data
-    Available {
-        /// 5-hour remaining percentage
-        h5_left: f64,
-        /// Weekly remaining percentage
-        weekly_left: f64,
-    },
-    /// Generic error
-    Error,
-}
-
 /// Inference usage state
 #[derive(Debug, PartialEq)]
 pub(crate) struct InferenceUsageModuleState {
     amp_free_pct: Option<f64>,
     claude_status: ClaudeUsageStatus,
-    chatgpt_status: ChatGptUsageStatus,
+    chatgpt_windows_left: Option<Vec<f64>>,
 }
 
 const ICON_INFERENCE_USAGE: &str = "󱩅";
@@ -89,98 +73,10 @@ const AMP_USAGE_URL: &str = "https://ampcode.com/settings";
 const CLAUDE_USAGE_URL: &str = "https://claude.ai/settings/usage";
 const CLAUDE_OAUTH_CLIENT_ID: &str = "9d1c250a-e61b-44d9-88ed-5944d1962f5e";
 const CHATGPT_USAGE_URL: &str = "https://chatgpt.com/codex/settings/usage";
-const CHATGPT_CODEX_POLL_INTERVAL: Duration = Duration::from_millis(100);
-const CHATGPT_CODEX_MAX_TRIES: usize = 120;
-const CHATGPT_CODEX_RETRY_INTERVAL: usize = 7;
-const CHATGPT_CODEX_TRUST_PROMPT: &str = "Do you trust the contents of this directory";
-
-struct CodexSession {
-    name: String,
-}
-
-impl CodexSession {
-    fn new(workdir: &Path) -> anyhow::Result<Self> {
-        let session_name = Self::session_name();
-
-        Command::new("tmux")
-            .args([
-                "new-session",
-                "-d",
-                "-x",
-                "160",
-                "-y",
-                "48",
-                "-s",
-                &session_name,
-                "codex",
-            ])
-            .current_dir(workdir)
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()
-            .context("Failed to start tmux session for ChatGPT usage")?
-            .exit_ok()
-            .context("tmux new-session exited with error")?;
-
-        Ok(Self { name: session_name })
-    }
-
-    fn tmux_status(args: &[&str]) -> anyhow::Result<()> {
-        let status = Command::new("tmux")
-            .args(args)
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()
-            .context("Failed to run tmux")?;
-        status.exit_ok().context("tmux exited with error")?;
-        Ok(())
-    }
-
-    fn tmux_output(args: &[&str]) -> anyhow::Result<String> {
-        let output = Command::new("tmux")
-            .args(args)
-            .stdin(Stdio::null())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::null())
-            .output()
-            .context("Failed to run tmux")?;
-        output.status.exit_ok().context("tmux exited with error")?;
-        String::from_utf8(output.stdout).context("tmux output is not UTF-8")
-    }
-
-    fn session_name() -> String {
-        let ts = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .ok()
-            .map_or(0_u128, |d| d.as_millis());
-        format!("polybar_chatgpt_usage_{}_{}", process::id(), ts)
-    }
-
-    fn is_alive(&self) -> bool {
-        Command::new("tmux")
-            .args(["has-session", "-t", &self.name])
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()
-            .is_ok_and(|s| s.success())
-    }
-
-    fn capture_pane(&self) -> anyhow::Result<String> {
-        Self::tmux_output(&["capture-pane", "-pJ", "-t", &self.name, "-S", "-500"])
-            .context("Failed to capture tmux pane")
-    }
-
-    fn send_keys(&self, keys: &str) -> anyhow::Result<()> {
-        Self::tmux_status(&["send-keys", "-t", &self.name, keys])
-    }
-
-    fn cleanup(&self) {
-        let _ = Self::tmux_status(&["kill-session", "-t", &self.name]);
-    }
-}
+const CHATGPT_USAGE_API_URL: &str = "https://chatgpt.com/backend-api/wham/usage";
+const CODEX_TOKEN_URL: &str = "https://auth.openai.com/oauth/token";
+const CODEX_OAUTH_CLIENT_ID: &str = "app_EMoamEEZ73f0CkXaXp7hrann";
+const CODEX_USER_AGENT: &str = "codex_cli_rs/0.144.1";
 
 enum ClaudeFetchError {
     AuthInvalid,
@@ -231,6 +127,57 @@ struct ClaudeTokenResponse {
     expires_in: u64,
 }
 
+#[derive(Debug, thiserror::Error)]
+enum ChatGptFetchError {
+    #[error("Authentication invalid (401)")]
+    AuthInvalid,
+    #[error(transparent)]
+    Other(#[from] anyhow::Error),
+}
+
+#[derive(serde::Deserialize)]
+struct CodexAuth {
+    tokens: CodexTokens,
+}
+
+#[derive(serde::Deserialize)]
+struct CodexTokens {
+    access_token: String,
+    account_id: Option<String>,
+}
+
+#[derive(serde::Deserialize)]
+struct ChatGptUsageResponse {
+    rate_limit: ChatGptRateLimit,
+}
+
+#[derive(serde::Deserialize)]
+struct ChatGptRateLimit {
+    primary_window: Option<ChatGptRateLimitWindow>,
+    secondary_window: Option<ChatGptRateLimitWindow>,
+}
+
+#[derive(serde::Deserialize)]
+struct ChatGptRateLimitWindow {
+    used_percent: f64,
+    limit_window_seconds: u64,
+}
+
+#[derive(serde::Serialize)]
+struct CodexTokenRequest {
+    client_id: &'static str,
+    grant_type: &'static str,
+    refresh_token: String,
+}
+
+#[expect(clippy::struct_field_names)]
+#[derive(serde::Deserialize)]
+struct CodexTokenResponse {
+    id_token: Option<String>,
+    access_token: Option<String>,
+    refresh_token: Option<String>,
+}
+
 impl InferenceUsageModule {
     pub(crate) fn new() -> Self {
         let client = ureq::Agent::new_with_config(
@@ -241,15 +188,12 @@ impl InferenceUsageModule {
                         .build(),
                 )
                 .timeout_global(Some(TCP_REMOTE_TIMEOUT))
-                .http_status_as_error(false)
                 .build(),
         );
         let amp_usage_re = regex::Regex::new(r"Amp Free: ([0-9]+\.?[0-9]*)% remaining").unwrap();
         let home = env::var("HOME").unwrap();
-        let token_path = PathBuf::from(home).join(".config/claude/.credentials.json");
-        let chatgpt_h5_limit_re = regex::Regex::new("5h limit:.* ([0-9]{1,3})% left").unwrap();
-        let chatgpt_weekly_limit_re =
-            regex::Regex::new("Weekly limit:.* ([0-9]{1,3})% left").unwrap();
+        let token_path = PathBuf::from(&home).join(".config/claude/.credentials.json");
+        let codex_auth_path = PathBuf::from(&home).join(".config/codex/auth.json");
         let claude_rate_limit_backoff_builder = backon::ExponentialBuilder::default()
             .with_jitter()
             .with_min_delay(Duration::from_mins(5))
@@ -265,144 +209,119 @@ impl InferenceUsageModule {
             claude_rate_limit_backoff,
             claude_skip_until: None,
             claude_auth_failed_mtime: None,
-            chatgpt_h5_limit_re,
-            chatgpt_weekly_limit_re,
-            codex_session: None,
+            codex_auth_path,
             amp_workdir,
         }
     }
 
-    fn reset_codex_session(&mut self) {
-        if let Some(session) = self.codex_session.take() {
-            session.cleanup();
+    fn fetch_chatgpt_usage(&self) -> Result<Vec<f64>, ChatGptFetchError> {
+        let auth_data = fs::read_to_string(&self.codex_auth_path)
+            .context("Failed to read codex auth")
+            .map_err(ChatGptFetchError::Other)?;
+        let auth: CodexAuth =
+            serde_json::from_str(&auth_data).map_err(|e| ChatGptFetchError::Other(e.into()))?;
+
+        let mut request = self
+            .client
+            .get(CHATGPT_USAGE_API_URL)
+            .header("User-Agent", CODEX_USER_AGENT)
+            .header(
+                "Authorization",
+                &format!("Bearer {}", auth.tokens.access_token),
+            );
+        if let Some(account_id) = &auth.tokens.account_id {
+            request = request.header("ChatGPT-Account-Id", account_id);
         }
-    }
-
-    fn ensure_codex_session(&mut self) -> anyhow::Result<()> {
-        if self
-            .codex_session
-            .as_ref()
-            .is_some_and(CodexSession::is_alive)
-        {
-            return Ok(());
-        }
-        self.reset_codex_session();
-        self.codex_session = Some(CodexSession::new(self.amp_workdir.path())?);
-        Ok(())
-    }
-
-    fn parse_chatgpt_left_pct(re: &regex::Regex, output: &str, label: &str) -> anyhow::Result<u8> {
-        let cap = re
-            .captures_iter(output)
-            .last()
-            .ok_or_else(|| anyhow::anyhow!("Unable to find {label} usage in codex output"))?;
-        cap.get(1)
-            .ok_or_else(|| anyhow::anyhow!("Unable to capture {label} percentage"))?
-            .as_str()
-            .parse()
-            .context("Failed to parse ChatGPT usage percentage")
-    }
-
-    /// Poll the codex tmux pane until `pred` matches the captured output,
-    /// or `attempts` tries are exhausted. Returns the matching output and
-    /// the number of tries consumed (including the successful one).
-    fn poll_codex_pane(
-        session: &CodexSession,
-        attempts: usize,
-        pred: impl Fn(&str) -> bool,
-    ) -> anyhow::Result<(String, usize)> {
-        for i in 0..attempts {
-            let output = session.capture_pane()?;
-            if pred(&output) {
-                return Ok((output, i + 1));
-            }
-            sleep(CHATGPT_CODEX_POLL_INTERVAL);
-        }
-        Err(anyhow::anyhow!(
-            "Timed out polling codex pane ({attempts} attempts)"
-        ))
-    }
-
-    fn fetch_chatgpt_usage(&mut self) -> anyhow::Result<(f64, f64)> {
-        self.ensure_codex_session()?;
-
-        let result = self.fetch_chatgpt_usage_inner();
-        if let Err(e) = &result {
-            log::warn!("ChatGPT usage first attempt failed, restarting session: {e}");
-            self.reset_codex_session();
-            self.ensure_codex_session()?;
-            return self.fetch_chatgpt_usage_inner();
-        }
-        result
-    }
-
-    fn fetch_chatgpt_usage_inner(&mut self) -> anyhow::Result<(f64, f64)> {
-        let session = self
-            .codex_session
-            .as_ref()
-            .ok_or_else(|| anyhow::anyhow!("Codex session missing"))?;
-
-        // Phase 1: Clear stale output, handle trust prompt if present,
-        // and wait for the codex prompt to appear
-        session.send_keys("C-l")?;
-        sleep(CHATGPT_CODEX_POLL_INTERVAL);
-        CodexSession::tmux_status(&["clear-history", "-t", &session.name])?;
-
-        let (pane, mut used) = Self::poll_codex_pane(session, CHATGPT_CODEX_MAX_TRIES, |p| {
-            p.contains("gpt-") || p.contains(CHATGPT_CODEX_TRUST_PROMPT)
+        let response = request.call().map_err(|error| match error {
+            ureq::Error::StatusCode(401) => ChatGptFetchError::AuthInvalid,
+            error => ChatGptFetchError::Other(error.into()),
         })?;
 
-        if pane.contains(CHATGPT_CODEX_TRUST_PROMPT) {
-            session.send_keys("Enter")?;
-            sleep(CHATGPT_CODEX_POLL_INTERVAL);
-            CodexSession::tmux_status(&["clear-history", "-t", &session.name])?;
+        let body: ChatGptUsageResponse = response
+            .into_body()
+            .read_json()
+            .map_err(|e| ChatGptFetchError::Other(e.into()))?;
 
-            let (_, phase1_used) = Self::poll_codex_pane(
-                session,
-                CHATGPT_CODEX_MAX_TRIES.saturating_sub(used),
-                |p| p.contains("gpt-"),
-            )?;
-            used += phase1_used;
-        }
-
-        // Phase 2: Send /status command and wait for usage output,
-        // retrying periodically if it does not appear
-        let mut remaining = CHATGPT_CODEX_MAX_TRIES.saturating_sub(used);
-        while remaining > 0 {
-            session.send_keys("C-u")?;
-            session.send_keys("/status")?;
-            session.send_keys("Enter")?;
-
-            let batch = remaining.min(CHATGPT_CODEX_RETRY_INTERVAL);
-            match Self::poll_codex_pane(session, batch, |p| {
-                p.contains("5h limit:") && p.contains("Weekly limit:")
-            }) {
-                Ok((raw_output, _)) => {
-                    return self.parse_chatgpt_usage(&raw_output);
-                }
-                Err(_) => {
-                    remaining = remaining.saturating_sub(batch);
-                }
-            }
-        }
-
-        Err(anyhow::anyhow!(
-            "Timed out waiting for ChatGPT usage in tmux session"
-        ))
+        Ok(Self::extract_chatgpt_windows(&body.rate_limit))
     }
 
-    fn parse_chatgpt_usage(&self, raw_output: &str) -> anyhow::Result<(f64, f64)> {
-        let h5_left = f64::from(Self::parse_chatgpt_left_pct(
-            &self.chatgpt_h5_limit_re,
-            raw_output,
-            "5h",
-        )?);
-        let weekly_left = f64::from(Self::parse_chatgpt_left_pct(
-            &self.chatgpt_weekly_limit_re,
-            raw_output,
-            "weekly",
-        )?);
-        Ok((h5_left, weekly_left))
+    /// Remaining percentage of each active rate-limit window, ordered by increasing window duration
+    fn extract_chatgpt_windows(rate_limit: &ChatGptRateLimit) -> Vec<f64> {
+        [&rate_limit.primary_window, &rate_limit.secondary_window]
+            .into_iter()
+            .flatten()
+            .sorted_by_key(|window| window.limit_window_seconds)
+            .map(|window| 100.0 - window.used_percent)
+            .collect()
+    }
+
+    fn update_chatgpt_usage(&self) -> Option<Vec<f64>> {
+        let result = self.fetch_chatgpt_usage().or_else(|error| {
+            if !matches!(error, ChatGptFetchError::AuthInvalid) {
+                return Err(error);
+            }
+            log::warn!("ChatGPT usage: authentication invalid (401), attempting token refresh");
+            self.refresh_chatgpt_token()?;
+            self.fetch_chatgpt_usage()
+        });
+
+        match result {
+            Ok(windows_left) if !windows_left.is_empty() => Some(windows_left),
+            Ok(_) => {
+                log::error!("ChatGPT usage: no rate limit windows");
+                None
+            }
+            Err(error) => {
+                log::error!("ChatGPT usage: {error}");
+                None
+            }
+        }
+    }
+
+    fn refresh_chatgpt_token(&self) -> anyhow::Result<()> {
+        let auth_data = fs::read_to_string(&self.codex_auth_path)
+            .context("Failed to read codex auth for refresh")?;
+        let mut auth: serde_json::Value =
+            serde_json::from_str(&auth_data).context("Failed to deserialize codex auth")?;
+
+        let refresh_token = auth
+            .get("tokens")
+            .and_then(|t| t.get("refresh_token"))
+            .and_then(serde_json::Value::as_str)
+            .context("Missing refresh_token in codex auth")?;
+
+        let request_body = CodexTokenRequest {
+            client_id: CODEX_OAUTH_CLIENT_ID,
+            grant_type: "refresh_token",
+            refresh_token: refresh_token.to_owned(),
+        };
+
+        let tok: CodexTokenResponse = self
+            .client
+            .post(CODEX_TOKEN_URL)
+            .send_json(&request_body)?
+            .into_body()
+            .read_json()?;
+
+        let tokens = auth
+            .get_mut("tokens")
+            .and_then(serde_json::Value::as_object_mut)
+            .context("Missing tokens object in codex auth")?;
+        if let Some(access_token) = tok.access_token {
+            tokens.insert("access_token".to_owned(), access_token.into());
+        }
+        if let Some(new_refresh_token) = tok.refresh_token {
+            tokens.insert("refresh_token".to_owned(), new_refresh_token.into());
+        }
+        if let Some(id_token) = tok.id_token {
+            tokens.insert("id_token".to_owned(), id_token.into());
+        }
+
+        Self::overwrite_json(&self.codex_auth_path, &auth)
+            .context("Failed to write refreshed codex auth")?;
+
+        log::info!("Codex token refreshed");
+        Ok(())
     }
 
     fn fetch_amp_usage(&self) -> anyhow::Result<f64> {
@@ -452,28 +371,16 @@ impl InferenceUsageModule {
             )
             .header("anthropic-beta", "oauth-2025-04-20")
             .call()
+            .map_err(|error| match error {
+                ureq::Error::StatusCode(401) => ClaudeFetchError::AuthInvalid,
+                ureq::Error::StatusCode(429) => ClaudeFetchError::RateLimited,
+                error => ClaudeFetchError::Other(error.into()),
+            })?;
+
+        let body: ClaudeUsageResponse = response
+            .into_body()
+            .read_json()
             .map_err(|e| ClaudeFetchError::Other(e.into()))?;
-
-        let status = response.status();
-        if status == ureq::http::StatusCode::UNAUTHORIZED {
-            return Err(ClaudeFetchError::AuthInvalid);
-        }
-        if status == ureq::http::StatusCode::TOO_MANY_REQUESTS {
-            return Err(ClaudeFetchError::RateLimited);
-        }
-        if status.is_client_error() || status.is_server_error() {
-            return Err(ClaudeFetchError::Other(anyhow::anyhow!(
-                "HTTP status {status}"
-            )));
-        }
-
-        let body: ClaudeUsageResponse = serde_json::from_str(
-            &response
-                .into_body()
-                .read_to_string()
-                .map_err(|e| ClaudeFetchError::Other(e.into()))?,
-        )
-        .map_err(|e| ClaudeFetchError::Other(e.into()))?;
 
         Ok((body.five_hour.utilization, body.seven_day.utilization))
     }
@@ -559,20 +466,12 @@ impl InferenceUsageModule {
             client_id: CLAUDE_OAUTH_CLIENT_ID,
             scope: creds.claude_ai_oauth.scopes.join(" "),
         };
-        let request_str = serde_json::to_string(&request_body)?;
-
-        let response = self
+        let tok: ClaudeTokenResponse = self
             .client
             .post("https://platform.claude.com/v1/oauth/token")
-            .header("Content-Type", "application/json")
-            .send(&*request_str)?;
-
-        if !response.status().is_success() {
-            anyhow::bail!("Token refresh failed with status {}", response.status());
-        }
-
-        let tok: ClaudeTokenResponse =
-            serde_json::from_str(&response.into_body().read_to_string()?)?;
+            .send_json(&request_body)?
+            .into_body()
+            .read_json()?;
 
         creds.claude_ai_oauth.access_token = tok.access_token;
         if let Some(new_refresh) = tok.refresh_token {
@@ -586,13 +485,7 @@ impl InferenceUsageModule {
             + tok.expires_in * 1000;
         creds.claude_ai_oauth.expires_at = expires_at;
 
-        let new_data = serde_json::to_string(&creds)?;
-        fs::OpenOptions::new()
-            .write(true)
-            .truncate(true)
-            .mode(0o600)
-            .open(&self.token_path)
-            .and_then(|file| io::Write::write_all(&mut &file, new_data.as_bytes()))
+        Self::overwrite_json(&self.token_path, &creds)
             .context("Failed to write refreshed credentials")?;
 
         log::info!(
@@ -630,11 +523,16 @@ impl InferenceUsageModule {
             format!("firefox --new-tab '{url}'"),
         )
     }
-}
 
-impl Drop for InferenceUsageModule {
-    fn drop(&mut self) {
-        self.reset_codex_session();
+    /// Serialize `value` to a sibling temporary file and atomically rename it over `path`
+    fn overwrite_json<T: serde::Serialize>(path: &Path, value: &T) -> anyhow::Result<()> {
+        let dir = path
+            .parent()
+            .with_context(|| format!("Path has no parent directory: {path:?}"))?;
+        let mut file = tempfile::NamedTempFile::new_in(dir)?;
+        serde_json::to_writer(&mut file, value)?;
+        file.persist(path)?;
+        Ok(())
     }
 }
 
@@ -660,21 +558,12 @@ impl RenderablePolybarModule for InferenceUsageModule {
 
         let claude_status = self.update_claude_status();
 
-        let chatgpt_status = match self.fetch_chatgpt_usage() {
-            Ok((h5_left, weekly_left)) => ChatGptUsageStatus::Available {
-                h5_left,
-                weekly_left,
-            },
-            Err(e) => {
-                log::error!("ChatGPT usage: {e}");
-                ChatGptUsageStatus::Error
-            }
-        };
+        let chatgpt_windows_left = self.update_chatgpt_usage();
 
         InferenceUsageModuleState {
             amp_free_pct,
             claude_status,
-            chatgpt_status,
+            chatgpt_windows_left,
         }
     }
 
@@ -728,22 +617,19 @@ impl RenderablePolybarModule for InferenceUsageModule {
             }
         }
 
-        match &state.chatgpt_status {
-            ChatGptUsageStatus::Available {
-                h5_left,
-                weekly_left,
-            } => {
+        match &state.chatgpt_windows_left {
+            Some(windows_left) => {
+                let usage: String = windows_left
+                    .iter()
+                    .map(|pct| Self::render_progress(*pct))
+                    .collect();
                 fragments.push(Self::provider_markup(
                     ICON_CHATGPT,
-                    format!(
-                        "{}{}",
-                        Self::render_progress(*h5_left),
-                        Self::render_progress(*weekly_left),
-                    ),
+                    usage,
                     CHATGPT_USAGE_URL,
                 ));
             }
-            ChatGptUsageStatus::Error => {
+            None => {
                 fragments.push(Self::provider_markup(
                     ICON_CHATGPT,
                     markup::Markup::new(ICON_WARNING).fg(theme::Color::Attention),
@@ -846,10 +732,7 @@ mod tests {
         let state = InferenceUsageModuleState {
             amp_free_pct: Some(45.0),
             claude_status: ClaudeUsageStatus::Available { h5: 50.0, d7: 20.0 },
-            chatgpt_status: ChatGptUsageStatus::Available {
-                h5_left: 81.0,
-                weekly_left: 90.0,
-            },
+            chatgpt_windows_left: Some(vec![81.0, 90.0]),
         };
         assert_eq!(
             module.render(&state),
@@ -874,7 +757,7 @@ mod tests {
         let state = InferenceUsageModuleState {
             amp_free_pct: None,
             claude_status: ClaudeUsageStatus::Error,
-            chatgpt_status: ChatGptUsageStatus::Error,
+            chatgpt_windows_left: None,
         };
         assert_eq!(
             module.render(&state),
@@ -890,7 +773,7 @@ mod tests {
         let state = InferenceUsageModuleState {
             amp_free_pct: Some(100.0),
             claude_status: ClaudeUsageStatus::Error,
-            chatgpt_status: ChatGptUsageStatus::Error,
+            chatgpt_windows_left: None,
         };
         assert_eq!(
             module.render(&state),
@@ -906,10 +789,7 @@ mod tests {
         let state = InferenceUsageModuleState {
             amp_free_pct: Some(5.0),
             claude_status: ClaudeUsageStatus::Available { h5: 5.0, d7: 5.0 },
-            chatgpt_status: ChatGptUsageStatus::Available {
-                h5_left: 95.0,
-                weekly_left: 95.0,
-            },
+            chatgpt_windows_left: Some(vec![95.0, 95.0]),
         };
         assert_eq!(
             module.render(&state),
@@ -934,10 +814,7 @@ mod tests {
         let state = InferenceUsageModuleState {
             amp_free_pct: Some(50.0),
             claude_status: ClaudeUsageStatus::AuthInvalid,
-            chatgpt_status: ChatGptUsageStatus::Available {
-                h5_left: 20.0,
-                weekly_left: 5.0,
-            },
+            chatgpt_windows_left: Some(vec![20.0, 5.0]),
         };
         assert_eq!(
             module.render(&state),
@@ -951,6 +828,23 @@ mod tests {
                     "%{F#ac8300}󰪟%{F-}%{F#d56500}󰪞%{F-}",
                     CHATGPT_USAGE_URL,
                 ),
+            )
+        );
+
+        // ChatGPT with a single window renders a single icon
+        let state = InferenceUsageModuleState {
+            amp_free_pct: Some(50.0),
+            claude_status: ClaudeUsageStatus::Error,
+            chatgpt_windows_left: Some(vec![82.0]),
+        };
+        assert_eq!(
+            module.render(&state),
+            format!(
+                "{} {} {} {}",
+                mi(ICON_INFERENCE_USAGE),
+                provider(ICON_AMP, "%{F#819500}󰪡%{F-}", AMP_USAGE_URL,),
+                provider(ICON_CLAUDE, &att_warn, CLAUDE_USAGE_URL),
+                provider(ICON_CHATGPT, "%{F#819500}󰪣%{F-}", CHATGPT_USAGE_URL),
             )
         );
     }
@@ -975,23 +869,33 @@ Individual credits: $5.56 remaining (set up automatic top-up to avoid running ou
     }
 
     #[test]
-    fn test_parse_chatgpt_usage_output() {
-        let module = InferenceUsageModule::new();
-        let output = "5h limit:             [████████████████░░░░] 81% left (resets 19:47)
-Weekly limit:         [██████████████████░░] 90% left (resets 19:45 on 30 Mar)";
+    fn test_extract_chatgpt_windows_single() {
+        let body = r#"{"rate_limit":{"allowed":true,"limit_reached":false,"primary_window":{"used_percent":18,"limit_window_seconds":604800,"reset_after_seconds":567359,"reset_at":1784539045},"secondary_window":null}}"#;
+        let resp: ChatGptUsageResponse = serde_json::from_str(body).unwrap();
         assert_eq!(
-            InferenceUsageModule::parse_chatgpt_left_pct(&module.chatgpt_h5_limit_re, output, "5h")
-                .unwrap(),
-            81
+            InferenceUsageModule::extract_chatgpt_windows(&resp.rate_limit),
+            vec![82.0]
         );
+    }
+
+    #[test]
+    fn test_extract_chatgpt_windows_both_sorted_by_duration() {
+        // Backend lists the weekly window first; output must be ordered by increasing duration
+        let body = r#"{"rate_limit":{"allowed":true,"limit_reached":false,"primary_window":{"used_percent":10,"limit_window_seconds":604800,"reset_after_seconds":1,"reset_at":1},"secondary_window":{"used_percent":19,"limit_window_seconds":18000,"reset_after_seconds":1,"reset_at":1}}}"#;
+        let resp: ChatGptUsageResponse = serde_json::from_str(body).unwrap();
         assert_eq!(
-            InferenceUsageModule::parse_chatgpt_left_pct(
-                &module.chatgpt_weekly_limit_re,
-                output,
-                "weekly"
-            )
-            .unwrap(),
-            90
+            InferenceUsageModule::extract_chatgpt_windows(&resp.rate_limit),
+            vec![81.0, 90.0]
+        );
+    }
+
+    #[test]
+    fn test_extract_chatgpt_windows_none() {
+        let body = r#"{"rate_limit":{"primary_window":null,"secondary_window":null}}"#;
+        let resp: ChatGptUsageResponse = serde_json::from_str(body).unwrap();
+        assert_eq!(
+            InferenceUsageModule::extract_chatgpt_windows(&resp.rate_limit),
+            Vec::<f64>::new()
         );
     }
 }

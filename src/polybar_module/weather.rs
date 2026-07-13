@@ -102,14 +102,11 @@ impl WeatherModule {
             "HTTP response {}",
             response.status(),
         );
-        let text = response.into_body().read_to_string()?;
-        log::debug!("{text:?}");
-
-        Self::parse(&text)
+        let body: OpenMeteoResponse = response.into_body().read_json()?;
+        Self::build_state(body)
     }
 
-    fn parse(text: &str) -> anyhow::Result<WeatherModuleState> {
-        let response: OpenMeteoResponse = serde_json::from_str(text)?;
+    fn build_state(response: OpenMeteoResponse) -> anyhow::Result<WeatherModuleState> {
         let current = response.current;
         let icon = weather_icon(
             current.weather_code,
@@ -213,7 +210,8 @@ longitude = 2.3522
                 "wind_gusts_10m": 25.3
             }
         }"#;
-        let state = WeatherModule::parse(json).unwrap();
+        let response: OpenMeteoResponse = serde_json::from_str(json).unwrap();
+        let state = WeatherModule::build_state(response).unwrap();
         assert_eq!(
             state,
             WeatherModuleState {
@@ -234,7 +232,8 @@ longitude = 2.3522
                 "wind_gusts_10m": 0.0
             }
         }"#;
-        assert_eq!(WeatherModule::parse(json).unwrap().temp, 14);
+        let response: OpenMeteoResponse = serde_json::from_str(json).unwrap();
+        assert_eq!(WeatherModule::build_state(response).unwrap().temp, 14);
 
         let json = r#"{
             "current": {
@@ -245,7 +244,8 @@ longitude = 2.3522
                 "wind_gusts_10m": 0.0
             }
         }"#;
-        assert_eq!(WeatherModule::parse(json).unwrap().temp, -4);
+        let response: OpenMeteoResponse = serde_json::from_str(json).unwrap();
+        assert_eq!(WeatherModule::build_state(response).unwrap().temp, -4);
     }
 
     #[test]
