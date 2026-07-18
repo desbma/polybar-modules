@@ -32,7 +32,7 @@ sha2 = { version = "0.11.0", default-features = false }
 signal-hook = { version = "0.4.4", default-features = false, features = ["iterator"] }
 simple_logger = { version = "5.2.0", default-features = false }
 strip-ansi-escapes = { version = "0.2.1", default-features = false }
-sysinfo = { version = "0.38.4", default-features = false, features = ["network"] }
+sysinfo = { version = "0.38.4", default-features = false, features = ["network", "system"] }
 tasks = { git = "https://github.com/desbma/todo", rev = "d559c94717c961fe41656e68e01863ce870c1ae0" }
 thiserror = { version = "2.0.18", default-features = false, features = ["std"] }
 tempfile = { version = "3.27.0", default-features = false }

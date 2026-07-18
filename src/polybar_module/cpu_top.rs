@@ -1,6 +1,14 @@
-use std::{io::BufRead as _, process::Command, thread::sleep, time::Duration};
+use std::{
+    ffi::{OsStr, OsString},
+    path::Path,
+    thread::sleep,
+    time::Duration,
+};
 
-use anyhow::Context as _;
+use sysinfo::{
+    MINIMUM_CPU_UPDATE_INTERVAL, ProcessRefreshKind, ProcessesToUpdate, System, ThreadKind,
+    UpdateKind, get_current_pid,
+};
 
 use crate::{
     markup,
@@ -10,6 +18,7 @@ use crate::{
 
 pub(crate) struct CpuTopModule {
     max_len: Option<usize>,
+    system: System,
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -20,62 +29,70 @@ pub(crate) struct CpuTopModuleState {
 
 impl CpuTopModule {
     pub(crate) fn new(max_len: Option<usize>) -> Self {
-        Self { max_len }
+        Self {
+            max_len,
+            system: System::new(),
+        }
     }
 
-    #[expect(clippy::unused_self)]
+    fn refresh_processes(&mut self) {
+        self.system.refresh_processes_specifics(
+            ProcessesToUpdate::All,
+            true,
+            ProcessRefreshKind::nothing()
+                .without_tasks()
+                .with_cpu()
+                .with_exe(UpdateKind::Always)
+                .with_cmd(UpdateKind::Always),
+        );
+    }
+
     fn try_update(&mut self) -> anyhow::Result<CpuTopModuleState> {
-        // Run ps
-        let output = Command::new("ps")
-            .args([
-                "-e",
-                "--no-headers",
-                "-o",
-                "c,cmd:256,exe:256",
-                "--sort",
-                "-%cpu",
-            ])
-            .output()?;
-        output.status.exit_ok().context("ps exited with error")?;
+        // Per-process CPU usage is a diff between the two most recent refreshes, so a priming
+        // refresh is needed for the first update to report real values instead of 0% everywhere
+        if self.system.processes().is_empty() {
+            self.refresh_processes();
+            sleep(MINIMUM_CPU_UPDATE_INTERVAL);
+        }
+        self.refresh_processes();
 
-        // Parse output
-        Self::parse_ps_output(&output.stdout)
-    }
+        // The sampler's own /proc scan makes it a CPU consumer; exclude it so an idle system
+        // does not just report this process back
+        let current_pid = get_current_pid().map_err(anyhow::Error::msg)?;
+        let proc = self
+            .system
+            .processes()
+            .values()
+            .filter(|process| process.pid() != current_pid)
+            .max_by(|a, b| a.cpu_usage().total_cmp(&b.cpu_usage()))
+            .ok_or_else(|| anyhow::anyhow!("No process found"))?;
 
-    fn parse_ps_output(stdout: &[u8]) -> anyhow::Result<CpuTopModuleState> {
-        let proc_line = stdout
-            .lines()
-            .map_while(Result::ok)
-            .map(|l| l.trim_start().to_owned())
-            .find(|l| l.split(' ').nth(1) != Some("ps"))
-            .ok_or_else(|| anyhow::anyhow!("Unexpected ps output"))?;
-        let (cpu_prct_str, rest) = proc_line
-            .split_once(' ')
-            .ok_or_else(|| anyhow::anyhow!("Unexpected ps output"))?;
-        let cpu_prct = cpu_prct_str.parse()?;
-        let (cmd, exe) = rest
-            .rsplit_once(' ')
-            .map(|p| (p.0.trim_end(), p.1))
-            .ok_or_else(|| anyhow::anyhow!("Unexpected ps output"))?;
-        let process_name_match = if exe != "-" {
-            exe.rsplit('/').next()
-        } else if cmd.starts_with('[') && cmd.ends_with(']') {
-            Some("[kthread]")
-        } else {
-            cmd.split(' ')
-                .next()
-                .ok_or_else(|| anyhow::anyhow!("Unexpected ps output"))?
-                .rsplit('/')
-                .next()
-        };
-        let process_name = process_name_match
-            .ok_or_else(|| anyhow::anyhow!("Unexpected ps output"))?
-            .to_owned();
+        let process_name =
+            Self::resolve_process_name(proc.thread_kind(), proc.exe(), proc.cmd(), proc.name())
+                .ok_or_else(|| anyhow::anyhow!("Unable to resolve process name"))?;
+        #[expect(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        let cpu_prct = proc.cpu_usage().round().clamp(0.0, 99.0) as u32;
 
         Ok(CpuTopModuleState {
             cpu_prct,
             process_name,
         })
+    }
+
+    fn resolve_process_name(
+        thread_kind: Option<ThreadKind>,
+        exe: Option<&Path>,
+        cmd: &[OsString],
+        name: &OsStr,
+    ) -> Option<String> {
+        if thread_kind == Some(ThreadKind::Kernel) {
+            return Some("[kthread]".to_owned());
+        }
+        let cmd_name = cmd.first().and_then(|arg| Path::new(arg).file_name());
+        exe.and_then(Path::file_name)
+            .or(cmd_name)
+            .or_else(|| (!name.is_empty()).then_some(name))
+            .map(|n| n.to_string_lossy().into_owned())
     }
 }
 
@@ -130,46 +147,70 @@ impl RenderablePolybarModule for CpuTopModule {
 }
 
 #[cfg(test)]
-#[expect(clippy::shadow_unrelated)]
 mod tests {
+    #[cfg(unix)]
+    use std::os::unix::ffi::OsStrExt as _;
+
     use super::*;
 
     #[test]
-    fn test_parse_ps_output() {
-        let output = " 1 /usr/lib/firefox/firefox -contentproc -childID 6 -isForBrowser -prefsLen 55932 -prefMapSize 253692 -jsInitLen 235336 -parentBuildID 20231106235557 -greomni /usr/lib/firefox/omni.ja -appomni /usr/lib/firefox/browser/omni.ja -appDir /usr/lib/firefox/browser -";
-        assert_eq!(
-            CpuTopModule::parse_ps_output(output.as_bytes()).unwrap(),
-            CpuTopModuleState {
-                cpu_prct: 1,
-                process_name: "firefox".to_owned()
-            }
-        );
+    fn test_resolve_process_name() {
+        let resolve = |thread_kind, exe: Option<&str>, args: &[&str], name: &str| -> String {
+            let cmd: Vec<OsString> = args.iter().copied().map(OsString::from).collect();
+            CpuTopModule::resolve_process_name(
+                thread_kind,
+                exe.map(Path::new),
+                &cmd,
+                OsStr::new(name),
+            )
+            .unwrap()
+        };
 
-        let output = " 1 /usr/lib/Xorg :0 -seat seat0 -auth /run/lightdm/root/:0 -nolisten tcp vt7 -novtswitch                                                                                                                                                -";
+        // exe basename wins over the command and the name
         assert_eq!(
-            CpuTopModule::parse_ps_output(output.as_bytes()).unwrap(),
-            CpuTopModuleState {
-                cpu_prct: 1,
-                process_name: "Xorg".to_owned()
-            }
+            resolve(
+                None,
+                Some("/usr/lib/firefox/firefox"),
+                &["/usr/bin/from-command"],
+                "from-name"
+            ),
+            "firefox"
         );
-
-        let output = " 0 polybar-modules network-status                                                                                                                                                /usr/bin/polybar-modules";
+        // exe unavailable: fall back to the command basename over the name
         assert_eq!(
-            CpuTopModule::parse_ps_output(output.as_bytes()).unwrap(),
-            CpuTopModuleState {
-                cpu_prct: 0,
-                process_name: "polybar-modules".to_owned()
-            }
+            resolve(
+                None,
+                None,
+                &["/usr/bin/polybar-modules", "network-status"],
+                "from-name"
+            ),
+            "polybar-modules"
         );
-
-        let output = "99 ps -e --no-headers -o c,cmd:255,exe:255 --sort -%cpu                                                                                                                                                /usr/bin/ps\n 6 /usr/lib/thunderbird/thunderbird                                                                                                                                                -";
+        // empty exe path is treated as unavailable
         assert_eq!(
-            CpuTopModule::parse_ps_output(output.as_bytes()).unwrap(),
-            CpuTopModuleState {
-                cpu_prct: 6,
-                process_name: "thunderbird".to_owned()
-            }
+            resolve(None, Some(""), &["/usr/lib/Xorg", ":0"], "from-name"),
+            "Xorg"
+        );
+        // kernel thread: identified by thread kind, not by empty exe/cmd
+        assert_eq!(
+            resolve(Some(ThreadKind::Kernel), None, &[], "kworker/0:1"),
+            "[kthread]"
+        );
+        // userland process with neither exe nor command line: fall back to the name
+        assert_eq!(resolve(None, None, &[], "mystery"), "mystery");
+        // no usable identity: unresolved
+        assert_eq!(
+            CpuTopModule::resolve_process_name(None, None, &[], OsStr::new("")),
+            None
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_resolve_non_utf8_process_name() {
+        assert_eq!(
+            CpuTopModule::resolve_process_name(None, None, &[], OsStr::from_bytes(b"process-\xff")),
+            Some("process-\u{fffd}".to_owned())
         );
     }
 
@@ -177,31 +218,23 @@ mod tests {
     fn test_render() {
         let module = CpuTopModule::new(Some(10));
 
-        let state = Some(CpuTopModuleState {
-            cpu_prct: 1,
-            process_name: "bz".to_owned(),
-        });
-        assert_eq!(module.render(&state), " 1%     bz");
-
-        let state = Some(CpuTopModuleState {
-            cpu_prct: 1,
-            process_name: "bzzzzzzzzzzzzzzzz".to_owned(),
-        });
-        assert_eq!(module.render(&state), " 1% bzzzz…");
-
-        let state = Some(CpuTopModuleState {
-            cpu_prct: 50,
-            process_name: "bz".to_owned(),
-        });
-        assert_eq!(module.render(&state), "%{F#ac8300}50%     bz%{F-}");
-
-        let state = Some(CpuTopModuleState {
-            cpu_prct: 99,
-            process_name: "bz".to_owned(),
-        });
-        assert_eq!(module.render(&state), "%{F#d56500}99%     bz%{F-}");
+        for (cpu_prct, process_name, expected) in [
+            (1, "bz", " 1%     bz"),
+            (1, "bzzzzzzzzzzzzzzzz", " 1% bzzzz…"),
+            (50, "bz", "%{F#ac8300}50%     bz%{F-}"),
+            (99, "bz", "%{F#d56500}99%     bz%{F-}"),
+        ] {
+            let state = Some(CpuTopModuleState {
+                cpu_prct,
+                process_name: process_name.to_owned(),
+            });
+            assert_eq!(module.render(&state), expected);
+        }
 
         let state = None;
-        assert_eq!(module.render(&state), "%{F#d56500}%{F-}");
+        assert_eq!(
+            module.render(&state),
+            format!("%{{F#d56500}}{ICON_WARNING}%{{F-}}")
+        );
     }
 }
