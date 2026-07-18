@@ -13,7 +13,7 @@ strip = true
 anyhow = { version = "1.0.103", default-features = false, features = ["backtrace", "std"] }
 backon = { version = "1.6.0", default-features = false, features = ["std", "std-blocking-sleep"] }
 bounded-vec-deque = { version = "0.1.1", default-features = false }
-chrono = { version = "0.4.45", default-features = false, features = ["clock", "std"] }
+chrono = { version = "0.4.45", default-features = false, features = ["clock", "serde", "std"] }
 clap = { version = "4.6.1", default-features = false, features = ["std", "derive", "help"] }
 glob = { version = "0.3.3", default-features = false }
 hex = { version = "0.4.3", default-features = false, features = ["std"] }

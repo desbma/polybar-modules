@@ -8,6 +8,7 @@ use std::{
 
 use anyhow::Context as _;
 use backon::BackoffBuilder as _;
+use chrono::{DateTime, Utc};
 use itertools::Itertools as _;
 
 use crate::{
@@ -29,15 +30,23 @@ pub(crate) struct InferenceUsageModule {
     amp_workdir: tempfile::TempDir,
 }
 
+/// Usage of a single rate limit window
+#[derive(Debug, PartialEq)]
+pub(crate) struct UsageWindow {
+    quota_left_pct: f64,
+    /// Share of the window duration left before it resets, `None` if the window is not running
+    time_left_frac: Option<f64>,
+}
+
 /// Claude usage fetch status
 #[derive(Debug, PartialEq)]
 pub(crate) enum ClaudeUsageStatus {
     /// Successfully fetched usage data
     Available {
-        /// 5-hour utilization percentage
-        h5: f64,
-        /// 7-day utilization percentage
-        d7: f64,
+        /// 5-hour window
+        h5: UsageWindow,
+        /// 7-day window
+        d7: UsageWindow,
     },
     /// Authentication failed (401), waiting for token refresh
     AuthInvalid,
@@ -50,7 +59,7 @@ pub(crate) enum ClaudeUsageStatus {
 pub(crate) struct InferenceUsageModuleState {
     amp_free_pct: Option<f64>,
     claude_status: ClaudeUsageStatus,
-    chatgpt_windows_left: Option<Vec<f64>>,
+    chatgpt_windows: Option<Vec<UsageWindow>>,
 }
 
 const ICON_INFERENCE_USAGE: &str = "󱩅";
@@ -58,7 +67,7 @@ const ICON_AMP: &str = "󰞍";
 const ICON_CLAUDE: &str = "";
 const ICON_CHATGPT: &str = "󰫈";
 const ICON_UNAUTHORIZED: &str = "";
-const PROGRESS_ICONS: [&str; 9] = [
+const QUOTA_ICONS: [&str; 9] = [
     "󰗖", // nf-md-alert_circle_outline
     "󰪞", // nf-md-circle_slice_1
     "󰪟", // nf-md-circle_slice_2
@@ -69,6 +78,10 @@ const PROGRESS_ICONS: [&str; 9] = [
     "󰪤", // nf-md-circle_slice_7
     "󰪥", // nf-md-circle_slice_8
 ];
+/// Duration of the Claude short rolling window
+const CLAUDE_H5_WINDOW: Duration = Duration::from_hours(5);
+/// Duration of the Claude long rolling window
+const CLAUDE_D7_WINDOW: Duration = Duration::from_hours(7 * 24);
 const AMP_USAGE_URL: &str = "https://ampcode.com/settings";
 const CLAUDE_USAGE_URL: &str = "https://claude.ai/settings/usage";
 const CLAUDE_OAUTH_CLIENT_ID: &str = "9d1c250a-e61b-44d9-88ed-5944d1962f5e";
@@ -110,6 +123,8 @@ struct ClaudeUsageResponse {
 #[derive(serde::Deserialize)]
 struct ClaudeUsageWindow {
     utilization: f64,
+    /// Null while no window is running, ie. nothing was consumed since the last reset
+    resets_at: Option<DateTime<Utc>>,
 }
 
 #[derive(serde::Serialize)]
@@ -161,6 +176,7 @@ struct ChatGptRateLimit {
 struct ChatGptRateLimitWindow {
     used_percent: f64,
     limit_window_seconds: u64,
+    reset_after_seconds: u64,
 }
 
 #[derive(serde::Serialize)]
@@ -214,7 +230,7 @@ impl InferenceUsageModule {
         }
     }
 
-    fn fetch_chatgpt_usage(&self) -> Result<Vec<f64>, ChatGptFetchError> {
+    fn fetch_chatgpt_usage(&self) -> Result<Vec<UsageWindow>, ChatGptFetchError> {
         let auth_data = fs::read_to_string(&self.codex_auth_path)
             .context("Failed to read codex auth")
             .map_err(ChatGptFetchError::Other)?;
@@ -245,17 +261,24 @@ impl InferenceUsageModule {
         Ok(Self::extract_chatgpt_windows(&body.rate_limit))
     }
 
-    /// Remaining percentage of each active rate-limit window, ordered by increasing window duration
-    fn extract_chatgpt_windows(rate_limit: &ChatGptRateLimit) -> Vec<f64> {
+    /// Each active rate-limit window, ordered by increasing window duration
+    #[expect(clippy::cast_precision_loss)]
+    fn extract_chatgpt_windows(rate_limit: &ChatGptRateLimit) -> Vec<UsageWindow> {
         [&rate_limit.primary_window, &rate_limit.secondary_window]
             .into_iter()
             .flatten()
             .sorted_by_key(|window| window.limit_window_seconds)
-            .map(|window| 100.0 - window.used_percent)
+            .map(|window| UsageWindow {
+                quota_left_pct: 100.0 - window.used_percent,
+                time_left_frac: Some(
+                    (window.reset_after_seconds as f64 / window.limit_window_seconds as f64)
+                        .clamp(0.0, 1.0),
+                ),
+            })
             .collect()
     }
 
-    fn update_chatgpt_usage(&self) -> Option<Vec<f64>> {
+    fn update_chatgpt_usage(&self) -> Option<Vec<UsageWindow>> {
         let result = self.fetch_chatgpt_usage().or_else(|error| {
             if !matches!(error, ChatGptFetchError::AuthInvalid) {
                 return Err(error);
@@ -266,7 +289,7 @@ impl InferenceUsageModule {
         });
 
         match result {
-            Ok(windows_left) if !windows_left.is_empty() => Some(windows_left),
+            Ok(windows) if !windows.is_empty() => Some(windows),
             Ok(_) => {
                 log::error!("ChatGPT usage: no rate limit windows");
                 None
@@ -355,7 +378,25 @@ impl InferenceUsageModule {
             .ok()
     }
 
-    fn fetch_claude_usage(&self) -> Result<(f64, f64), ClaudeFetchError> {
+    /// Quota left and share of `window_len` remaining before `window` resets
+    fn claude_window(
+        window: &ClaudeUsageWindow,
+        window_len: Duration,
+        now: DateTime<Utc>,
+    ) -> UsageWindow {
+        UsageWindow {
+            quota_left_pct: 100.0 - window.utilization,
+            time_left_frac: window.resets_at.map(|resets_at| {
+                (resets_at - now)
+                    .to_std()
+                    .unwrap_or_default()
+                    .div_duration_f64(window_len)
+                    .clamp(0.0, 1.0)
+            }),
+        }
+    }
+
+    fn fetch_claude_usage(&self) -> Result<(UsageWindow, UsageWindow), ClaudeFetchError> {
         let creds_data = fs::read_to_string(&self.token_path)
             .context("Failed to read credentials")
             .map_err(ClaudeFetchError::Other)?;
@@ -382,7 +423,11 @@ impl InferenceUsageModule {
             .read_json()
             .map_err(|e| ClaudeFetchError::Other(e.into()))?;
 
-        Ok((body.five_hour.utilization, body.seven_day.utilization))
+        let now = Utc::now();
+        Ok((
+            Self::claude_window(&body.five_hour, CLAUDE_H5_WINDOW, now),
+            Self::claude_window(&body.seven_day, CLAUDE_D7_WINDOW, now),
+        ))
     }
 
     fn update_claude_status(&mut self) -> ClaudeUsageStatus {
@@ -495,23 +540,49 @@ impl InferenceUsageModule {
         Ok(())
     }
 
-    fn render_progress(utilization: f64) -> String {
-        #[expect(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-        let pct = utilization.clamp(0.0, 100.0) as usize;
-        let icon = if pct == 0 {
-            PROGRESS_ICONS[0]
-        } else {
-            #[expect(clippy::indexing_slicing)]
-            PROGRESS_ICONS[1 + (pct - 1) * (PROGRESS_ICONS.len() - 2) / 99]
-        };
-        let color = if utilization > 30.0 {
+    fn quota_color(quota_left_pct: f64) -> theme::Color {
+        if quota_left_pct > 30.0 {
             theme::Color::Good
-        } else if utilization >= 10.0 {
+        } else if quota_left_pct >= 10.0 {
             theme::Color::Notice
         } else {
             theme::Color::Attention
+        }
+    }
+
+    fn render_quota(quota_left_pct: f64) -> String {
+        #[expect(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        let pct = quota_left_pct.clamp(0.0, 100.0) as usize;
+        let icon = if pct == 0 {
+            QUOTA_ICONS[0]
+        } else {
+            #[expect(clippy::indexing_slicing)]
+            QUOTA_ICONS[1 + (pct - 1) * (QUOTA_ICONS.len() - 2) / 99]
         };
-        markup::Markup::new(icon).fg(color).into_string()
+        markup::Markup::new(icon)
+            .fg(Self::quota_color(quota_left_pct))
+            .into_string()
+    }
+
+    /// Render each window quota, with the time left before reset only for the shortest one
+    fn render_windows<'a, I>(windows: I) -> String
+    where
+        I: IntoIterator<Item = &'a UsageWindow>,
+    {
+        windows
+            .into_iter()
+            .enumerate()
+            .map(|(i, window)| {
+                let quota = Self::render_quota(window.quota_left_pct);
+                match window.time_left_frac {
+                    Some(time_left_frac) if i == 0 => format!(
+                        "{quota}{}",
+                        markup::ramp(time_left_frac, Self::quota_color(window.quota_left_pct))
+                    ),
+                    _ => quota,
+                }
+            })
+            .collect()
     }
 
     fn provider_markup<S>(label: &str, usage: S, url: &str) -> markup::Markup
@@ -558,91 +629,42 @@ impl RenderablePolybarModule for InferenceUsageModule {
 
         let claude_status = self.update_claude_status();
 
-        let chatgpt_windows_left = self.update_chatgpt_usage();
+        let chatgpt_windows = self.update_chatgpt_usage();
 
         InferenceUsageModuleState {
             amp_free_pct,
             claude_status,
-            chatgpt_windows_left,
+            chatgpt_windows,
         }
     }
 
     fn render(&self, state: &Self::State) -> String {
-        let mut fragments =
-            vec![markup::Markup::new(ICON_INFERENCE_USAGE).fg(theme::Color::MainIcon)];
+        let warning = || {
+            markup::Markup::new(ICON_WARNING)
+                .fg(theme::Color::Attention)
+                .into_string()
+        };
+        let amp = state.amp_free_pct.map_or_else(warning, Self::render_quota);
+        let claude = match &state.claude_status {
+            ClaudeUsageStatus::Available { h5, d7 } => Self::render_windows([h5, d7]),
+            ClaudeUsageStatus::AuthInvalid => ICON_UNAUTHORIZED.to_owned(),
+            ClaudeUsageStatus::Error => warning(),
+        };
+        let chatgpt = state
+            .chatgpt_windows
+            .as_ref()
+            .map_or_else(warning, Self::render_windows);
 
-        match state.amp_free_pct {
-            Some(pct) => {
-                fragments.push(Self::provider_markup(
-                    ICON_AMP,
-                    Self::render_progress(pct),
-                    AMP_USAGE_URL,
-                ));
-            }
-            None => {
-                fragments.push(Self::provider_markup(
-                    ICON_AMP,
-                    markup::Markup::new(ICON_WARNING).fg(theme::Color::Attention),
-                    AMP_USAGE_URL,
-                ));
-            }
-        }
-
-        // Claude
-        match &state.claude_status {
-            ClaudeUsageStatus::Available { h5, d7 } => {
-                fragments.push(Self::provider_markup(
-                    ICON_CLAUDE,
-                    format!(
-                        "{}{}",
-                        Self::render_progress(100.0 - h5),
-                        Self::render_progress(100.0 - d7),
-                    ),
-                    CLAUDE_USAGE_URL,
-                ));
-            }
-            ClaudeUsageStatus::AuthInvalid => {
-                fragments.push(Self::provider_markup(
-                    ICON_CLAUDE,
-                    markup::Markup::new(ICON_UNAUTHORIZED),
-                    CLAUDE_USAGE_URL,
-                ));
-            }
-            ClaudeUsageStatus::Error => {
-                fragments.push(Self::provider_markup(
-                    ICON_CLAUDE,
-                    markup::Markup::new(ICON_WARNING).fg(theme::Color::Attention),
-                    CLAUDE_USAGE_URL,
-                ));
-            }
-        }
-
-        match &state.chatgpt_windows_left {
-            Some(windows_left) => {
-                let usage: String = windows_left
-                    .iter()
-                    .map(|pct| Self::render_progress(*pct))
-                    .collect();
-                fragments.push(Self::provider_markup(
-                    ICON_CHATGPT,
-                    usage,
-                    CHATGPT_USAGE_URL,
-                ));
-            }
-            None => {
-                fragments.push(Self::provider_markup(
-                    ICON_CHATGPT,
-                    markup::Markup::new(ICON_WARNING).fg(theme::Color::Attention),
-                    CHATGPT_USAGE_URL,
-                ));
-            }
-        }
-
-        fragments
-            .into_iter()
-            .map(markup::Markup::into_string)
-            .collect::<Vec<_>>()
-            .join(" ")
+        [
+            markup::Markup::new(ICON_INFERENCE_USAGE).fg(theme::Color::MainIcon),
+            Self::provider_markup(ICON_AMP, amp, AMP_USAGE_URL),
+            Self::provider_markup(ICON_CLAUDE, claude, CLAUDE_USAGE_URL),
+            Self::provider_markup(ICON_CHATGPT, chatgpt, CHATGPT_USAGE_URL),
+        ]
+        .into_iter()
+        .map(markup::Markup::into_string)
+        .collect::<Vec<_>>()
+        .join(" ")
     }
 }
 
@@ -652,59 +674,24 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_render_progress() {
-        assert_eq!(
-            InferenceUsageModule::render_progress(0.0),
-            "%{F#d56500}󰗖%{F-}"
-        );
-        assert_eq!(
-            InferenceUsageModule::render_progress(1.0),
-            "%{F#d56500}󰪞%{F-}"
-        );
-        assert_eq!(
-            InferenceUsageModule::render_progress(5.0),
-            "%{F#d56500}󰪞%{F-}"
-        );
-        assert_eq!(
-            InferenceUsageModule::render_progress(10.0),
-            "%{F#ac8300}󰪞%{F-}"
-        );
-        assert_eq!(
-            InferenceUsageModule::render_progress(20.0),
-            "%{F#ac8300}󰪟%{F-}"
-        );
-        assert_eq!(
-            InferenceUsageModule::render_progress(30.0),
-            "%{F#ac8300}󰪠%{F-}"
-        );
-        assert_eq!(
-            InferenceUsageModule::render_progress(40.0),
-            "%{F#819500}󰪠%{F-}"
-        );
-        assert_eq!(
-            InferenceUsageModule::render_progress(50.0),
-            "%{F#819500}󰪡%{F-}"
-        );
-        assert_eq!(
-            InferenceUsageModule::render_progress(60.0),
-            "%{F#819500}󰪢%{F-}"
-        );
-        assert_eq!(
-            InferenceUsageModule::render_progress(70.0),
-            "%{F#819500}󰪢%{F-}"
-        );
-        assert_eq!(
-            InferenceUsageModule::render_progress(80.0),
-            "%{F#819500}󰪣%{F-}"
-        );
-        assert_eq!(
-            InferenceUsageModule::render_progress(90.0),
-            "%{F#819500}󰪤%{F-}"
-        );
-        assert_eq!(
-            InferenceUsageModule::render_progress(100.0),
-            "%{F#819500}󰪥%{F-}"
-        );
+    fn test_render_quota() {
+        for (quota_left_pct, expected) in [
+            (0.0, "%{F#d56500}󰗖%{F-}"),
+            (1.0, "%{F#d56500}󰪞%{F-}"),
+            (5.0, "%{F#d56500}󰪞%{F-}"),
+            (10.0, "%{F#ac8300}󰪞%{F-}"),
+            (20.0, "%{F#ac8300}󰪟%{F-}"),
+            (30.0, "%{F#ac8300}󰪠%{F-}"),
+            (40.0, "%{F#819500}󰪠%{F-}"),
+            (50.0, "%{F#819500}󰪡%{F-}"),
+            (60.0, "%{F#819500}󰪢%{F-}"),
+            (70.0, "%{F#819500}󰪢%{F-}"),
+            (80.0, "%{F#819500}󰪣%{F-}"),
+            (90.0, "%{F#819500}󰪤%{F-}"),
+            (100.0, "%{F#819500}󰪥%{F-}"),
+        ] {
+            assert_eq!(InferenceUsageModule::render_quota(quota_left_pct), expected);
+        }
     }
 
     #[expect(clippy::too_many_lines)]
@@ -717,7 +704,7 @@ mod tests {
                 .fg(theme::Color::MainIcon)
                 .into_string()
         };
-        let provider = |label, usage, url| {
+        let provider = |label: &str, usage: &str, url: &str| {
             markup::Markup::new(format!("{label} {usage}"))
                 .action(
                     markup::PolybarActionType::ClickLeft,
@@ -728,124 +715,122 @@ mod tests {
         let att_warn = markup::Markup::new(ICON_WARNING)
             .fg(theme::Color::Attention)
             .into_string();
+        let w = |quota_left_pct, time_left_frac| UsageWindow {
+            quota_left_pct,
+            time_left_frac: Some(time_left_frac),
+        };
+        let assert_render = |state: &InferenceUsageModuleState,
+                             [amp, claude, chatgpt]: [&str; 3]| {
+            assert_eq!(
+                module.render(state),
+                [
+                    mi(ICON_INFERENCE_USAGE),
+                    provider(ICON_AMP, amp, AMP_USAGE_URL),
+                    provider(ICON_CLAUDE, claude, CLAUDE_USAGE_URL),
+                    provider(ICON_CHATGPT, chatgpt, CHATGPT_USAGE_URL),
+                ]
+                .join(" ")
+            );
+        };
 
         let state = InferenceUsageModuleState {
             amp_free_pct: Some(45.0),
-            claude_status: ClaudeUsageStatus::Available { h5: 50.0, d7: 20.0 },
-            chatgpt_windows_left: Some(vec![81.0, 90.0]),
+            claude_status: ClaudeUsageStatus::Available {
+                h5: w(50.0, 0.75),
+                d7: w(80.0, 0.9),
+            },
+            chatgpt_windows: Some(vec![w(81.0, 0.5), w(90.0, 1.0)]),
         };
-        assert_eq!(
-            module.render(&state),
-            format!(
-                "{} {} {} {}",
-                mi(ICON_INFERENCE_USAGE),
-                provider(ICON_AMP, "%{F#819500}󰪡%{F-}", AMP_USAGE_URL,),
-                provider(
-                    ICON_CLAUDE,
-                    "%{F#819500}󰪡%{F-}%{F#819500}󰪣%{F-}",
-                    CLAUDE_USAGE_URL,
-                ),
-                provider(
-                    ICON_CHATGPT,
-                    "%{F#819500}󰪣%{F-}%{F#819500}󰪤%{F-}",
-                    CHATGPT_USAGE_URL,
-                ),
-            )
+        assert_render(
+            &state,
+            [
+                "%{F#819500}󰪡%{F-}",
+                "%{F#819500}󰪡%{F-}%{F#819500}▆%{F-}%{F#819500}󰪣%{F-}",
+                "%{F#819500}󰪣%{F-}%{F#819500}▄%{F-}%{F#819500}󰪤%{F-}",
+            ],
         );
 
         // All errors
         let state = InferenceUsageModuleState {
             amp_free_pct: None,
             claude_status: ClaudeUsageStatus::Error,
-            chatgpt_windows_left: None,
+            chatgpt_windows: None,
         };
-        assert_eq!(
-            module.render(&state),
-            format!(
-                "{} {} {} {}",
-                mi(ICON_INFERENCE_USAGE),
-                provider(ICON_AMP, &att_warn, AMP_USAGE_URL),
-                provider(ICON_CLAUDE, &att_warn, CLAUDE_USAGE_URL),
-                provider(ICON_CHATGPT, &att_warn, CHATGPT_USAGE_URL),
-            )
-        );
+        assert_render(&state, [&att_warn, &att_warn, &att_warn]);
 
         let state = InferenceUsageModuleState {
             amp_free_pct: Some(100.0),
             claude_status: ClaudeUsageStatus::Error,
-            chatgpt_windows_left: None,
+            chatgpt_windows: None,
         };
-        assert_eq!(
-            module.render(&state),
-            format!(
-                "{} {} {} {}",
-                mi(ICON_INFERENCE_USAGE),
-                provider(ICON_AMP, "%{F#819500}󰪥%{F-}", AMP_USAGE_URL,),
-                provider(ICON_CLAUDE, &att_warn, CLAUDE_USAGE_URL),
-                provider(ICON_CHATGPT, &att_warn, CHATGPT_USAGE_URL),
-            )
-        );
+        assert_render(&state, ["%{F#819500}󰪥%{F-}", &att_warn, &att_warn]);
 
         let state = InferenceUsageModuleState {
             amp_free_pct: Some(5.0),
-            claude_status: ClaudeUsageStatus::Available { h5: 5.0, d7: 5.0 },
-            chatgpt_windows_left: Some(vec![95.0, 95.0]),
+            claude_status: ClaudeUsageStatus::Available {
+                h5: w(95.0, 0.125),
+                d7: w(95.0, 0.4),
+            },
+            chatgpt_windows: Some(vec![w(95.0, 0.0), w(95.0, 0.6)]),
         };
-        assert_eq!(
-            module.render(&state),
-            format!(
-                "{} {} {} {}",
-                mi(ICON_INFERENCE_USAGE),
-                provider(ICON_AMP, "%{F#d56500}󰪞%{F-}", AMP_USAGE_URL,),
-                provider(
-                    ICON_CLAUDE,
-                    "%{F#819500}󰪤%{F-}%{F#819500}󰪤%{F-}",
-                    CLAUDE_USAGE_URL,
-                ),
-                provider(
-                    ICON_CHATGPT,
-                    "%{F#819500}󰪤%{F-}%{F#819500}󰪤%{F-}",
-                    CHATGPT_USAGE_URL,
-                ),
-            )
+        assert_render(
+            &state,
+            [
+                "%{F#d56500}󰪞%{F-}",
+                "%{F#819500}󰪤%{F-}%{F#819500}▁%{F-}%{F#819500}󰪤%{F-}",
+                "%{F#819500}󰪤%{F-}%{F#819500}▁%{F-}%{F#819500}󰪤%{F-}",
+            ],
         );
 
         // Claude auth invalid (401)
         let state = InferenceUsageModuleState {
             amp_free_pct: Some(50.0),
             claude_status: ClaudeUsageStatus::AuthInvalid,
-            chatgpt_windows_left: Some(vec![20.0, 5.0]),
+            chatgpt_windows: Some(vec![w(20.0, 0.3), w(5.0, 0.8)]),
         };
-        assert_eq!(
-            module.render(&state),
-            format!(
-                "{} {} {} {}",
-                mi(ICON_INFERENCE_USAGE),
-                provider(ICON_AMP, "%{F#819500}󰪡%{F-}", AMP_USAGE_URL,),
-                provider(ICON_CLAUDE, ICON_UNAUTHORIZED, CLAUDE_USAGE_URL),
-                provider(
-                    ICON_CHATGPT,
-                    "%{F#ac8300}󰪟%{F-}%{F#d56500}󰪞%{F-}",
-                    CHATGPT_USAGE_URL,
-                ),
-            )
+        assert_render(
+            &state,
+            [
+                "%{F#819500}󰪡%{F-}",
+                ICON_UNAUTHORIZED,
+                "%{F#ac8300}󰪟%{F-}%{F#ac8300}▃%{F-}%{F#d56500}󰪞%{F-}",
+            ],
         );
 
-        // ChatGPT with a single window renders a single icon
+        // Claude 5h window not running yet: full quota, no reset bar
+        let state = InferenceUsageModuleState {
+            amp_free_pct: Some(50.0),
+            claude_status: ClaudeUsageStatus::Available {
+                h5: UsageWindow {
+                    quota_left_pct: 100.0,
+                    time_left_frac: None,
+                },
+                d7: w(80.0, 0.9),
+            },
+            chatgpt_windows: None,
+        };
+        assert_render(
+            &state,
+            [
+                "%{F#819500}󰪡%{F-}",
+                "%{F#819500}󰪥%{F-}%{F#819500}󰪣%{F-}",
+                &att_warn,
+            ],
+        );
+
+        // ChatGPT with a single window renders a single quota icon, still with its reset bar
         let state = InferenceUsageModuleState {
             amp_free_pct: Some(50.0),
             claude_status: ClaudeUsageStatus::Error,
-            chatgpt_windows_left: Some(vec![82.0]),
+            chatgpt_windows: Some(vec![w(82.0, 1.0)]),
         };
-        assert_eq!(
-            module.render(&state),
-            format!(
-                "{} {} {} {}",
-                mi(ICON_INFERENCE_USAGE),
-                provider(ICON_AMP, "%{F#819500}󰪡%{F-}", AMP_USAGE_URL,),
-                provider(ICON_CLAUDE, &att_warn, CLAUDE_USAGE_URL),
-                provider(ICON_CHATGPT, "%{F#819500}󰪣%{F-}", CHATGPT_USAGE_URL),
-            )
+        assert_render(
+            &state,
+            [
+                "%{F#819500}󰪡%{F-}",
+                &att_warn,
+                "%{F#819500}󰪣%{F-}%{F#819500}█%{F-}",
+            ],
         );
     }
 
@@ -869,23 +854,83 @@ Individual credits: $5.56 remaining (set up automatic top-up to avoid running ou
     }
 
     #[test]
+    fn test_claude_window() {
+        let body = r#"{"utilization":12.0,"resets_at":"2026-05-14T19:40:00+00:00"}"#;
+        let window: ClaudeUsageWindow = serde_json::from_str(body).unwrap();
+        let now = "2026-05-14T17:10:00+00:00"
+            .parse::<DateTime<Utc>>()
+            .unwrap();
+        assert_eq!(
+            InferenceUsageModule::claude_window(&window, Duration::from_hours(5), now),
+            UsageWindow {
+                quota_left_pct: 88.0,
+                time_left_frac: Some(0.5),
+            }
+        );
+    }
+
+    #[test]
+    fn test_claude_window_past_reset() {
+        let body = r#"{"utilization":0.0,"resets_at":"2026-05-14T19:40:00+00:00"}"#;
+        let window: ClaudeUsageWindow = serde_json::from_str(body).unwrap();
+        let now = "2026-05-15T00:00:00+00:00"
+            .parse::<DateTime<Utc>>()
+            .unwrap();
+        assert_eq!(
+            InferenceUsageModule::claude_window(&window, Duration::from_hours(5), now),
+            UsageWindow {
+                quota_left_pct: 100.0,
+                time_left_frac: Some(0.0),
+            }
+        );
+    }
+
+    #[test]
+    fn test_claude_window_no_active_window() {
+        let body = r#"{"utilization":0.0,"resets_at":null}"#;
+        let window: ClaudeUsageWindow = serde_json::from_str(body).unwrap();
+        let now = "2026-05-14T17:10:00+00:00"
+            .parse::<DateTime<Utc>>()
+            .unwrap();
+        assert_eq!(
+            InferenceUsageModule::claude_window(&window, Duration::from_hours(5), now),
+            UsageWindow {
+                quota_left_pct: 100.0,
+                time_left_frac: None,
+            }
+        );
+    }
+
+    #[test]
     fn test_extract_chatgpt_windows_single() {
         let body = r#"{"rate_limit":{"allowed":true,"limit_reached":false,"primary_window":{"used_percent":18,"limit_window_seconds":604800,"reset_after_seconds":567359,"reset_at":1784539045},"secondary_window":null}}"#;
         let resp: ChatGptUsageResponse = serde_json::from_str(body).unwrap();
         assert_eq!(
             InferenceUsageModule::extract_chatgpt_windows(&resp.rate_limit),
-            vec![82.0]
+            vec![UsageWindow {
+                quota_left_pct: 82.0,
+                time_left_frac: Some(567_359.0 / 604_800.0),
+            }]
         );
     }
 
     #[test]
     fn test_extract_chatgpt_windows_both_sorted_by_duration() {
         // Backend lists the weekly window first; output must be ordered by increasing duration
-        let body = r#"{"rate_limit":{"allowed":true,"limit_reached":false,"primary_window":{"used_percent":10,"limit_window_seconds":604800,"reset_after_seconds":1,"reset_at":1},"secondary_window":{"used_percent":19,"limit_window_seconds":18000,"reset_after_seconds":1,"reset_at":1}}}"#;
+        let body = r#"{"rate_limit":{"allowed":true,"limit_reached":false,"primary_window":{"used_percent":10,"limit_window_seconds":604800,"reset_after_seconds":302400,"reset_at":1},"secondary_window":{"used_percent":19,"limit_window_seconds":18000,"reset_after_seconds":4500,"reset_at":1}}}"#;
         let resp: ChatGptUsageResponse = serde_json::from_str(body).unwrap();
         assert_eq!(
             InferenceUsageModule::extract_chatgpt_windows(&resp.rate_limit),
-            vec![81.0, 90.0]
+            vec![
+                UsageWindow {
+                    quota_left_pct: 81.0,
+                    time_left_frac: Some(0.25),
+                },
+                UsageWindow {
+                    quota_left_pct: 90.0,
+                    time_left_frac: Some(0.5),
+                },
+            ]
         );
     }
 
@@ -895,7 +940,7 @@ Individual credits: $5.56 remaining (set up automatic top-up to avoid running ou
         let resp: ChatGptUsageResponse = serde_json::from_str(body).unwrap();
         assert_eq!(
             InferenceUsageModule::extract_chatgpt_windows(&resp.rate_limit),
-            Vec::<f64>::new()
+            Vec::new()
         );
     }
 }

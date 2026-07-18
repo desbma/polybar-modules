@@ -130,6 +130,22 @@ impl From<Markup> for String {
     }
 }
 
+/// Vertical bars, from lowest to highest level
+const RAMP_ICONS: [&str; 8] = ["▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"];
+
+/// Render `frac`, clamped to 0-1, as a vertical bar
+pub(crate) fn ramp(frac: f64, color: theme::Color) -> String {
+    #[expect(
+        clippy::cast_possible_truncation,
+        clippy::cast_precision_loss,
+        clippy::cast_sign_loss
+    )]
+    let level = (frac.clamp(0.0, 1.0) * RAMP_ICONS.len() as f64).ceil() as usize;
+    #[expect(clippy::indexing_slicing)]
+    let icon = RAMP_ICONS[level.saturating_sub(1)];
+    Markup::new(icon).fg(color).into_string()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -140,6 +156,16 @@ mod tests {
             Markup::new("").fg(theme::Color::MainIcon).into_string(),
             "%{F#f1e9d2}%{F-}"
         );
+    }
+
+    #[test]
+    fn test_ramp() {
+        assert_eq!(ramp(1.1, theme::Color::Good), "%{F#819500}█%{F-}");
+        assert_eq!(ramp(1.0, theme::Color::Good), "%{F#819500}█%{F-}");
+        assert_eq!(ramp(0.5, theme::Color::Good), "%{F#819500}▄%{F-}");
+        assert_eq!(ramp(0.125, theme::Color::Notice), "%{F#ac8300}▁%{F-}");
+        assert_eq!(ramp(0.126, theme::Color::Notice), "%{F#ac8300}▂%{F-}");
+        assert_eq!(ramp(0.0, theme::Color::Attention), "%{F#d56500}▁%{F-}");
     }
 
     #[test]

@@ -113,26 +113,13 @@ impl GpuNvidiaModule {
     }
 
     fn ramp_prct(prct: u8) -> String {
-        let icons: [(&str, theme::Color); 8] = [
-            ("▁", theme::Color::Good),
-            ("▂", theme::Color::Good),
-            ("▃", theme::Color::Good),
-            ("▄", theme::Color::Notice),
-            ("▅", theme::Color::Notice),
-            ("▆", theme::Color::Attention),
-            ("▇", theme::Color::Attention),
-            ("█", theme::Color::Critical),
-        ];
-        for (i, (icon, color)) in icons.iter().enumerate() {
-            if prct as usize <= 100 / icons.len() * (i + 1) {
-                return markup::Markup::new(*icon)
-                    .fg(color.to_owned())
-                    .into_string();
-            }
-        }
-        markup::Markup::new(icons.last().unwrap().0)
-            .fg(icons.last().unwrap().1)
-            .into_string()
+        let color = match prct {
+            0..=36 => theme::Color::Good,
+            37..=60 => theme::Color::Notice,
+            61..=84 => theme::Color::Attention,
+            _ => theme::Color::Critical,
+        };
+        markup::ramp(f64::from(prct) / 100.0, color)
     }
 }
 
@@ -213,6 +200,20 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_ramp_prct_color_thresholds() {
+        for (prct, expected) in [
+            (36, "%{F#819500}▃%{F-}"),
+            (37, "%{F#ac8300}▃%{F-}"),
+            (60, "%{F#ac8300}▅%{F-}"),
+            (61, "%{F#d56500}▅%{F-}"),
+            (84, "%{F#d56500}▇%{F-}"),
+            (85, "%{F#f23749}▇%{F-}"),
+        ] {
+            assert_eq!(GpuNvidiaModule::ramp_prct(prct), expected);
+        }
+    }
+
+    #[test]
     fn test_render() {
         let module = GpuNvidiaModule::new().unwrap();
 
@@ -241,7 +242,7 @@ mod tests {
         });
         assert_eq!(
             module.render(&state),
-            "%{F#f1e9d2}%{F-} 88% %{F#f23749}█%{F-} 1600+2000MHz 69°C 200W"
+            "%{F#f1e9d2}%{F-} 88% %{F#f23749}▇%{F-} 1600+2000MHz 69°C 200W"
         );
 
         let state = Some(GpuNvidiaModuleState {
@@ -255,7 +256,7 @@ mod tests {
         });
         assert_eq!(
             module.render(&state),
-            "%{F#f1e9d2}%{F-} 88% %{F#f23749}█%{F-} 1600+2000MHz %{u#f23749}%{+u}%{F#f23749}69°C%{F-}%{-u} 200W"
+            "%{F#f1e9d2}%{F-} 88% %{F#f23749}▇%{F-} 1600+2000MHz %{u#f23749}%{+u}%{F#f23749}69°C%{F-}%{-u} 200W"
         );
 
         let state = Some(GpuNvidiaModuleState {
@@ -269,7 +270,7 @@ mod tests {
         });
         assert_eq!(
             module.render(&state),
-            "%{F#f1e9d2}%{F-} 88% %{F#f23749}█%{F-} 1600+2000MHz %{u#f23749}%{+u}%{F#f23749}70°C%{F-}%{-u} 200W"
+            "%{F#f1e9d2}%{F-} 88% %{F#f23749}▇%{F-} 1600+2000MHz %{u#f23749}%{+u}%{F#f23749}70°C%{F-}%{-u} 200W"
         );
 
         let state = Some(GpuNvidiaModuleState {
