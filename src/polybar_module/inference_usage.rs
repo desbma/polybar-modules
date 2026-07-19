@@ -564,23 +564,20 @@ impl InferenceUsageModule {
             .into_string()
     }
 
-    /// Render each window quota, with the time left before reset only for the shortest one
+    /// Render each window quota, followed by the time left before reset for each running window
     fn render_windows<'a, I>(windows: I) -> String
     where
         I: IntoIterator<Item = &'a UsageWindow>,
     {
         windows
             .into_iter()
-            .enumerate()
-            .map(|(i, window)| {
-                let quota = Self::render_quota(window.quota_left_pct);
-                match window.time_left_frac {
-                    Some(time_left_frac) if i == 0 => format!(
-                        "{quota}{}",
-                        markup::ramp(time_left_frac, Self::quota_color(window.quota_left_pct))
-                    ),
-                    _ => quota,
+            .map(|window| {
+                let mut quota = Self::render_quota(window.quota_left_pct);
+                if let Some(time_left_frac) = window.time_left_frac {
+                    quota +=
+                        &markup::ramp(time_left_frac, Self::quota_color(window.quota_left_pct));
                 }
+                quota
             })
             .collect()
     }
@@ -745,8 +742,8 @@ mod tests {
             &state,
             [
                 "%{F#819500}󰪡%{F-}",
-                "%{F#819500}󰪡%{F-}%{F#819500}▆%{F-}%{F#819500}󰪣%{F-}",
-                "%{F#819500}󰪣%{F-}%{F#819500}▄%{F-}%{F#819500}󰪤%{F-}",
+                "%{F#819500}󰪡%{F-}%{F#819500}▆%{F-}%{F#819500}󰪣%{F-}%{F#819500}█%{F-}",
+                "%{F#819500}󰪣%{F-}%{F#819500}▄%{F-}%{F#819500}󰪤%{F-}%{F#819500}█%{F-}",
             ],
         );
 
@@ -777,8 +774,8 @@ mod tests {
             &state,
             [
                 "%{F#d56500}󰪞%{F-}",
-                "%{F#819500}󰪤%{F-}%{F#819500}▁%{F-}%{F#819500}󰪤%{F-}",
-                "%{F#819500}󰪤%{F-}%{F#819500}▁%{F-}%{F#819500}󰪤%{F-}",
+                "%{F#819500}󰪤%{F-}%{F#819500}▁%{F-}%{F#819500}󰪤%{F-}%{F#819500}▄%{F-}",
+                "%{F#819500}󰪤%{F-}%{F#819500}▁%{F-}%{F#819500}󰪤%{F-}%{F#819500}▅%{F-}",
             ],
         );
 
@@ -793,7 +790,7 @@ mod tests {
             [
                 "%{F#819500}󰪡%{F-}",
                 ICON_UNAUTHORIZED,
-                "%{F#ac8300}󰪟%{F-}%{F#ac8300}▃%{F-}%{F#d56500}󰪞%{F-}",
+                "%{F#ac8300}󰪟%{F-}%{F#ac8300}▃%{F-}%{F#d56500}󰪞%{F-}%{F#d56500}▇%{F-}",
             ],
         );
 
@@ -813,7 +810,7 @@ mod tests {
             &state,
             [
                 "%{F#819500}󰪡%{F-}",
-                "%{F#819500}󰪥%{F-}%{F#819500}󰪣%{F-}",
+                "%{F#819500}󰪥%{F-}%{F#819500}󰪣%{F-}%{F#819500}█%{F-}",
                 &att_warn,
             ],
         );
