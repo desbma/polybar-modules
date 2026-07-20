@@ -25,6 +25,7 @@ notify = { version = "8.2.0", default-features = false }
 quick-xml = { version = "0.41.0", default-features = false, features = ["serialize"] }
 rand = { version = "0.10.2", default-features = false, features = ["std", "thread_rng"] }
 regex = { version = "1.12.4", default-features = false, features = ["std"] }
+rustix = { version = "1.1.4", default-features = false, features = ["thread", "time"] }
 scraper =  { version = "0.27.0", default-features = false }
 serde =  { version = "1.0.228", default-features = false, features = ["derive"] }
 serde_json = { version = "1.0.150", default-features = false, features = ["std", "raw_value"] }

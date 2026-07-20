@@ -2,8 +2,7 @@ use std::{
     env, fs,
     path::{Path, PathBuf},
     process::{Command, Stdio},
-    thread::sleep,
-    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 use anyhow::Context as _;
@@ -13,7 +12,9 @@ use itertools::Itertools as _;
 
 use crate::{
     markup,
-    polybar_module::{RenderablePolybarModule, TCP_REMOTE_TIMEOUT, wait_network_ready},
+    polybar_module::{
+        RenderablePolybarModule, TCP_REMOTE_TIMEOUT, sleep_suspend_aware, wait_network_ready,
+    },
     theme::{self, ICON_WARNING},
 };
 
@@ -22,16 +23,55 @@ pub(crate) struct InferenceUsageModule {
     client: ureq::Agent,
     amp_usage_re: regex::Regex,
     token_path: PathBuf,
-    claude_rate_limit_backoff_builder: backon::ExponentialBuilder,
-    claude_rate_limit_backoff: backon::ExponentialBackoff,
-    claude_skip_until: Option<Instant>,
+    claude_rate_limit: RateLimitBackoff,
+    chatgpt_rate_limit: RateLimitBackoff,
     claude_auth_failed_mtime: Option<SystemTime>,
     codex_auth_path: PathBuf,
     amp_workdir: tempfile::TempDir,
+    degraded_backoff: backon::ExponentialBackoff,
+    /// Start of the current run of degraded updates
+    degraded_since: Option<SystemTime>,
+    /// Last state in which every provider reported its usage
+    last_complete_state: Option<InferenceUsageModuleState>,
+}
+
+/// Escalating delay leaving a provider alone after it answered with a rate limit
+///
+/// Deadlines are on the wall clock rather than a monotonic one, so that a suspend counts towards
+/// them: the throttling they wait out is the provider's, and it expires while we are asleep.
+struct RateLimitBackoff {
+    backoff: backon::ExponentialBackoff,
+    skip_until: Option<SystemTime>,
+}
+
+impl RateLimitBackoff {
+    fn new() -> Self {
+        Self {
+            backoff: RATE_LIMIT_BACKOFF.build(),
+            skip_until: None,
+        }
+    }
+
+    /// Whether requests are currently held back
+    fn active(&self) -> bool {
+        self.skip_until.is_some_and(|t| SystemTime::now() < t)
+    }
+
+    /// Hold requests back for the next delay, and return it
+    fn hit(&mut self) -> Duration {
+        let delay = self.backoff.next().unwrap();
+        self.skip_until = Some(SystemTime::now() + delay);
+        delay
+    }
+
+    fn reset(&mut self) {
+        self.skip_until = None;
+        self.backoff = RATE_LIMIT_BACKOFF.build();
+    }
 }
 
 /// Usage of a single rate limit window
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub(crate) struct UsageWindow {
     quota_left_pct: f64,
     /// Share of the window duration left before it resets, `None` if the window is not running
@@ -39,7 +79,7 @@ pub(crate) struct UsageWindow {
 }
 
 /// Claude usage fetch status
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub(crate) enum ClaudeUsageStatus {
     /// Successfully fetched usage data
     Available {
@@ -55,11 +95,20 @@ pub(crate) enum ClaudeUsageStatus {
 }
 
 /// Inference usage state
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub(crate) struct InferenceUsageModuleState {
     amp_free_pct: Option<f64>,
     claude_status: ClaudeUsageStatus,
     chatgpt_windows: Option<Vec<UsageWindow>>,
+}
+
+impl InferenceUsageModuleState {
+    /// Whether some provider usage is missing
+    fn is_degraded(&self) -> bool {
+        self.amp_free_pct.is_none()
+            || self.chatgpt_windows.is_none()
+            || !matches!(self.claude_status, ClaudeUsageStatus::Available { .. })
+    }
 }
 
 const ICON_INFERENCE_USAGE: &str = "󱩅";
@@ -89,12 +138,62 @@ const CHATGPT_USAGE_URL: &str = "https://chatgpt.com/codex/settings/usage";
 const CHATGPT_USAGE_API_URL: &str = "https://chatgpt.com/backend-api/wham/usage";
 const CODEX_TOKEN_URL: &str = "https://auth.openai.com/oauth/token";
 const CODEX_OAUTH_CLIENT_ID: &str = "app_EMoamEEZ73f0CkXaXp7hrann";
-const CODEX_USER_AGENT: &str = "codex_cli_rs/0.144.1";
+const CODEX_USER_AGENT: &str = "codex_cli_rs/0.144.6";
+/// Delay between updates while at least one provider is reachable
+const UPDATE_INTERVAL: Duration = Duration::from_mins(3);
+/// Timeout of the resolve and connect phases
+///
+/// Bounds how long an update takes to give up when the network is down, without shortening the
+/// global timeout granted to a server that does answer.
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
+/// Duration the last complete usage stays displayed while an update is degraded
+const DEGRADED_HOLD: Duration = Duration::from_mins(1);
+/// Shortest delay between updates while retrying through a degraded update
+const DEGRADED_MIN_DELAY: Duration = Duration::from_secs(3);
+/// Shortest delay a provider is left alone after answering with a rate limit, before jitter
+const RATE_LIMIT_MIN_DELAY: Duration = Duration::from_mins(5);
+/// Longest delay a provider is left alone after answering with a rate limit, before jitter
+///
+/// Jitter stretches an emitted delay by up to as much again, so it is a ceiling on the escalation
+/// rather than on the wait itself.
+const RATE_LIMIT_MAX_DELAY: Duration = Duration::from_hours(1);
+/// Escalation curve of the delay a rate limited provider is left alone for
+const RATE_LIMIT_BACKOFF: backon::ExponentialBuilder = backon::ExponentialBuilder::new()
+    .with_jitter()
+    .with_min_delay(RATE_LIMIT_MIN_DELAY)
+    .with_max_delay(RATE_LIMIT_MAX_DELAY)
+    .without_max_times();
+/// Escalation curve of the delay between updates while retrying through a degraded update
+const DEGRADED_BACKOFF: backon::ExponentialBuilder = backon::ExponentialBuilder::new()
+    .with_jitter()
+    .with_factor(1.5)
+    .with_min_delay(DEGRADED_MIN_DELAY)
+    .with_max_delay(UPDATE_INTERVAL)
+    .without_max_times();
 
-enum ClaudeFetchError {
+/// Failure of a provider usage fetch
+#[derive(Debug, thiserror::Error)]
+enum ProviderFetchError {
+    #[error("Authentication invalid")]
     AuthInvalid,
+    #[error("Rate limited (429)")]
     RateLimited,
-    Other(anyhow::Error),
+    #[error(transparent)]
+    Other(#[from] anyhow::Error),
+}
+
+impl ProviderFetchError {
+    /// Classify a Claude token refresh failure
+    ///
+    /// A request the server turned down leaves nothing to retry, the stored credentials are spent.
+    /// Anything else may well resolve on its own, and says nothing about them.
+    fn from_claude_refresh(error: ureq::Error) -> Self {
+        match error {
+            ureq::Error::StatusCode(429) => Self::RateLimited,
+            ureq::Error::StatusCode(400..500) => Self::AuthInvalid,
+            error => Self::Other(error.into()),
+        }
+    }
 }
 
 #[derive(serde::Deserialize, serde::Serialize)]
@@ -140,14 +239,6 @@ struct ClaudeTokenResponse {
     access_token: String,
     refresh_token: Option<String>,
     expires_in: u64,
-}
-
-#[derive(Debug, thiserror::Error)]
-enum ChatGptFetchError {
-    #[error("Authentication invalid (401)")]
-    AuthInvalid,
-    #[error(transparent)]
-    Other(#[from] anyhow::Error),
 }
 
 #[derive(serde::Deserialize)]
@@ -204,38 +295,65 @@ impl InferenceUsageModule {
                         .build(),
                 )
                 .timeout_global(Some(TCP_REMOTE_TIMEOUT))
+                .timeout_resolve(Some(CONNECT_TIMEOUT))
+                .timeout_connect(Some(CONNECT_TIMEOUT))
                 .build(),
         );
         let amp_usage_re = regex::Regex::new(r"Amp Free: ([0-9]+\.?[0-9]*)% remaining").unwrap();
         let home = env::var("HOME").unwrap();
         let token_path = PathBuf::from(&home).join(".config/claude/.credentials.json");
         let codex_auth_path = PathBuf::from(&home).join(".config/codex/auth.json");
-        let claude_rate_limit_backoff_builder = backon::ExponentialBuilder::default()
-            .with_jitter()
-            .with_min_delay(Duration::from_mins(5))
-            .with_max_delay(Duration::from_hours(1))
-            .without_max_times();
-        let claude_rate_limit_backoff = claude_rate_limit_backoff_builder.build();
         let amp_workdir = tempfile::tempdir().unwrap();
         Self {
             client,
             amp_usage_re,
             token_path,
-            claude_rate_limit_backoff_builder,
-            claude_rate_limit_backoff,
-            claude_skip_until: None,
+            claude_rate_limit: RateLimitBackoff::new(),
+            chatgpt_rate_limit: RateLimitBackoff::new(),
             claude_auth_failed_mtime: None,
             codex_auth_path,
             amp_workdir,
+            degraded_backoff: DEGRADED_BACKOFF.build(),
+            degraded_since: None,
+            last_complete_state: None,
         }
     }
 
-    fn fetch_chatgpt_usage(&self) -> Result<Vec<UsageWindow>, ChatGptFetchError> {
+    /// Delay before the next update, shortened while retrying through a degraded update
+    ///
+    /// A provider throttling us is the one thing worth waiting out, so it holds the update back to
+    /// its nominal interval.
+    fn next_delay(&mut self) -> Duration {
+        let delay = if self.degraded_since.is_some() && !self.rate_limited() {
+            self.degraded_backoff.next().unwrap()
+        } else {
+            self.degraded_backoff = DEGRADED_BACKOFF.build();
+            UPDATE_INTERVAL
+        };
+        // Wake up in time to drop a held state the moment it gets too stale, which a rate limit
+        // would otherwise postpone to the nominal interval
+        self.degraded_since
+            .filter(|_| self.last_complete_state.is_some())
+            .and_then(Self::degraded_hold_left)
+            .map_or(delay, |left| delay.min(left).max(DEGRADED_MIN_DELAY))
+    }
+
+    /// Time left before the last complete state gets too stale to display, `None` once it is
+    fn degraded_hold_left(since: SystemTime) -> Option<Duration> {
+        DEGRADED_HOLD.checked_sub(since.elapsed().ok()?)
+    }
+
+    /// Whether a provider is currently holding us back
+    fn rate_limited(&self) -> bool {
+        self.claude_rate_limit.active() || self.chatgpt_rate_limit.active()
+    }
+
+    fn fetch_chatgpt_usage(&self) -> Result<Vec<UsageWindow>, ProviderFetchError> {
         let auth_data = fs::read_to_string(&self.codex_auth_path)
             .context("Failed to read codex auth")
-            .map_err(ChatGptFetchError::Other)?;
+            .map_err(ProviderFetchError::Other)?;
         let auth: CodexAuth =
-            serde_json::from_str(&auth_data).map_err(|e| ChatGptFetchError::Other(e.into()))?;
+            serde_json::from_str(&auth_data).map_err(|e| ProviderFetchError::Other(e.into()))?;
 
         let mut request = self
             .client
@@ -248,15 +366,17 @@ impl InferenceUsageModule {
         if let Some(account_id) = &auth.tokens.account_id {
             request = request.header("ChatGPT-Account-Id", account_id);
         }
+        // An exhausted quota is reported in the body, not by an error code
         let response = request.call().map_err(|error| match error {
-            ureq::Error::StatusCode(401) => ChatGptFetchError::AuthInvalid,
-            error => ChatGptFetchError::Other(error.into()),
+            ureq::Error::StatusCode(401) => ProviderFetchError::AuthInvalid,
+            ureq::Error::StatusCode(429) => ProviderFetchError::RateLimited,
+            error => ProviderFetchError::Other(error.into()),
         })?;
 
         let body: ChatGptUsageResponse = response
             .into_body()
             .read_json()
-            .map_err(|e| ChatGptFetchError::Other(e.into()))?;
+            .map_err(|e| ProviderFetchError::Other(e.into()))?;
 
         Ok(Self::extract_chatgpt_windows(&body.rate_limit))
     }
@@ -278,9 +398,14 @@ impl InferenceUsageModule {
             .collect()
     }
 
-    fn update_chatgpt_usage(&self) -> Option<Vec<UsageWindow>> {
+    fn update_chatgpt_usage(&mut self) -> Option<Vec<UsageWindow>> {
+        if self.chatgpt_rate_limit.active() {
+            log::debug!("Skipping ChatGPT usage: rate limited");
+            return None;
+        }
+
         let result = self.fetch_chatgpt_usage().or_else(|error| {
-            if !matches!(error, ChatGptFetchError::AuthInvalid) {
+            if !matches!(error, ProviderFetchError::AuthInvalid) {
                 return Err(error);
             }
             log::warn!("ChatGPT usage: authentication invalid (401), attempting token refresh");
@@ -289,9 +414,18 @@ impl InferenceUsageModule {
         });
 
         match result {
-            Ok(windows) if !windows.is_empty() => Some(windows),
-            Ok(_) => {
-                log::error!("ChatGPT usage: no rate limit windows");
+            Ok(windows) => {
+                self.chatgpt_rate_limit.reset();
+                if windows.is_empty() {
+                    log::error!("ChatGPT usage: no rate limit windows");
+                    None
+                } else {
+                    Some(windows)
+                }
+            }
+            Err(ProviderFetchError::RateLimited) => {
+                let delay = self.chatgpt_rate_limit.hit();
+                log::warn!("ChatGPT usage: rate limited, backing off for {delay:?}");
                 None
             }
             Err(error) => {
@@ -301,7 +435,7 @@ impl InferenceUsageModule {
         }
     }
 
-    fn refresh_chatgpt_token(&self) -> anyhow::Result<()> {
+    fn refresh_chatgpt_token(&self) -> Result<(), ProviderFetchError> {
         let auth_data = fs::read_to_string(&self.codex_auth_path)
             .context("Failed to read codex auth for refresh")?;
         let mut auth: serde_json::Value =
@@ -322,9 +456,14 @@ impl InferenceUsageModule {
         let tok: CodexTokenResponse = self
             .client
             .post(CODEX_TOKEN_URL)
-            .send_json(&request_body)?
+            .send_json(&request_body)
+            .map_err(|error| match error {
+                ureq::Error::StatusCode(429) => ProviderFetchError::RateLimited,
+                error => ProviderFetchError::Other(error.into()),
+            })?
             .into_body()
-            .read_json()?;
+            .read_json()
+            .map_err(|e| ProviderFetchError::Other(e.into()))?;
 
         let tokens = auth
             .get_mut("tokens")
@@ -396,12 +535,12 @@ impl InferenceUsageModule {
         }
     }
 
-    fn fetch_claude_usage(&self) -> Result<(UsageWindow, UsageWindow), ClaudeFetchError> {
+    fn fetch_claude_usage(&self) -> Result<(UsageWindow, UsageWindow), ProviderFetchError> {
         let creds_data = fs::read_to_string(&self.token_path)
             .context("Failed to read credentials")
-            .map_err(ClaudeFetchError::Other)?;
+            .map_err(ProviderFetchError::Other)?;
         let creds: ClaudeCredentials =
-            serde_json::from_str(&creds_data).map_err(|e| ClaudeFetchError::Other(e.into()))?;
+            serde_json::from_str(&creds_data).map_err(|e| ProviderFetchError::Other(e.into()))?;
 
         let response = self
             .client
@@ -413,15 +552,15 @@ impl InferenceUsageModule {
             .header("anthropic-beta", "oauth-2025-04-20")
             .call()
             .map_err(|error| match error {
-                ureq::Error::StatusCode(401) => ClaudeFetchError::AuthInvalid,
-                ureq::Error::StatusCode(429) => ClaudeFetchError::RateLimited,
-                error => ClaudeFetchError::Other(error.into()),
+                ureq::Error::StatusCode(401) => ProviderFetchError::AuthInvalid,
+                ureq::Error::StatusCode(429) => ProviderFetchError::RateLimited,
+                error => ProviderFetchError::Other(error.into()),
             })?;
 
         let body: ClaudeUsageResponse = response
             .into_body()
             .read_json()
-            .map_err(|e| ClaudeFetchError::Other(e.into()))?;
+            .map_err(|e| ProviderFetchError::Other(e.into()))?;
 
         let now = Utc::now();
         Ok((
@@ -438,68 +577,51 @@ impl InferenceUsageModule {
             log::debug!("Skipping Claude usage: auth invalid, token unchanged");
             return ClaudeUsageStatus::AuthInvalid;
         }
-        if self.claude_skip_until.is_some_and(|t| Instant::now() < t) {
+        if self.claude_rate_limit.active() {
             log::debug!("Skipping Claude usage: rate limited");
             return ClaudeUsageStatus::Error;
         }
 
-        // Capture mtime before fetching to avoid a race where a login
-        // refreshes the token between our read and the mtime probe
-        let pre_fetch_mtime = self.claude_token_mtime();
+        // Mtime of the credentials the failing request used, captured before each attempt to avoid
+        // a race where a login rewrites them between our read and the mtime probe
+        let mut tried_creds_mtime = self.claude_token_mtime();
 
-        match self.fetch_claude_usage() {
+        let result = self.fetch_claude_usage().or_else(|error| {
+            if !matches!(error, ProviderFetchError::AuthInvalid) {
+                return Err(error);
+            }
+            log::warn!("Claude usage: authentication invalid (401), attempting token refresh");
+            self.refresh_claude_token()?;
+            tried_creds_mtime = self.claude_token_mtime();
+            self.fetch_claude_usage()
+        });
+
+        match result {
             Ok((h5, d7)) => {
                 self.claude_auth_failed_mtime = None;
-                self.claude_skip_until = None;
-                self.claude_rate_limit_backoff = self.claude_rate_limit_backoff_builder.build();
+                self.claude_rate_limit.reset();
                 ClaudeUsageStatus::Available { h5, d7 }
             }
-            Err(ClaudeFetchError::AuthInvalid) => {
-                log::warn!("Claude usage: authentication invalid (401), attempting token refresh");
-                if let Err(e) = self.refresh_claude_token() {
-                    log::error!("Claude token refresh failed: {e}");
-                    self.claude_auth_failed_mtime = pre_fetch_mtime;
-                    return ClaudeUsageStatus::AuthInvalid;
-                }
-                match self.fetch_claude_usage() {
-                    Ok((h5, d7)) => {
-                        self.claude_auth_failed_mtime = None;
-                        ClaudeUsageStatus::Available { h5, d7 }
-                    }
-                    Err(ClaudeFetchError::AuthInvalid) => {
-                        log::error!("Claude usage still unauthorized after refresh");
-                        self.claude_auth_failed_mtime = self.claude_token_mtime();
-                        ClaudeUsageStatus::AuthInvalid
-                    }
-                    Err(ClaudeFetchError::RateLimited) => {
-                        log::warn!("Claude usage rate limited after refresh");
-                        self.apply_claude_rate_limit_backoff()
-                    }
-                    Err(ClaudeFetchError::Other(e)) => {
-                        log::error!("Claude usage after refresh: {e}");
-                        ClaudeUsageStatus::Error
-                    }
-                }
+            Err(ProviderFetchError::AuthInvalid) => {
+                log::error!(
+                    "Claude usage: authentication invalid, waiting for a credentials change"
+                );
+                self.claude_auth_failed_mtime = tried_creds_mtime;
+                ClaudeUsageStatus::AuthInvalid
             }
-            Err(ClaudeFetchError::RateLimited) => {
-                log::warn!("Claude usage: rate limited");
-                self.apply_claude_rate_limit_backoff()
+            Err(ProviderFetchError::RateLimited) => {
+                let delay = self.claude_rate_limit.hit();
+                log::warn!("Claude usage: rate limited, backing off for {delay:?}");
+                ClaudeUsageStatus::Error
             }
-            Err(ClaudeFetchError::Other(e)) => {
-                log::error!("Claude usage: {e}");
+            Err(ProviderFetchError::Other(error)) => {
+                log::error!("Claude usage: {error}");
                 ClaudeUsageStatus::Error
             }
         }
     }
 
-    fn apply_claude_rate_limit_backoff(&mut self) -> ClaudeUsageStatus {
-        let delay = self.claude_rate_limit_backoff.next().unwrap();
-        log::warn!("Claude rate limited, backing off for {delay:?}");
-        self.claude_skip_until = Some(Instant::now() + delay);
-        ClaudeUsageStatus::Error
-    }
-
-    fn refresh_claude_token(&self) -> anyhow::Result<()> {
+    fn refresh_claude_token(&self) -> Result<(), ProviderFetchError> {
         let creds_data = fs::read_to_string(&self.token_path)
             .context("Failed to read credentials for refresh")?;
         let mut creds: ClaudeCredentials =
@@ -514,9 +636,11 @@ impl InferenceUsageModule {
         let tok: ClaudeTokenResponse = self
             .client
             .post("https://platform.claude.com/v1/oauth/token")
-            .send_json(&request_body)?
+            .send_json(&request_body)
+            .map_err(ProviderFetchError::from_claude_refresh)?
             .into_body()
-            .read_json()?;
+            .read_json()
+            .map_err(|e| ProviderFetchError::Other(e.into()))?;
 
         creds.claude_ai_oauth.access_token = tok.access_token;
         if let Some(new_refresh) = tok.refresh_token {
@@ -609,7 +733,7 @@ impl RenderablePolybarModule for InferenceUsageModule {
 
     fn wait_update(&mut self, prev_state: Option<&Self::State>) {
         if prev_state.is_some() {
-            sleep(Duration::from_mins(3));
+            sleep_suspend_aware(self.next_delay());
         } else {
             wait_network_ready().unwrap();
         }
@@ -628,10 +752,27 @@ impl RenderablePolybarModule for InferenceUsageModule {
 
         let chatgpt_windows = self.update_chatgpt_usage();
 
-        InferenceUsageModuleState {
+        let state = InferenceUsageModuleState {
             amp_free_pct,
             claude_status,
             chatgpt_windows,
+        };
+
+        if !state.is_degraded() {
+            self.degraded_since = None;
+            self.last_complete_state = Some(state.clone());
+            return state;
+        }
+
+        // Resuming from suspend leaves the network unusable for a few seconds; keep showing the
+        // last complete usage instead of flashing an error, until it gets too stale to be trusted
+        let since = *self.degraded_since.get_or_insert_with(SystemTime::now);
+        match &self.last_complete_state {
+            Some(last) if Self::degraded_hold_left(since).is_some() => {
+                log::warn!("Update degraded, holding last complete usage");
+                last.clone()
+            }
+            _ => state,
         }
     }
 
@@ -668,7 +809,12 @@ impl RenderablePolybarModule for InferenceUsageModule {
 #[cfg(test)]
 #[expect(clippy::shadow_unrelated)]
 mod tests {
+    use std::iter;
+
     use super::*;
+
+    /// Slack absorbing the time a test itself takes
+    const MARGIN: Duration = Duration::from_secs(1);
 
     #[test]
     fn test_render_quota() {
@@ -929,6 +1075,189 @@ Individual credits: $5.56 remaining (set up automatic top-up to avoid running ou
                 },
             ]
         );
+    }
+
+    #[test]
+    fn test_is_degraded() {
+        let w = || UsageWindow {
+            quota_left_pct: 50.0,
+            time_left_frac: Some(0.5),
+        };
+        let complete = InferenceUsageModuleState {
+            amp_free_pct: Some(50.0),
+            claude_status: ClaudeUsageStatus::Available { h5: w(), d7: w() },
+            chatgpt_windows: Some(vec![w()]),
+        };
+        assert!(!complete.is_degraded());
+
+        for state in [
+            InferenceUsageModuleState {
+                amp_free_pct: None,
+                ..complete.clone()
+            },
+            InferenceUsageModuleState {
+                claude_status: ClaudeUsageStatus::Error,
+                ..complete.clone()
+            },
+            InferenceUsageModuleState {
+                claude_status: ClaudeUsageStatus::AuthInvalid,
+                ..complete.clone()
+            },
+            InferenceUsageModuleState {
+                chatgpt_windows: None,
+                ..complete.clone()
+            },
+        ] {
+            assert!(state.is_degraded());
+        }
+    }
+
+    #[test]
+    fn test_next_delay_shortened_while_degraded() {
+        // Jitter can double each computed delay
+        let base_range = DEGRADED_MIN_DELAY..(2 * DEGRADED_MIN_DELAY);
+        let mut module = InferenceUsageModule::new();
+        assert_eq!(module.next_delay(), UPDATE_INTERVAL);
+
+        module.degraded_since = Some(SystemTime::now());
+        assert!(base_range.contains(&module.next_delay()));
+        // Grows, then converges back to the nominal interval instead of drifting further away
+        let grown = iter::repeat_with(|| module.next_delay()).nth(4).unwrap();
+        assert!(grown > base_range.end);
+        let capped = iter::repeat_with(|| module.next_delay()).nth(19).unwrap();
+        assert!((UPDATE_INTERVAL..(2 * UPDATE_INTERVAL)).contains(&capped));
+
+        // Complete again: back to the nominal interval, and the backoff restarts from its floor
+        module.degraded_since = None;
+        assert_eq!(module.next_delay(), UPDATE_INTERVAL);
+        module.degraded_since = Some(SystemTime::now());
+        assert!(base_range.contains(&module.next_delay()));
+    }
+
+    #[test]
+    fn test_next_delay_nominal_while_rate_limited() {
+        // Either provider throttling us holds the update back, they answer 429 for the same reason
+        for claude in [true, false] {
+            let mut module = InferenceUsageModule::new();
+            module.degraded_since = Some(SystemTime::now());
+            if claude {
+                module.claude_rate_limit.hit();
+            } else {
+                module.chatgpt_rate_limit.hit();
+            }
+            assert_eq!(module.next_delay(), UPDATE_INTERVAL);
+            assert_eq!(module.next_delay(), UPDATE_INTERVAL);
+
+            // Once it stops, the backoff resumes from its floor rather than mid-curve
+            if claude {
+                module.claude_rate_limit.reset();
+            } else {
+                module.chatgpt_rate_limit.reset();
+            }
+            assert!((DEGRADED_MIN_DELAY..(2 * DEGRADED_MIN_DELAY)).contains(&module.next_delay()));
+        }
+    }
+
+    #[test]
+    fn test_next_delay_capped_by_degraded_hold() {
+        let w = UsageWindow {
+            quota_left_pct: 50.0,
+            time_left_frac: Some(0.5),
+        };
+        let complete = InferenceUsageModuleState {
+            amp_free_pct: Some(50.0),
+            claude_status: ClaudeUsageStatus::Available {
+                h5: w.clone(),
+                d7: w.clone(),
+            },
+            chatgpt_windows: Some(vec![w]),
+        };
+        let mut module = InferenceUsageModule::new();
+        module.degraded_since = Some(SystemTime::now());
+        module.last_complete_state = Some(complete.clone());
+
+        // A rate limit stretches the interval past the hold, the held state still expires on time
+        module.claude_rate_limit.hit();
+        assert!(module.next_delay() <= DEGRADED_HOLD);
+
+        // A hold about to run out does not collapse the delay into a busy retry
+        module.degraded_since =
+            SystemTime::now().checked_sub(DEGRADED_HOLD.checked_sub(MARGIN).unwrap());
+        assert_eq!(module.next_delay(), DEGRADED_MIN_DELAY);
+
+        // Once the hold has run out there is nothing left to expire early
+        module.degraded_since = SystemTime::now().checked_sub(2 * DEGRADED_HOLD);
+        assert_eq!(module.next_delay(), UPDATE_INTERVAL);
+
+        // Neither is there when no complete state is being held
+        module.degraded_since = Some(SystemTime::now());
+        module.last_complete_state = None;
+        assert_eq!(module.next_delay(), UPDATE_INTERVAL);
+
+        // An escalated retry is capped too, its ceiling is above the hold even without a rate limit
+        let mut ordinary = InferenceUsageModule::new();
+        ordinary.degraded_since = SystemTime::now().checked_sub(DEGRADED_HOLD / 2);
+        ordinary.last_complete_state = Some(complete);
+        let delay = iter::repeat_with(|| ordinary.next_delay()).nth(19).unwrap();
+        let hold_left = DEGRADED_HOLD / 2;
+        assert!((hold_left.checked_sub(MARGIN).unwrap()..=hold_left).contains(&delay));
+    }
+
+    #[test]
+    fn test_degraded_hold_left_none_when_clock_moves_backwards() {
+        // A hold starting in the future has an unknown age, it does not get to count as fresh
+        let future_start = SystemTime::now() + UPDATE_INTERVAL;
+        assert_eq!(InferenceUsageModule::degraded_hold_left(future_start), None);
+    }
+
+    #[test]
+    fn test_provider_fetch_error_from_claude_refresh() {
+        // Whichever way the server words it, a rejected refresh means the credentials are spent
+        for status in (400..500).filter(|status| *status != 429) {
+            assert!(matches!(
+                ProviderFetchError::from_claude_refresh(ureq::Error::StatusCode(status)),
+                ProviderFetchError::AuthInvalid
+            ));
+        }
+        assert!(matches!(
+            ProviderFetchError::from_claude_refresh(ureq::Error::StatusCode(429)),
+            ProviderFetchError::RateLimited
+        ));
+        // A server or transport failure says nothing about the credentials
+        for error in [
+            ureq::Error::StatusCode(500),
+            ureq::Error::StatusCode(503),
+            ureq::Error::HostNotFound,
+            ureq::Error::ConnectionFailed,
+        ] {
+            assert!(matches!(
+                ProviderFetchError::from_claude_refresh(error),
+                ProviderFetchError::Other(_)
+            ));
+        }
+    }
+
+    #[test]
+    fn test_rate_limit_backoff() {
+        let mut backoff = RateLimitBackoff::new();
+        assert!(!backoff.active());
+
+        // Jitter can double each computed delay
+        let delay = backoff.hit();
+        assert!((RATE_LIMIT_MIN_DELAY..(2 * RATE_LIMIT_MIN_DELAY)).contains(&delay));
+        assert!(backoff.active());
+
+        // Consecutive rate limits escalate, up to the ceiling
+        assert!(backoff.hit() > delay);
+        let escalated = iter::repeat_with(|| backoff.hit()).nth(9).unwrap();
+        assert!((RATE_LIMIT_MAX_DELAY..(2 * RATE_LIMIT_MAX_DELAY)).contains(&escalated));
+
+        backoff.reset();
+        assert!(!backoff.active());
+        assert!((RATE_LIMIT_MIN_DELAY..(2 * RATE_LIMIT_MIN_DELAY)).contains(&backoff.hit()));
+
+        backoff.skip_until = SystemTime::now().checked_sub(Duration::from_secs(1));
+        assert!(!backoff.active());
     }
 
     #[test]

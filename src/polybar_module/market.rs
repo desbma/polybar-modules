@@ -1,4 +1,4 @@
-use std::{thread::sleep, time::Duration};
+use std::time::Duration;
 
 use anyhow::Context as _;
 use backon::BackoffBuilder as _;
@@ -7,8 +7,8 @@ use chrono::Datelike as _;
 use crate::{
     markup,
     polybar_module::{
-        NetworkMode, PolybarModuleEnv, RenderablePolybarModule, TCP_REMOTE_TIMEOUT,
-        wait_network_ready,
+        NETWORK_ERROR_BACKOFF, NetworkMode, PolybarModuleEnv, RenderablePolybarModule,
+        TCP_REMOTE_TIMEOUT, sleep_suspend_aware, wait_network_ready,
     },
     theme::{self, ICON_WARNING},
 };
@@ -80,7 +80,7 @@ impl MarketModule {
 
             // Don't try to be smart by computing absolute time to sleep until,
             // time shifts (NTP, DST...) could easily fuck that up
-            sleep(Duration::from_hours(8));
+            sleep_suspend_aware(Duration::from_hours(8));
             did_wait = true;
         }
         did_wait
@@ -146,13 +146,13 @@ impl RenderablePolybarModule for MarketModule {
             let sleep_duration = match prev_state {
                 // Nominal
                 Some(_) => {
-                    self.env.network_error_backoff = self.env.network_error_backoff_builder.build();
+                    self.env.network_error_backoff = NETWORK_ERROR_BACKOFF.build();
                     Duration::from_mins(30)
                 }
                 // Error occured
                 None => self.env.network_error_backoff.next().unwrap(),
             };
-            sleep(sleep_duration);
+            sleep_suspend_aware(sleep_duration);
         } else {
             wait_network_ready().unwrap();
         }

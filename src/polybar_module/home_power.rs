@@ -1,7 +1,6 @@
 use std::{
     cmp::Ordering,
     net::{TcpStream, ToSocketAddrs as _},
-    thread::sleep,
     time::Duration,
 };
 
@@ -16,7 +15,10 @@ use tungstenite::WebSocket;
 use crate::{
     config::{HomePowerModuleConfig, InverterModbusConfig, ShellyDeviceConfig},
     markup,
-    polybar_module::{NetworkMode, PolybarModuleEnv, RenderablePolybarModule},
+    polybar_module::{
+        NETWORK_ERROR_BACKOFF, NetworkMode, PolybarModuleEnv, RenderablePolybarModule,
+        sleep_suspend_aware,
+    },
     theme::{self, ICON_WARNING},
 };
 
@@ -445,12 +447,12 @@ impl RenderablePolybarModule for HomePowerModule {
     fn wait_update(&mut self, prev_state: Option<&Self::State>) {
         if let Some(prev_state) = prev_state {
             let sleep_duration = if prev_state.is_some() {
-                self.env.network_error_backoff = self.env.network_error_backoff_builder.build();
+                self.env.network_error_backoff = NETWORK_ERROR_BACKOFF.build();
                 Duration::from_secs(1)
             } else {
                 self.env.network_error_backoff.next().unwrap()
             };
-            sleep(sleep_duration);
+            sleep_suspend_aware(sleep_duration);
         }
         self.env.wait_network_mode(&NetworkMode::Unrestricted);
     }

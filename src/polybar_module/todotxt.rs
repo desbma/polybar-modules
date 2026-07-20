@@ -4,7 +4,7 @@ use std::{
     path::PathBuf,
     sync::mpsc::{RecvTimeoutError, channel},
     thread::sleep,
-    time::{Duration, Instant, SystemTime},
+    time::{Duration, SystemTime},
 };
 
 use notify::Watcher as _;
@@ -12,7 +12,7 @@ use tasks::{Task, TodoFile};
 
 use crate::{
     markup,
-    polybar_module::{PolybarModuleEnv, RenderablePolybarModule},
+    polybar_module::{PolybarModuleEnv, RenderablePolybarModule, boottime},
     theme::{self, ICON_WARNING},
 };
 
@@ -92,6 +92,8 @@ impl RenderablePolybarModule for TodoTxtModule {
 
     fn wait_update(&mut self, prev_state: Option<&Self::State>) {
         const MAX_WAIT: Duration = Duration::from_hours(1);
+        /// Longest a single receive may block, bounding how late a return from suspend is noticed
+        const RESUME_CHECK_INTERVAL: Duration = Duration::from_mins(1);
         if let Some(prev_state) = prev_state {
             match prev_state {
                 // Nominal
@@ -109,23 +111,21 @@ impl RenderablePolybarModule for TodoTxtModule {
                             .watch(to_watch_filepath, notify::RecursiveMode::NonRecursive)
                             .unwrap();
                     }
-                    let wait_start = Instant::now();
-                    while !self.env.public_screen()
-                        && (Instant::now().duration_since(wait_start) < MAX_WAIT)
-                    {
+                    let deadline = boottime() + MAX_WAIT;
+                    while !self.env.public_screen() && boottime() < deadline {
                         let max_mtime = self.get_todotxt_file_mtime();
                         if max_mtime != *last_fs_change {
                             break;
                         }
 
-                        let timeout =
-                            MAX_WAIT.saturating_sub(Instant::now().duration_since(wait_start));
+                        let timeout = deadline
+                            .saturating_sub(boottime())
+                            .min(RESUME_CHECK_INTERVAL);
                         let res = events_rx.recv_timeout(timeout);
                         let evt = match res {
                             Ok(evt) => evt,
-                            Err(RecvTimeoutError::Timeout) => {
-                                break;
-                            }
+                            // Receiving in slices, the loop condition owns the deadline
+                            Err(RecvTimeoutError::Timeout) => continue,
                             Err(_) => res.unwrap(),
                         };
                         log::trace!("{evt:?}");

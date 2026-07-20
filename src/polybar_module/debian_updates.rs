@@ -1,6 +1,5 @@
 use std::{
     process::{Command, Stdio},
-    thread::sleep,
     time::Duration,
 };
 
@@ -10,8 +9,8 @@ use backon::BackoffBuilder as _;
 use crate::{
     markup,
     polybar_module::{
-        NetworkMode, PolybarModuleEnv, RenderablePolybarModule, arch_updates::ICON_UPDATE,
-        wait_network_ready,
+        NETWORK_ERROR_BACKOFF, NetworkMode, PolybarModuleEnv, RenderablePolybarModule,
+        arch_updates::ICON_UPDATE, sleep_suspend_aware, wait_network_ready,
     },
     theme::{self, ICON_WARNING},
 };
@@ -120,13 +119,13 @@ impl RenderablePolybarModule for DebianUpdatesModule {
             let sleep_duration = match prev_state {
                 // Nominal
                 Some(_) => {
-                    self.env.network_error_backoff = self.env.network_error_backoff_builder.build();
+                    self.env.network_error_backoff = NETWORK_ERROR_BACKOFF.build();
                     Duration::from_mins(3)
                 }
                 // Error occured
                 None => self.env.network_error_backoff.next().unwrap(),
             };
-            sleep(sleep_duration);
+            sleep_suspend_aware(sleep_duration);
         } else {
             wait_network_ready().unwrap();
         }

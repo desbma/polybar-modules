@@ -1197,6 +1197,7 @@ dependencies = [
  "quick-xml",
  "rand 0.10.2",
  "regex",
+ "rustix",
  "scraper",
  "serde",
  "serde_json",

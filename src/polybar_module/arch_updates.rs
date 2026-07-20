@@ -2,7 +2,6 @@ use std::{
     borrow::ToOwned,
     fmt::Write as _,
     process::{Command, Stdio},
-    thread::sleep,
     time::Duration,
 };
 
@@ -11,7 +10,10 @@ use backon::BackoffBuilder as _;
 
 use crate::{
     markup,
-    polybar_module::{NetworkMode, PolybarModuleEnv, RenderablePolybarModule, wait_network_ready},
+    polybar_module::{
+        NetworkMode, PolybarModuleEnv, RenderablePolybarModule, sleep_suspend_aware,
+        wait_network_ready,
+    },
     theme::{self, ICON_WARNING},
 };
 
@@ -144,7 +146,7 @@ impl RenderablePolybarModule for ArchUpdatesModule {
                 // Error occured
                 None => self.server_error_backoff.next().unwrap(),
             };
-            sleep(sleep_duration);
+            sleep_suspend_aware(sleep_duration);
         } else {
             wait_network_ready().unwrap();
         }

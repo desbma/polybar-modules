@@ -10,6 +10,11 @@ use std::{
 
 use backon::BackoffBuilder as _;
 use notify::Watcher as _;
+use rustix::{
+    io::Errno,
+    thread::{ClockId, Timespec, clock_nanosleep_absolute},
+    time::clock_gettime,
+};
 
 pub(crate) mod arch_updates;
 pub(crate) mod autolock;
@@ -67,6 +72,14 @@ pub(crate) enum NetworkMode {
 
 const TCP_REMOTE_TIMEOUT: Duration = Duration::from_secs(20);
 const TCP_LOCAL_TIMEOUT: Duration = Duration::from_secs(5);
+/// Escalation curve of the delay before retrying an update the network made fail
+pub(crate) const NETWORK_ERROR_BACKOFF: backon::ExponentialBuilder =
+    backon::ExponentialBuilder::new()
+        .with_jitter()
+        .with_factor(1.5)
+        .with_min_delay(Duration::from_secs(3))
+        .with_max_delay(Duration::from_hours(1))
+        .without_max_times();
 
 pub(crate) trait RenderablePolybarModule {
     type State: Debug + PartialEq;
@@ -81,7 +94,6 @@ pub(crate) trait RenderablePolybarModule {
 pub(crate) struct PolybarModuleEnv {
     pub low_bw_filepath: PathBuf,
     pub public_screen_filepath: PathBuf,
-    pub network_error_backoff_builder: backon::ExponentialBuilder,
     pub network_error_backoff: backon::ExponentialBackoff,
 }
 
@@ -93,18 +105,10 @@ impl PolybarModuleEnv {
             .unwrap()
             .join("low_internet_bandwidth");
         let public_screen_filepath = xdg_dirs.place_runtime_file("public_screen").unwrap();
-        let network_error_backoff_builder = backon::ExponentialBuilder::default()
-            .with_jitter()
-            .with_factor(1.5)
-            .with_min_delay(Duration::from_secs(3))
-            .with_max_delay(Duration::from_hours(1))
-            .without_max_times();
-        let network_error_backoff = network_error_backoff_builder.build();
         Self {
             low_bw_filepath,
             public_screen_filepath,
-            network_error_backoff_builder,
-            network_error_backoff,
+            network_error_backoff: NETWORK_ERROR_BACKOFF.build(),
         }
     }
 
@@ -155,6 +159,20 @@ impl PolybarModuleEnv {
     }
 }
 
+/// Time since boot, including time spent suspended
+pub(crate) fn boottime() -> Duration {
+    clock_gettime(ClockId::Boottime).try_into().unwrap()
+}
+
+/// Sleep for `delay`, counting time spent suspended, unlike [`sleep`]
+pub(crate) fn sleep_suspend_aware(delay: Duration) {
+    let deadline = clock_gettime(ClockId::Boottime) + Timespec::try_from(delay).unwrap();
+    while let Err(error) = clock_nanosleep_absolute(ClockId::Boottime, &deadline) {
+        // Waiting on an absolute deadline, only a signal can cut the sleep short
+        assert_eq!(error, Errno::INTR);
+    }
+}
+
 /// Block until network is ready (a default route exists in `/proc/net/route`)
 pub(crate) fn wait_network_ready() -> anyhow::Result<()> {
     let backoff = backon::ExponentialBuilder::default()
@@ -190,4 +208,18 @@ pub(crate) fn is_systemd_user_unit_running(name: &str) -> bool {
         .stderr(Stdio::null())
         .status()
         .is_ok_and(|s| s.success())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_sleep_suspend_aware_waits_for_the_whole_delay() {
+        const DELAY: Duration = Duration::from_millis(200);
+        // Measured on the clock the sleep is specified against, so a suspend does not fail the test
+        let start = boottime();
+        sleep_suspend_aware(DELAY);
+        assert!(boottime().saturating_sub(start) >= DELAY);
+    }
 }
