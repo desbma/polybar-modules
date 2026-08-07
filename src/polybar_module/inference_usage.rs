@@ -1,7 +1,6 @@
 use std::{
     env, fs,
     path::{Path, PathBuf},
-    process::{Command, Stdio},
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
@@ -21,13 +20,11 @@ use crate::{
 /// Inference API usage module
 pub(crate) struct InferenceUsageModule {
     client: ureq::Agent,
-    amp_usage_re: regex::Regex,
     token_path: PathBuf,
     claude_rate_limit: RateLimitBackoff,
     chatgpt_rate_limit: RateLimitBackoff,
     claude_auth_failed_mtime: Option<SystemTime>,
     codex_auth_path: PathBuf,
-    amp_workdir: tempfile::TempDir,
     degraded_backoff: backon::ExponentialBackoff,
     /// Start of the current run of degraded updates
     degraded_since: Option<SystemTime>,
@@ -97,7 +94,6 @@ pub(crate) enum ClaudeUsageStatus {
 /// Inference usage state
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct InferenceUsageModuleState {
-    amp_free_pct: Option<f64>,
     claude_status: ClaudeUsageStatus,
     chatgpt_windows: Option<Vec<UsageWindow>>,
 }
@@ -105,14 +101,12 @@ pub(crate) struct InferenceUsageModuleState {
 impl InferenceUsageModuleState {
     /// Whether some provider usage is missing
     fn is_degraded(&self) -> bool {
-        self.amp_free_pct.is_none()
-            || self.chatgpt_windows.is_none()
+        self.chatgpt_windows.is_none()
             || !matches!(self.claude_status, ClaudeUsageStatus::Available { .. })
     }
 }
 
 const ICON_INFERENCE_USAGE: &str = "󱩅";
-const ICON_AMP: &str = "󰞍";
 const ICON_CLAUDE: &str = "";
 const ICON_CHATGPT: &str = "󰫈";
 const ICON_UNAUTHORIZED: &str = "";
@@ -131,7 +125,6 @@ const QUOTA_ICONS: [&str; 9] = [
 const CLAUDE_H5_WINDOW: Duration = Duration::from_hours(5);
 /// Duration of the Claude long rolling window
 const CLAUDE_D7_WINDOW: Duration = Duration::from_hours(7 * 24);
-const AMP_USAGE_URL: &str = "https://ampcode.com/settings";
 const CLAUDE_USAGE_URL: &str = "https://claude.ai/settings/usage";
 const CLAUDE_OAUTH_CLIENT_ID: &str = "9d1c250a-e61b-44d9-88ed-5944d1962f5e";
 const CHATGPT_USAGE_URL: &str = "https://chatgpt.com/codex/settings/usage";
@@ -299,20 +292,16 @@ impl InferenceUsageModule {
                 .timeout_connect(Some(CONNECT_TIMEOUT))
                 .build(),
         );
-        let amp_usage_re = regex::Regex::new(r"Amp Free: ([0-9]+\.?[0-9]*)% remaining").unwrap();
         let home = env::var("HOME").unwrap();
         let token_path = PathBuf::from(&home).join(".config/claude/.credentials.json");
         let codex_auth_path = PathBuf::from(&home).join(".config/codex/auth.json");
-        let amp_workdir = tempfile::tempdir().unwrap();
         Self {
             client,
-            amp_usage_re,
             token_path,
             claude_rate_limit: RateLimitBackoff::new(),
             chatgpt_rate_limit: RateLimitBackoff::new(),
             claude_auth_failed_mtime: None,
             codex_auth_path,
-            amp_workdir,
             degraded_backoff: DEGRADED_BACKOFF.build(),
             degraded_since: None,
             last_complete_state: None,
@@ -484,31 +473,6 @@ impl InferenceUsageModule {
 
         log::info!("Codex token refreshed");
         Ok(())
-    }
-
-    fn fetch_amp_usage(&self) -> anyhow::Result<f64> {
-        let output = Command::new("amp")
-            .arg("usage")
-            .current_dir(self.amp_workdir.path())
-            .stdin(Stdio::null())
-            .stderr(Stdio::null())
-            .output()
-            .context("Failed to run amp usage")?;
-        output.status.exit_ok()?;
-        let stdout = String::from_utf8(output.stdout)?;
-        Self::parse_amp_usage(&self.amp_usage_re, &stdout)
-    }
-
-    /// Parse the free credit percentage from the `Amp Free: N% remaining` line
-    fn parse_amp_usage(re: &regex::Regex, usage: &str) -> anyhow::Result<f64> {
-        let cap = re
-            .captures(usage)
-            .ok_or_else(|| anyhow::anyhow!("No Amp Free credit found in amp usage output"))?;
-        cap.get(1)
-            .unwrap()
-            .as_str()
-            .parse()
-            .context("Failed to parse remaining Amp credit percentage")
     }
 
     fn claude_token_mtime(&self) -> Option<SystemTime> {
@@ -740,20 +704,11 @@ impl RenderablePolybarModule for InferenceUsageModule {
     }
 
     fn update(&mut self) -> Self::State {
-        let amp_free_pct = match self.fetch_amp_usage() {
-            Ok(v) => Some(v),
-            Err(e) => {
-                log::error!("AMP usage: {e}");
-                None
-            }
-        };
-
         let claude_status = self.update_claude_status();
 
         let chatgpt_windows = self.update_chatgpt_usage();
 
         let state = InferenceUsageModuleState {
-            amp_free_pct,
             claude_status,
             chatgpt_windows,
         };
@@ -782,7 +737,6 @@ impl RenderablePolybarModule for InferenceUsageModule {
                 .fg(theme::Color::Attention)
                 .into_string()
         };
-        let amp = state.amp_free_pct.map_or_else(warning, Self::render_quota);
         let claude = match &state.claude_status {
             ClaudeUsageStatus::Available { h5, d7 } => Self::render_windows([h5, d7]),
             ClaudeUsageStatus::AuthInvalid => ICON_UNAUTHORIZED.to_owned(),
@@ -795,7 +749,6 @@ impl RenderablePolybarModule for InferenceUsageModule {
 
         [
             markup::Markup::new(ICON_INFERENCE_USAGE).fg(theme::Color::MainIcon),
-            Self::provider_markup(ICON_AMP, amp, AMP_USAGE_URL),
             Self::provider_markup(ICON_CLAUDE, claude, CLAUDE_USAGE_URL),
             Self::provider_markup(ICON_CHATGPT, chatgpt, CHATGPT_USAGE_URL),
         ]
@@ -837,7 +790,6 @@ mod tests {
         }
     }
 
-    #[expect(clippy::too_many_lines)]
     #[test]
     fn test_render() {
         let module = InferenceUsageModule::new();
@@ -862,13 +814,11 @@ mod tests {
             quota_left_pct,
             time_left_frac: Some(time_left_frac),
         };
-        let assert_render = |state: &InferenceUsageModuleState,
-                             [amp, claude, chatgpt]: [&str; 3]| {
+        let assert_render = |state: &InferenceUsageModuleState, [claude, chatgpt]: [&str; 2]| {
             assert_eq!(
                 module.render(state),
                 [
                     mi(ICON_INFERENCE_USAGE),
-                    provider(ICON_AMP, amp, AMP_USAGE_URL),
                     provider(ICON_CLAUDE, claude, CLAUDE_USAGE_URL),
                     provider(ICON_CHATGPT, chatgpt, CHATGPT_USAGE_URL),
                 ]
@@ -877,7 +827,6 @@ mod tests {
         };
 
         let state = InferenceUsageModuleState {
-            amp_free_pct: Some(45.0),
             claude_status: ClaudeUsageStatus::Available {
                 h5: w(50.0, 0.75),
                 d7: w(80.0, 0.9),
@@ -887,7 +836,6 @@ mod tests {
         assert_render(
             &state,
             [
-                "%{F#819500}󰪡%{F-}",
                 "%{F#819500}󰪡%{F-}%{F#819500}▆%{F-}%{F#819500}󰪣%{F-}%{F#819500}█%{F-}",
                 "%{F#819500}󰪣%{F-}%{F#819500}▄%{F-}%{F#819500}󰪤%{F-}%{F#819500}█%{F-}",
             ],
@@ -895,21 +843,12 @@ mod tests {
 
         // All errors
         let state = InferenceUsageModuleState {
-            amp_free_pct: None,
             claude_status: ClaudeUsageStatus::Error,
             chatgpt_windows: None,
         };
-        assert_render(&state, [&att_warn, &att_warn, &att_warn]);
+        assert_render(&state, [&att_warn, &att_warn]);
 
         let state = InferenceUsageModuleState {
-            amp_free_pct: Some(100.0),
-            claude_status: ClaudeUsageStatus::Error,
-            chatgpt_windows: None,
-        };
-        assert_render(&state, ["%{F#819500}󰪥%{F-}", &att_warn, &att_warn]);
-
-        let state = InferenceUsageModuleState {
-            amp_free_pct: Some(5.0),
             claude_status: ClaudeUsageStatus::Available {
                 h5: w(95.0, 0.125),
                 d7: w(95.0, 0.4),
@@ -919,7 +858,6 @@ mod tests {
         assert_render(
             &state,
             [
-                "%{F#d56500}󰪞%{F-}",
                 "%{F#819500}󰪤%{F-}%{F#819500}▁%{F-}%{F#819500}󰪤%{F-}%{F#819500}▄%{F-}",
                 "%{F#819500}󰪤%{F-}%{F#819500}▁%{F-}%{F#819500}󰪤%{F-}%{F#819500}▅%{F-}",
             ],
@@ -927,14 +865,12 @@ mod tests {
 
         // Claude auth invalid (401)
         let state = InferenceUsageModuleState {
-            amp_free_pct: Some(50.0),
             claude_status: ClaudeUsageStatus::AuthInvalid,
             chatgpt_windows: Some(vec![w(20.0, 0.3), w(5.0, 0.8)]),
         };
         assert_render(
             &state,
             [
-                "%{F#819500}󰪡%{F-}",
                 ICON_UNAUTHORIZED,
                 "%{F#ac8300}󰪟%{F-}%{F#ac8300}▃%{F-}%{F#d56500}󰪞%{F-}%{F#d56500}▇%{F-}",
             ],
@@ -942,7 +878,6 @@ mod tests {
 
         // Claude 5h window not running yet: full quota, no reset bar
         let state = InferenceUsageModuleState {
-            amp_free_pct: Some(50.0),
             claude_status: ClaudeUsageStatus::Available {
                 h5: UsageWindow {
                     quota_left_pct: 100.0,
@@ -955,7 +890,6 @@ mod tests {
         assert_render(
             &state,
             [
-                "%{F#819500}󰪡%{F-}",
                 "%{F#819500}󰪥%{F-}%{F#819500}󰪣%{F-}%{F#819500}█%{F-}",
                 &att_warn,
             ],
@@ -963,37 +897,10 @@ mod tests {
 
         // ChatGPT with a single window renders a single quota icon, still with its reset bar
         let state = InferenceUsageModuleState {
-            amp_free_pct: Some(50.0),
             claude_status: ClaudeUsageStatus::Error,
             chatgpt_windows: Some(vec![w(82.0, 1.0)]),
         };
-        assert_render(
-            &state,
-            [
-                "%{F#819500}󰪡%{F-}",
-                &att_warn,
-                "%{F#819500}󰪣%{F-}%{F#819500}█%{F-}",
-            ],
-        );
-    }
-
-    #[test]
-    #[expect(clippy::float_cmp)]
-    fn test_parse_amp_usage() {
-        let module = InferenceUsageModule::new();
-        let output = "Signed in as user@example.com (user)
-Amp Free: 100% remaining today (resets daily) - https://ampcode.com/settings#amp-free
-Individual credits: $5.56 remaining (set up automatic top-up to avoid running out) - https://ampcode.com/settings";
-        assert_eq!(
-            InferenceUsageModule::parse_amp_usage(&module.amp_usage_re, output).unwrap(),
-            100.0
-        );
-
-        let output = "Amp Free: 50% remaining today (resets daily)";
-        assert_eq!(
-            InferenceUsageModule::parse_amp_usage(&module.amp_usage_re, output).unwrap(),
-            50.0
-        );
+        assert_render(&state, [&att_warn, "%{F#819500}󰪣%{F-}%{F#819500}█%{F-}"]);
     }
 
     #[test]
@@ -1084,17 +991,12 @@ Individual credits: $5.56 remaining (set up automatic top-up to avoid running ou
             time_left_frac: Some(0.5),
         };
         let complete = InferenceUsageModuleState {
-            amp_free_pct: Some(50.0),
             claude_status: ClaudeUsageStatus::Available { h5: w(), d7: w() },
             chatgpt_windows: Some(vec![w()]),
         };
         assert!(!complete.is_degraded());
 
         for state in [
-            InferenceUsageModuleState {
-                amp_free_pct: None,
-                ..complete.clone()
-            },
             InferenceUsageModuleState {
                 claude_status: ClaudeUsageStatus::Error,
                 ..complete.clone()
@@ -1165,7 +1067,6 @@ Individual credits: $5.56 remaining (set up automatic top-up to avoid running ou
             time_left_frac: Some(0.5),
         };
         let complete = InferenceUsageModuleState {
-            amp_free_pct: Some(50.0),
             claude_status: ClaudeUsageStatus::Available {
                 h5: w.clone(),
                 d7: w.clone(),
