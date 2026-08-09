@@ -20,10 +20,10 @@ use crate::{
 /// Inference API usage module
 pub(crate) struct InferenceUsageModule {
     client: ureq::Agent,
-    token_path: PathBuf,
+    claude_token_path: PathBuf,
     claude_rate_limit: RateLimitBackoff,
-    chatgpt_rate_limit: RateLimitBackoff,
     claude_auth_failed_mtime: Option<SystemTime>,
+    chatgpt_rate_limit: RateLimitBackoff,
     codex_auth_path: PathBuf,
     degraded_backoff: backon::ExponentialBackoff,
     /// Start of the current run of degraded updates
@@ -293,11 +293,11 @@ impl InferenceUsageModule {
                 .build(),
         );
         let home = env::var("HOME").unwrap();
-        let token_path = PathBuf::from(&home).join(".config/claude/.credentials.json");
+        let claude_token_path = PathBuf::from(&home).join(".config/claude/.credentials.json");
         let codex_auth_path = PathBuf::from(&home).join(".config/codex/auth.json");
         Self {
             client,
-            token_path,
+            claude_token_path,
             claude_rate_limit: RateLimitBackoff::new(),
             chatgpt_rate_limit: RateLimitBackoff::new(),
             claude_auth_failed_mtime: None,
@@ -476,7 +476,7 @@ impl InferenceUsageModule {
     }
 
     fn claude_token_mtime(&self) -> Option<SystemTime> {
-        fs::metadata(&self.token_path)
+        fs::metadata(&self.claude_token_path)
             .and_then(|m| m.modified())
             .ok()
     }
@@ -500,7 +500,7 @@ impl InferenceUsageModule {
     }
 
     fn fetch_claude_usage(&self) -> Result<(UsageWindow, UsageWindow), ProviderFetchError> {
-        let creds_data = fs::read_to_string(&self.token_path)
+        let creds_data = fs::read_to_string(&self.claude_token_path)
             .context("Failed to read credentials")
             .map_err(ProviderFetchError::Other)?;
         let creds: ClaudeCredentials =
@@ -586,7 +586,7 @@ impl InferenceUsageModule {
     }
 
     fn refresh_claude_token(&self) -> Result<(), ProviderFetchError> {
-        let creds_data = fs::read_to_string(&self.token_path)
+        let creds_data = fs::read_to_string(&self.claude_token_path)
             .context("Failed to read credentials for refresh")?;
         let mut creds: ClaudeCredentials =
             serde_json::from_str(&creds_data).context("Failed to deserialize credentials")?;
@@ -618,7 +618,7 @@ impl InferenceUsageModule {
             + tok.expires_in * 1000;
         creds.claude_ai_oauth.expires_at = expires_at;
 
-        Self::overwrite_json(&self.token_path, &creds)
+        Self::overwrite_json(&self.claude_token_path, &creds)
             .context("Failed to write refreshed credentials")?;
 
         log::info!(
