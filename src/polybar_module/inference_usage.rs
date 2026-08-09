@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     env, fs,
     path::{Path, PathBuf},
     time::{Duration, SystemTime, UNIX_EPOCH},
@@ -20,19 +21,27 @@ use crate::{
 /// Inference API usage module
 pub(crate) struct InferenceUsageModule {
     client: ureq::Agent,
-    claude_token_path: PathBuf,
-    claude_rate_limit: RateLimitBackoff,
-    claude_auth_failed_mtime: Option<SystemTime>,
-    chatgpt_rate_limit: RateLimitBackoff,
-    codex_auth_path: PathBuf,
+    home_path: String,
+    /// Claude state of each credentials file
+    claude_accounts: HashMap<PathBuf, ClaudeAccount>,
+    /// `ChatGPT` state of each auth file
+    chatgpt_accounts: HashMap<PathBuf, RateLimitBackoff>,
     degraded_backoff: backon::ExponentialBackoff,
     /// Start of the current run of degraded updates
     degraded_since: Option<SystemTime>,
-    /// Last state in which every provider reported its usage
+    /// Last state in which every account reported its usage
     last_complete_state: Option<InferenceUsageModuleState>,
 }
 
-/// Escalating delay leaving a provider alone after it answered with a rate limit
+/// Claude state of a single account
+#[derive(Default)]
+struct ClaudeAccount {
+    rate_limit: RateLimitBackoff,
+    /// Mtime of the credentials whose authentication failed
+    auth_failed_mtime: Option<SystemTime>,
+}
+
+/// Escalating delay holding a single account's requests back after a rate limit
 ///
 /// Deadlines are on the wall clock rather than a monotonic one, so that a suspend counts towards
 /// them: the throttling they wait out is the provider's, and it expires while we are asleep.
@@ -41,15 +50,17 @@ struct RateLimitBackoff {
     skip_until: Option<SystemTime>,
 }
 
-impl RateLimitBackoff {
-    fn new() -> Self {
+impl Default for RateLimitBackoff {
+    fn default() -> Self {
         Self {
             backoff: RATE_LIMIT_BACKOFF.build(),
             skip_until: None,
         }
     }
+}
 
-    /// Whether requests are currently held back
+impl RateLimitBackoff {
+    /// Return whether requests are currently held back
     fn active(&self) -> bool {
         self.skip_until.is_some_and(|t| SystemTime::now() < t)
     }
@@ -91,18 +102,21 @@ pub(crate) enum ClaudeUsageStatus {
     Error,
 }
 
-/// Inference usage state
+/// Inference usage state, with one entry per account of each provider
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct InferenceUsageModuleState {
-    claude_status: ClaudeUsageStatus,
-    chatgpt_windows: Option<Vec<UsageWindow>>,
+    claude_statuses: Vec<ClaudeUsageStatus>,
+    chatgpt_statuses: Vec<Option<Vec<UsageWindow>>>,
 }
 
 impl InferenceUsageModuleState {
-    /// Whether some provider usage is missing
+    /// Return whether some account usage is missing
     fn is_degraded(&self) -> bool {
-        self.chatgpt_windows.is_none()
-            || !matches!(self.claude_status, ClaudeUsageStatus::Available { .. })
+        self.chatgpt_statuses.iter().any(Option::is_none)
+            || self
+                .claude_statuses
+                .iter()
+                .any(|status| !matches!(status, ClaudeUsageStatus::Available { .. }))
     }
 }
 
@@ -125,6 +139,10 @@ const QUOTA_ICONS: [&str; 9] = [
 const CLAUDE_H5_WINDOW: Duration = Duration::from_hours(5);
 /// Duration of the Claude long rolling window
 const CLAUDE_D7_WINDOW: Duration = Duration::from_hours(7 * 24);
+/// Prefix of the Claude credentials files, relative to the home directory
+const CLAUDE_TOKEN_PREFIX: &str = ".config/claude/.credentials";
+/// Prefix of the Codex auth files, relative to the home directory
+const CODEX_AUTH_PREFIX: &str = ".config/codex/auth";
 const CLAUDE_USAGE_URL: &str = "https://claude.ai/settings/usage";
 const CLAUDE_OAUTH_CLIENT_ID: &str = "9d1c250a-e61b-44d9-88ed-5944d1962f5e";
 const CHATGPT_USAGE_URL: &str = "https://chatgpt.com/codex/settings/usage";
@@ -143,14 +161,14 @@ const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 const DEGRADED_HOLD: Duration = Duration::from_mins(1);
 /// Shortest delay between updates while retrying through a degraded update
 const DEGRADED_MIN_DELAY: Duration = Duration::from_secs(3);
-/// Shortest delay a provider is left alone after answering with a rate limit, before jitter
+/// Shortest delay an account is left alone after a rate limit, before jitter
 const RATE_LIMIT_MIN_DELAY: Duration = Duration::from_mins(5);
-/// Longest delay a provider is left alone after answering with a rate limit, before jitter
+/// Longest delay an account is left alone after a rate limit, before jitter
 ///
 /// Jitter stretches an emitted delay by up to as much again, so it is a ceiling on the escalation
 /// rather than on the wait itself.
 const RATE_LIMIT_MAX_DELAY: Duration = Duration::from_hours(1);
-/// Escalation curve of the delay a rate limited provider is left alone for
+/// Escalation curve of the delay a rate limited account is left alone for
 const RATE_LIMIT_BACKOFF: backon::ExponentialBuilder = backon::ExponentialBuilder::new()
     .with_jitter()
     .with_min_delay(RATE_LIMIT_MIN_DELAY)
@@ -292,25 +310,44 @@ impl InferenceUsageModule {
                 .timeout_connect(Some(CONNECT_TIMEOUT))
                 .build(),
         );
-        let home = env::var("HOME").unwrap();
-        let claude_token_path = PathBuf::from(&home).join(".config/claude/.credentials.json");
-        let codex_auth_path = PathBuf::from(&home).join(".config/codex/auth.json");
         Self {
             client,
-            claude_token_path,
-            claude_rate_limit: RateLimitBackoff::new(),
-            chatgpt_rate_limit: RateLimitBackoff::new(),
-            claude_auth_failed_mtime: None,
-            codex_auth_path,
+            home_path: env::var("HOME").unwrap(),
+            claude_accounts: HashMap::new(),
+            chatgpt_accounts: HashMap::new(),
             degraded_backoff: DEGRADED_BACKOFF.build(),
             degraded_since: None,
             last_complete_state: None,
         }
     }
 
+    /// Return the `<prefix>.json` file of the default account, followed by the `<prefix>-*.json`
+    /// files of the extra ones
+    ///
+    /// The default path is listed whether it exists or not.
+    fn account_paths(home: &str, prefix: &str) -> Vec<PathBuf> {
+        let mut paths = vec![PathBuf::from(format!("{home}/{prefix}.json"))];
+        // Escape the home directory, it would otherwise be a glob pattern of its own
+        let extra_pattern = format!("{}/{prefix}-*.json", glob::Pattern::escape(home));
+        match glob::glob(&extra_pattern) {
+            Ok(entries) => paths.extend(entries.filter_map(|entry| {
+                entry
+                    .inspect_err(|error| log::error!("Failed to list credentials: {error}"))
+                    .ok()
+            })),
+            Err(error) => log::error!("Invalid credentials pattern {extra_pattern:?}: {error}"),
+        }
+        paths
+    }
+
+    /// Drop the state of the accounts missing from `paths`
+    fn retain_accounts<T>(accounts: &mut HashMap<PathBuf, T>, paths: &[PathBuf]) {
+        accounts.retain(|path, _| paths.contains(path));
+    }
+
     /// Delay before the next update, shortened while retrying through a degraded update
     ///
-    /// A provider throttling us is the one thing worth waiting out, so it holds the update back to
+    /// A rate limited account is the one thing worth waiting out, so it holds the update back to
     /// its nominal interval.
     fn next_delay(&mut self) -> Duration {
         let delay = if self.degraded_since.is_some() && !self.rate_limited() {
@@ -332,13 +369,16 @@ impl InferenceUsageModule {
         DEGRADED_HOLD.checked_sub(since.elapsed().ok()?)
     }
 
-    /// Whether a provider is currently holding us back
+    /// Return whether an account is currently holding us back
     fn rate_limited(&self) -> bool {
-        self.claude_rate_limit.active() || self.chatgpt_rate_limit.active()
+        self.claude_accounts
+            .values()
+            .any(|account| account.rate_limit.active())
+            || self.chatgpt_accounts.values().any(RateLimitBackoff::active)
     }
 
-    fn fetch_chatgpt_usage(&self) -> Result<Vec<UsageWindow>, ProviderFetchError> {
-        let auth_data = fs::read_to_string(&self.codex_auth_path)
+    fn fetch_chatgpt_usage(&self, path: &Path) -> Result<Vec<UsageWindow>, ProviderFetchError> {
+        let auth_data = fs::read_to_string(path)
             .context("Failed to read codex auth")
             .map_err(ProviderFetchError::Other)?;
         let auth: CodexAuth =
@@ -387,46 +427,51 @@ impl InferenceUsageModule {
             .collect()
     }
 
-    fn update_chatgpt_usage(&mut self) -> Option<Vec<UsageWindow>> {
-        if self.chatgpt_rate_limit.active() {
-            log::debug!("Skipping ChatGPT usage: rate limited");
+    fn update_chatgpt_usage(&mut self, path: &Path) -> Option<Vec<UsageWindow>> {
+        if self
+            .chatgpt_accounts
+            .get(path)
+            .is_some_and(RateLimitBackoff::active)
+        {
+            log::debug!("Skipping ChatGPT usage for {path:?}: rate limited");
             return None;
         }
 
-        let result = self.fetch_chatgpt_usage().or_else(|error| {
+        let result = self.fetch_chatgpt_usage(path).or_else(|error| {
             if !matches!(error, ProviderFetchError::AuthInvalid) {
                 return Err(error);
             }
-            log::warn!("ChatGPT usage: authentication invalid (401), attempting token refresh");
-            self.refresh_chatgpt_token()?;
-            self.fetch_chatgpt_usage()
+            log::warn!("ChatGPT usage for {path:?}: auth invalid (401), refreshing token");
+            self.refresh_chatgpt_token(path)?;
+            self.fetch_chatgpt_usage(path)
         });
 
+        let rate_limit = self.chatgpt_accounts.entry(path.to_owned()).or_default();
         match result {
             Ok(windows) => {
-                self.chatgpt_rate_limit.reset();
+                rate_limit.reset();
                 if windows.is_empty() {
-                    log::error!("ChatGPT usage: no rate limit windows");
+                    log::error!("ChatGPT usage for {path:?}: no rate limit windows");
                     None
                 } else {
                     Some(windows)
                 }
             }
             Err(ProviderFetchError::RateLimited) => {
-                let delay = self.chatgpt_rate_limit.hit();
-                log::warn!("ChatGPT usage: rate limited, backing off for {delay:?}");
+                let delay = rate_limit.hit();
+                log::warn!("ChatGPT usage for {path:?}: rate limited, backing off for {delay:?}");
                 None
             }
             Err(error) => {
-                log::error!("ChatGPT usage: {error}");
+                log::error!("ChatGPT usage for {path:?}: {error}");
                 None
             }
         }
     }
 
-    fn refresh_chatgpt_token(&self) -> Result<(), ProviderFetchError> {
-        let auth_data = fs::read_to_string(&self.codex_auth_path)
-            .context("Failed to read codex auth for refresh")?;
+    fn refresh_chatgpt_token(&self, path: &Path) -> Result<(), ProviderFetchError> {
+        let auth_data =
+            fs::read_to_string(path).context("Failed to read codex auth for refresh")?;
         let mut auth: serde_json::Value =
             serde_json::from_str(&auth_data).context("Failed to deserialize codex auth")?;
 
@@ -468,17 +513,14 @@ impl InferenceUsageModule {
             tokens.insert("id_token".to_owned(), id_token.into());
         }
 
-        Self::overwrite_json(&self.codex_auth_path, &auth)
-            .context("Failed to write refreshed codex auth")?;
+        Self::overwrite_json(path, &auth).context("Failed to write refreshed codex auth")?;
 
-        log::info!("Codex token refreshed");
+        log::info!("Codex token refreshed for {path:?}");
         Ok(())
     }
 
-    fn claude_token_mtime(&self) -> Option<SystemTime> {
-        fs::metadata(&self.claude_token_path)
-            .and_then(|m| m.modified())
-            .ok()
+    fn token_mtime(path: &Path) -> Option<SystemTime> {
+        fs::metadata(path).and_then(|m| m.modified()).ok()
     }
 
     /// Quota left and share of `window_len` remaining before `window` resets
@@ -499,8 +541,11 @@ impl InferenceUsageModule {
         }
     }
 
-    fn fetch_claude_usage(&self) -> Result<(UsageWindow, UsageWindow), ProviderFetchError> {
-        let creds_data = fs::read_to_string(&self.claude_token_path)
+    fn fetch_claude_usage(
+        &self,
+        path: &Path,
+    ) -> Result<(UsageWindow, UsageWindow), ProviderFetchError> {
+        let creds_data = fs::read_to_string(path)
             .context("Failed to read credentials")
             .map_err(ProviderFetchError::Other)?;
         let creds: ClaudeCredentials =
@@ -533,61 +578,62 @@ impl InferenceUsageModule {
         ))
     }
 
-    fn update_claude_status(&mut self) -> ClaudeUsageStatus {
+    fn update_claude_status(&mut self, path: &Path) -> ClaudeUsageStatus {
         // Skip if auth failed and token file unchanged, or if rate-limit backoff active
-        if let Some(failed_mtime) = self.claude_auth_failed_mtime
-            && self.claude_token_mtime() == Some(failed_mtime)
-        {
-            log::debug!("Skipping Claude usage: auth invalid, token unchanged");
-            return ClaudeUsageStatus::AuthInvalid;
-        }
-        if self.claude_rate_limit.active() {
-            log::debug!("Skipping Claude usage: rate limited");
-            return ClaudeUsageStatus::Error;
+        if let Some(account) = self.claude_accounts.get(path) {
+            if let Some(failed_mtime) = account.auth_failed_mtime
+                && Self::token_mtime(path) == Some(failed_mtime)
+            {
+                log::debug!("Skipping Claude usage for {path:?}: auth invalid, token unchanged");
+                return ClaudeUsageStatus::AuthInvalid;
+            }
+            if account.rate_limit.active() {
+                log::debug!("Skipping Claude usage for {path:?}: rate limited");
+                return ClaudeUsageStatus::Error;
+            }
         }
 
         // Mtime of the credentials the failing request used, captured before each attempt to avoid
         // a race where a login rewrites them between our read and the mtime probe
-        let mut tried_creds_mtime = self.claude_token_mtime();
+        let mut tried_creds_mtime = Self::token_mtime(path);
 
-        let result = self.fetch_claude_usage().or_else(|error| {
+        let result = self.fetch_claude_usage(path).or_else(|error| {
             if !matches!(error, ProviderFetchError::AuthInvalid) {
                 return Err(error);
             }
-            log::warn!("Claude usage: authentication invalid (401), attempting token refresh");
-            self.refresh_claude_token()?;
-            tried_creds_mtime = self.claude_token_mtime();
-            self.fetch_claude_usage()
+            log::warn!("Claude usage for {path:?}: auth invalid (401), refreshing token");
+            self.refresh_claude_token(path)?;
+            tried_creds_mtime = Self::token_mtime(path);
+            self.fetch_claude_usage(path)
         });
 
+        let account = self.claude_accounts.entry(path.to_owned()).or_default();
         match result {
             Ok((h5, d7)) => {
-                self.claude_auth_failed_mtime = None;
-                self.claude_rate_limit.reset();
+                account.auth_failed_mtime = None;
+                account.rate_limit.reset();
                 ClaudeUsageStatus::Available { h5, d7 }
             }
             Err(ProviderFetchError::AuthInvalid) => {
-                log::error!(
-                    "Claude usage: authentication invalid, waiting for a credentials change"
-                );
-                self.claude_auth_failed_mtime = tried_creds_mtime;
+                log::error!("Claude usage for {path:?}: auth invalid until credentials change");
+                account.auth_failed_mtime = tried_creds_mtime;
                 ClaudeUsageStatus::AuthInvalid
             }
             Err(ProviderFetchError::RateLimited) => {
-                let delay = self.claude_rate_limit.hit();
-                log::warn!("Claude usage: rate limited, backing off for {delay:?}");
+                let delay = account.rate_limit.hit();
+                log::warn!("Claude usage for {path:?}: rate limited, backing off for {delay:?}");
                 ClaudeUsageStatus::Error
             }
             Err(ProviderFetchError::Other(error)) => {
-                log::error!("Claude usage: {error}");
+                log::error!("Claude usage for {path:?}: {error}");
                 ClaudeUsageStatus::Error
             }
         }
     }
 
-    fn refresh_claude_token(&self) -> Result<(), ProviderFetchError> {
-        let creds_data = fs::read_to_string(&self.claude_token_path)
-            .context("Failed to read credentials for refresh")?;
+    fn refresh_claude_token(&self, path: &Path) -> Result<(), ProviderFetchError> {
+        let creds_data =
+            fs::read_to_string(path).context("Failed to read credentials for refresh")?;
         let mut creds: ClaudeCredentials =
             serde_json::from_str(&creds_data).context("Failed to deserialize credentials")?;
 
@@ -618,11 +664,10 @@ impl InferenceUsageModule {
             + tok.expires_in * 1000;
         creds.claude_ai_oauth.expires_at = expires_at;
 
-        Self::overwrite_json(&self.claude_token_path, &creds)
-            .context("Failed to write refreshed credentials")?;
+        Self::overwrite_json(path, &creds).context("Failed to write refreshed credentials")?;
 
         log::info!(
-            "Claude token refreshed, expires in {} seconds",
+            "Claude token refreshed for {path:?}, expires in {} seconds",
             tok.expires_in
         );
         Ok(())
@@ -670,11 +715,8 @@ impl InferenceUsageModule {
             .collect()
     }
 
-    fn provider_markup<S>(label: &str, usage: S, url: &str) -> markup::Markup
-    where
-        S: Into<String>,
-    {
-        markup::Markup::new(format!("{} {}", label, usage.into())).action(
+    fn provider_markup(label: &str, usage: &str, url: &str) -> markup::Markup {
+        markup::Markup::new(format!("{label} {usage}")).action(
             markup::PolybarActionType::ClickLeft,
             format!("firefox --new-tab '{url}'"),
         )
@@ -704,13 +746,23 @@ impl RenderablePolybarModule for InferenceUsageModule {
     }
 
     fn update(&mut self) -> Self::State {
-        let claude_status = self.update_claude_status();
+        let claude_paths = Self::account_paths(&self.home_path, CLAUDE_TOKEN_PREFIX);
+        Self::retain_accounts(&mut self.claude_accounts, &claude_paths);
+        let claude_statuses = claude_paths
+            .iter()
+            .map(|path| self.update_claude_status(path))
+            .collect();
 
-        let chatgpt_windows = self.update_chatgpt_usage();
+        let chatgpt_paths = Self::account_paths(&self.home_path, CODEX_AUTH_PREFIX);
+        Self::retain_accounts(&mut self.chatgpt_accounts, &chatgpt_paths);
+        let chatgpt_statuses = chatgpt_paths
+            .iter()
+            .map(|path| self.update_chatgpt_usage(path))
+            .collect();
 
         let state = InferenceUsageModuleState {
-            claude_status,
-            chatgpt_windows,
+            claude_statuses,
+            chatgpt_statuses,
         };
 
         if !state.is_degraded() {
@@ -737,20 +789,25 @@ impl RenderablePolybarModule for InferenceUsageModule {
                 .fg(theme::Color::Attention)
                 .into_string()
         };
-        let claude = match &state.claude_status {
-            ClaudeUsageStatus::Available { h5, d7 } => Self::render_windows([h5, d7]),
-            ClaudeUsageStatus::AuthInvalid => ICON_UNAUTHORIZED.to_owned(),
-            ClaudeUsageStatus::Error => warning(),
-        };
+        let claude = state
+            .claude_statuses
+            .iter()
+            .map(|status| match status {
+                ClaudeUsageStatus::Available { h5, d7 } => Self::render_windows([h5, d7]),
+                ClaudeUsageStatus::AuthInvalid => ICON_UNAUTHORIZED.to_owned(),
+                ClaudeUsageStatus::Error => warning(),
+            })
+            .join(" ");
         let chatgpt = state
-            .chatgpt_windows
-            .as_ref()
-            .map_or_else(warning, Self::render_windows);
+            .chatgpt_statuses
+            .iter()
+            .map(|windows| windows.as_ref().map_or_else(warning, Self::render_windows))
+            .join(" ");
 
         [
             markup::Markup::new(ICON_INFERENCE_USAGE).fg(theme::Color::MainIcon),
-            Self::provider_markup(ICON_CLAUDE, claude, CLAUDE_USAGE_URL),
-            Self::provider_markup(ICON_CHATGPT, chatgpt, CHATGPT_USAGE_URL),
+            Self::provider_markup(ICON_CLAUDE, &claude, CLAUDE_USAGE_URL),
+            Self::provider_markup(ICON_CHATGPT, &chatgpt, CHATGPT_USAGE_URL),
         ]
         .into_iter()
         .map(markup::Markup::into_string)
@@ -762,12 +819,174 @@ impl RenderablePolybarModule for InferenceUsageModule {
 #[cfg(test)]
 #[expect(clippy::shadow_unrelated)]
 mod tests {
-    use std::iter;
+    use std::{collections::HashSet, iter};
 
     use super::*;
 
     /// Slack absorbing the time a test itself takes
     const MARGIN: Duration = Duration::from_secs(1);
+
+    /// Return a test account's rate limit backoff, created on first use
+    fn rate_limit(module: &mut InferenceUsageModule, claude: bool) -> &mut RateLimitBackoff {
+        let path = PathBuf::from("account");
+        if claude {
+            &mut module.claude_accounts.entry(path).or_default().rate_limit
+        } else {
+            module.chatgpt_accounts.entry(path).or_default()
+        }
+    }
+
+    fn usage_window(quota_left_pct: f64, time_left_frac: f64) -> UsageWindow {
+        UsageWindow {
+            quota_left_pct,
+            time_left_frac: Some(time_left_frac),
+        }
+    }
+
+    #[test]
+    fn test_account_paths() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let home = dir.path().to_str().unwrap();
+        let default = dir.path().join(".credentials.json");
+
+        // A provider with no credentials file at all still has its default account
+        assert_eq!(
+            InferenceUsageModule::account_paths(home, ".credentials"),
+            vec![default.clone()]
+        );
+
+        for name in [
+            ".credentials.json",
+            ".credentials-work.json",
+            ".credentials-perso.json",
+            ".credentials-work.json.bak",
+            "auth-work.json",
+        ] {
+            fs::write(dir.path().join(name), "").unwrap();
+        }
+        // Default first and only once, extra accounts sorted after it, unrelated files left out
+        assert_eq!(
+            InferenceUsageModule::account_paths(home, ".credentials"),
+            vec![
+                default,
+                dir.path().join(".credentials-perso.json"),
+                dir.path().join(".credentials-work.json"),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_claude_state_is_per_account() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let failed = dir.path().join("failed.json");
+        let limited = dir.path().join("limited.json");
+        let other = dir.path().join("other.json");
+        // Credentials no request can be built from, so none is sent
+        fs::write(&failed, "{}").unwrap();
+        fs::write(&other, "{}").unwrap();
+
+        let mut module = InferenceUsageModule::new();
+        module
+            .claude_accounts
+            .entry(failed.clone())
+            .or_default()
+            .auth_failed_mtime = InferenceUsageModule::token_mtime(&failed);
+        module
+            .claude_accounts
+            .entry(limited)
+            .or_default()
+            .rate_limit
+            .hit();
+
+        // A skipped account leaves the others alone, which an entry of their own attests
+        assert_eq!(
+            module.update_claude_status(&failed),
+            ClaudeUsageStatus::AuthInvalid
+        );
+        assert_eq!(
+            module.update_claude_status(&other),
+            ClaudeUsageStatus::Error
+        );
+        assert!(module.claude_accounts.contains_key(&other));
+    }
+
+    #[test]
+    fn test_chatgpt_state_is_per_account() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let limited = dir.path().join("limited.json");
+        let other = dir.path().join("other.json");
+        // Credentials no request can be built from, so none is sent
+        fs::write(&other, "{}").unwrap();
+
+        let mut module = InferenceUsageModule::new();
+        module.chatgpt_accounts.entry(limited).or_default().hit();
+
+        // A skipped account leaves the others alone, which an entry of their own attests
+        assert_eq!(module.update_chatgpt_usage(&other), None);
+        assert!(module.chatgpt_accounts.contains_key(&other));
+    }
+
+    #[test]
+    fn test_update_discovers_accounts_and_prunes_deleted() {
+        let home = tempfile::TempDir::new().unwrap();
+        for relative in [
+            ".config/claude/.credentials.json",
+            ".config/claude/.credentials-work.json",
+            ".config/codex/auth.json",
+            ".config/codex/auth-personal.json",
+            ".config/codex/auth-work.json",
+        ] {
+            let path = home.path().join(relative);
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            // Credentials no request can be built from, so none is sent
+            fs::write(path, "{}").unwrap();
+        }
+        let claude_default = home.path().join(".config/claude/.credentials.json");
+        let claude_work = home.path().join(".config/claude/.credentials-work.json");
+        let chatgpt_default = home.path().join(".config/codex/auth.json");
+        let chatgpt_perso = home.path().join(".config/codex/auth-personal.json");
+        let chatgpt_work = home.path().join(".config/codex/auth-work.json");
+
+        let mut module = InferenceUsageModule::new();
+        module.home_path = home.path().to_str().unwrap().to_owned();
+        for path in [
+            claude_work.clone(),
+            home.path().join(".config/claude/.credentials-deleted.json"),
+        ] {
+            module
+                .claude_accounts
+                .entry(path)
+                .or_default()
+                .rate_limit
+                .hit();
+        }
+        for path in [
+            chatgpt_work.clone(),
+            home.path().join(".config/codex/auth-deleted.json"),
+        ] {
+            module.chatgpt_accounts.entry(path).or_default().hit();
+        }
+
+        // Every discovered account is updated, the default one first
+        assert_eq!(
+            module.update(),
+            InferenceUsageModuleState {
+                claude_statuses: vec![ClaudeUsageStatus::Error, ClaudeUsageStatus::Error],
+                chatgpt_statuses: vec![None, None, None],
+            }
+        );
+        // A deleted credentials file takes its state with it
+        assert_eq!(
+            module.claude_accounts.keys().collect::<HashSet<_>>(),
+            HashSet::from([&claude_default, &claude_work])
+        );
+        assert_eq!(
+            module.chatgpt_accounts.keys().collect::<HashSet<_>>(),
+            HashSet::from([&chatgpt_default, &chatgpt_perso, &chatgpt_work])
+        );
+        // A live one keeps its backoff, which no update of its own would set back
+        assert!(module.rate_limited());
+    }
 
     #[test]
     fn test_render_quota() {
@@ -790,15 +1009,8 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_render() {
-        let module = InferenceUsageModule::new();
-
-        let mi = |s| {
-            markup::Markup::new(s)
-                .fg(theme::Color::MainIcon)
-                .into_string()
-        };
+    /// Assert `state` renders with the given usage for each provider
+    fn assert_render(state: &InferenceUsageModuleState, [claude, chatgpt]: [&str; 2]) {
         let provider = |label: &str, usage: &str, url: &str| {
             markup::Markup::new(format!("{label} {usage}"))
                 .action(
@@ -807,31 +1019,65 @@ mod tests {
                 )
                 .into_string()
         };
+        assert_eq!(
+            InferenceUsageModule::new().render(state),
+            [
+                markup::Markup::new(ICON_INFERENCE_USAGE)
+                    .fg(theme::Color::MainIcon)
+                    .into_string(),
+                provider(ICON_CLAUDE, claude, CLAUDE_USAGE_URL),
+                provider(ICON_CHATGPT, chatgpt, CHATGPT_USAGE_URL),
+            ]
+            .join(" ")
+        );
+    }
+
+    #[test]
+    fn test_render_accounts() {
         let att_warn = markup::Markup::new(ICON_WARNING)
             .fg(theme::Color::Attention)
             .into_string();
-        let w = |quota_left_pct, time_left_frac| UsageWindow {
-            quota_left_pct,
-            time_left_frac: Some(time_left_frac),
+
+        // Extra accounts render after the default one, space separated
+        let state = InferenceUsageModuleState {
+            claude_statuses: vec![
+                ClaudeUsageStatus::Available {
+                    h5: usage_window(50.0, 0.75),
+                    d7: usage_window(80.0, 0.9),
+                },
+                ClaudeUsageStatus::AuthInvalid,
+            ],
+            chatgpt_statuses: vec![
+                Some(vec![usage_window(81.0, 0.5)]),
+                None,
+                Some(vec![usage_window(20.0, 0.3)]),
+            ],
         };
-        let assert_render = |state: &InferenceUsageModuleState, [claude, chatgpt]: [&str; 2]| {
-            assert_eq!(
-                module.render(state),
-                [
-                    mi(ICON_INFERENCE_USAGE),
-                    provider(ICON_CLAUDE, claude, CLAUDE_USAGE_URL),
-                    provider(ICON_CHATGPT, chatgpt, CHATGPT_USAGE_URL),
-                ]
-                .join(" ")
-            );
-        };
+        assert_render(
+            &state,
+            [
+                &format!(
+                    "%{{F#819500}}󰪡%{{F-}}%{{F#819500}}▆%{{F-}}%{{F#819500}}󰪣%{{F-}}%{{F#819500}}█%{{F-}} {ICON_UNAUTHORIZED}"
+                ),
+                &format!(
+                    "%{{F#819500}}󰪣%{{F-}}%{{F#819500}}▄%{{F-}} {att_warn} %{{F#ac8300}}󰪟%{{F-}}%{{F#ac8300}}▃%{{F-}}"
+                ),
+            ],
+        );
+    }
+
+    #[test]
+    fn test_render() {
+        let att_warn = markup::Markup::new(ICON_WARNING)
+            .fg(theme::Color::Attention)
+            .into_string();
 
         let state = InferenceUsageModuleState {
-            claude_status: ClaudeUsageStatus::Available {
-                h5: w(50.0, 0.75),
-                d7: w(80.0, 0.9),
-            },
-            chatgpt_windows: Some(vec![w(81.0, 0.5), w(90.0, 1.0)]),
+            claude_statuses: vec![ClaudeUsageStatus::Available {
+                h5: usage_window(50.0, 0.75),
+                d7: usage_window(80.0, 0.9),
+            }],
+            chatgpt_statuses: vec![Some(vec![usage_window(81.0, 0.5), usage_window(90.0, 1.0)])],
         };
         assert_render(
             &state,
@@ -843,17 +1089,17 @@ mod tests {
 
         // All errors
         let state = InferenceUsageModuleState {
-            claude_status: ClaudeUsageStatus::Error,
-            chatgpt_windows: None,
+            claude_statuses: vec![ClaudeUsageStatus::Error],
+            chatgpt_statuses: vec![None],
         };
         assert_render(&state, [&att_warn, &att_warn]);
 
         let state = InferenceUsageModuleState {
-            claude_status: ClaudeUsageStatus::Available {
-                h5: w(95.0, 0.125),
-                d7: w(95.0, 0.4),
-            },
-            chatgpt_windows: Some(vec![w(95.0, 0.0), w(95.0, 0.6)]),
+            claude_statuses: vec![ClaudeUsageStatus::Available {
+                h5: usage_window(95.0, 0.125),
+                d7: usage_window(95.0, 0.4),
+            }],
+            chatgpt_statuses: vec![Some(vec![usage_window(95.0, 0.0), usage_window(95.0, 0.6)])],
         };
         assert_render(
             &state,
@@ -865,8 +1111,8 @@ mod tests {
 
         // Claude auth invalid (401)
         let state = InferenceUsageModuleState {
-            claude_status: ClaudeUsageStatus::AuthInvalid,
-            chatgpt_windows: Some(vec![w(20.0, 0.3), w(5.0, 0.8)]),
+            claude_statuses: vec![ClaudeUsageStatus::AuthInvalid],
+            chatgpt_statuses: vec![Some(vec![usage_window(20.0, 0.3), usage_window(5.0, 0.8)])],
         };
         assert_render(
             &state,
@@ -878,14 +1124,14 @@ mod tests {
 
         // Claude 5h window not running yet: full quota, no reset bar
         let state = InferenceUsageModuleState {
-            claude_status: ClaudeUsageStatus::Available {
+            claude_statuses: vec![ClaudeUsageStatus::Available {
                 h5: UsageWindow {
                     quota_left_pct: 100.0,
                     time_left_frac: None,
                 },
-                d7: w(80.0, 0.9),
-            },
-            chatgpt_windows: None,
+                d7: usage_window(80.0, 0.9),
+            }],
+            chatgpt_statuses: vec![None],
         };
         assert_render(
             &state,
@@ -897,8 +1143,8 @@ mod tests {
 
         // ChatGPT with a single window renders a single quota icon, still with its reset bar
         let state = InferenceUsageModuleState {
-            claude_status: ClaudeUsageStatus::Error,
-            chatgpt_windows: Some(vec![w(82.0, 1.0)]),
+            claude_statuses: vec![ClaudeUsageStatus::Error],
+            chatgpt_statuses: vec![Some(vec![usage_window(82.0, 1.0)])],
         };
         assert_render(&state, [&att_warn, "%{F#819500}󰪣%{F-}%{F#819500}█%{F-}"]);
     }
@@ -986,27 +1232,28 @@ mod tests {
 
     #[test]
     fn test_is_degraded() {
-        let w = || UsageWindow {
-            quota_left_pct: 50.0,
-            time_left_frac: Some(0.5),
+        let available = || ClaudeUsageStatus::Available {
+            h5: usage_window(50.0, 0.5),
+            d7: usage_window(50.0, 0.5),
         };
         let complete = InferenceUsageModuleState {
-            claude_status: ClaudeUsageStatus::Available { h5: w(), d7: w() },
-            chatgpt_windows: Some(vec![w()]),
+            claude_statuses: vec![available()],
+            chatgpt_statuses: vec![Some(vec![usage_window(50.0, 0.5)])],
         };
         assert!(!complete.is_degraded());
 
         for state in [
             InferenceUsageModuleState {
-                claude_status: ClaudeUsageStatus::Error,
+                claude_statuses: vec![ClaudeUsageStatus::AuthInvalid],
+                ..complete.clone()
+            },
+            // A single failing account is enough
+            InferenceUsageModuleState {
+                claude_statuses: vec![available(), ClaudeUsageStatus::Error],
                 ..complete.clone()
             },
             InferenceUsageModuleState {
-                claude_status: ClaudeUsageStatus::AuthInvalid,
-                ..complete.clone()
-            },
-            InferenceUsageModuleState {
-                chatgpt_windows: None,
+                chatgpt_statuses: vec![Some(vec![usage_window(50.0, 0.5)]), None],
                 ..complete.clone()
             },
         ] {
@@ -1042,43 +1289,31 @@ mod tests {
         for claude in [true, false] {
             let mut module = InferenceUsageModule::new();
             module.degraded_since = Some(SystemTime::now());
-            if claude {
-                module.claude_rate_limit.hit();
-            } else {
-                module.chatgpt_rate_limit.hit();
-            }
+            rate_limit(&mut module, claude).hit();
             assert_eq!(module.next_delay(), UPDATE_INTERVAL);
             assert_eq!(module.next_delay(), UPDATE_INTERVAL);
 
             // Once it stops, the backoff resumes from its floor rather than mid-curve
-            if claude {
-                module.claude_rate_limit.reset();
-            } else {
-                module.chatgpt_rate_limit.reset();
-            }
+            rate_limit(&mut module, claude).reset();
             assert!((DEGRADED_MIN_DELAY..(2 * DEGRADED_MIN_DELAY)).contains(&module.next_delay()));
         }
     }
 
     #[test]
     fn test_next_delay_capped_by_degraded_hold() {
-        let w = UsageWindow {
-            quota_left_pct: 50.0,
-            time_left_frac: Some(0.5),
-        };
         let complete = InferenceUsageModuleState {
-            claude_status: ClaudeUsageStatus::Available {
-                h5: w.clone(),
-                d7: w.clone(),
-            },
-            chatgpt_windows: Some(vec![w]),
+            claude_statuses: vec![ClaudeUsageStatus::Available {
+                h5: usage_window(50.0, 0.5),
+                d7: usage_window(50.0, 0.5),
+            }],
+            chatgpt_statuses: vec![Some(vec![usage_window(50.0, 0.5)])],
         };
         let mut module = InferenceUsageModule::new();
         module.degraded_since = Some(SystemTime::now());
         module.last_complete_state = Some(complete.clone());
 
         // A rate limit stretches the interval past the hold, the held state still expires on time
-        module.claude_rate_limit.hit();
+        rate_limit(&mut module, true).hit();
         assert!(module.next_delay() <= DEGRADED_HOLD);
 
         // A hold about to run out does not collapse the delay into a busy retry
@@ -1140,7 +1375,7 @@ mod tests {
 
     #[test]
     fn test_rate_limit_backoff() {
-        let mut backoff = RateLimitBackoff::new();
+        let mut backoff = RateLimitBackoff::default();
         assert!(!backoff.active());
 
         // Jitter can double each computed delay
