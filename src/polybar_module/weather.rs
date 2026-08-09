@@ -182,7 +182,6 @@ mod tests {
     }
 
     #[test]
-    #[expect(clippy::float_cmp)]
     fn test_config_deserialization() {
         let toml = "
 [module.weather]

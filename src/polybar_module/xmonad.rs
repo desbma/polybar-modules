@@ -101,7 +101,7 @@ impl RenderablePolybarModule for XmonadModule {
         if self.pipe.is_none() {
             None
         } else {
-            assert!(!self.pending_data.is_empty());
+            assert_ne!(self.pending_data, "");
             Some(XmonadModuleState {
                 layout: mem::take(&mut self.pending_data),
             })

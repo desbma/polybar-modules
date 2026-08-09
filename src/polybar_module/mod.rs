@@ -39,6 +39,7 @@ pub(crate) mod todotxt;
 pub(crate) mod weather;
 pub(crate) mod xmonad;
 
+#[expect(clippy::large_enum_variant)]
 pub(crate) enum PolybarModule {
     ArchUpdates(arch_updates::ArchUpdatesModule),
     Autolock(autolock::AutolockModule),
