@@ -715,11 +715,16 @@ impl InferenceUsageModule {
             .collect()
     }
 
-    fn provider_markup(label: &str, usage: &str, url: &str) -> markup::Markup {
-        markup::Markup::new(format!("{label} {usage}")).action(
-            markup::PolybarActionType::ClickLeft,
-            format!("firefox --new-tab '{url}'"),
-        )
+    fn provider_markup(label: &str, usage: &str, default: bool, url: &str) -> String {
+        if !default {
+            return usage.to_owned();
+        }
+        markup::Markup::new(format!("{label} {usage}"))
+            .action(
+                markup::PolybarActionType::ClickLeft,
+                format!("firefox --new-tab '{url}'"),
+            )
+            .into_string()
     }
 
     /// Serialize `value` to a sibling temporary file and atomically rename it over `path`
@@ -789,6 +794,7 @@ impl RenderablePolybarModule for InferenceUsageModule {
                 .fg(theme::Color::Attention)
                 .into_string()
         };
+        // Accounts render in credentials file order, the default one first
         let claude = state
             .claude_statuses
             .iter()
@@ -797,21 +803,28 @@ impl RenderablePolybarModule for InferenceUsageModule {
                 ClaudeUsageStatus::AuthInvalid => ICON_UNAUTHORIZED.to_owned(),
                 ClaudeUsageStatus::Error => warning(),
             })
+            .enumerate()
+            .map(|(index, usage)| {
+                Self::provider_markup(ICON_CLAUDE, &usage, index == 0, CLAUDE_USAGE_URL)
+            })
             .join(" ");
         let chatgpt = state
             .chatgpt_statuses
             .iter()
             .map(|windows| windows.as_ref().map_or_else(warning, Self::render_windows))
+            .enumerate()
+            .map(|(index, usage)| {
+                Self::provider_markup(ICON_CHATGPT, &usage, index == 0, CHATGPT_USAGE_URL)
+            })
             .join(" ");
 
         [
-            markup::Markup::new(ICON_INFERENCE_USAGE).fg(theme::Color::MainIcon),
-            Self::provider_markup(ICON_CLAUDE, &claude, CLAUDE_USAGE_URL),
-            Self::provider_markup(ICON_CHATGPT, &chatgpt, CHATGPT_USAGE_URL),
+            markup::Markup::new(ICON_INFERENCE_USAGE)
+                .fg(theme::Color::MainIcon)
+                .into_string(),
+            claude,
+            chatgpt,
         ]
-        .into_iter()
-        .map(markup::Markup::into_string)
-        .collect::<Vec<_>>()
         .join(" ")
     }
 }
@@ -1009,15 +1022,19 @@ mod tests {
         }
     }
 
-    /// Assert `state` renders with the given usage for each provider
-    fn assert_render(state: &InferenceUsageModuleState, [claude, chatgpt]: [&str; 2]) {
-        let provider = |label: &str, usage: &str, url: &str| {
-            markup::Markup::new(format!("{label} {usage}"))
+    /// Assert `state` renders with the given usage for each account of each provider
+    fn assert_render(state: &InferenceUsageModuleState, [claude, chatgpt]: [&[&str]; 2]) {
+        let provider = |label: &str, usages: &[&str], url: &str| {
+            let (default, extra) = usages.split_first().unwrap();
+            let default = markup::Markup::new(format!("{label} {default}"))
                 .action(
                     markup::PolybarActionType::ClickLeft,
                     format!("firefox --new-tab '{url}'"),
                 )
-                .into_string()
+                .into_string();
+            iter::once(default.as_str())
+                .chain(extra.iter().copied())
+                .join(" ")
         };
         assert_eq!(
             InferenceUsageModule::new().render(state),
@@ -1056,12 +1073,15 @@ mod tests {
         assert_render(
             &state,
             [
-                &format!(
-                    "%{{F#819500}}󰪡%{{F-}}%{{F#819500}}▆%{{F-}}%{{F#819500}}󰪣%{{F-}}%{{F#819500}}█%{{F-}} {ICON_UNAUTHORIZED}"
-                ),
-                &format!(
-                    "%{{F#819500}}󰪣%{{F-}}%{{F#819500}}▄%{{F-}} {att_warn} %{{F#ac8300}}󰪟%{{F-}}%{{F#ac8300}}▃%{{F-}}"
-                ),
+                &[
+                    "%{F#819500}󰪡%{F-}%{F#819500}▆%{F-}%{F#819500}󰪣%{F-}%{F#819500}█%{F-}",
+                    ICON_UNAUTHORIZED,
+                ],
+                &[
+                    "%{F#819500}󰪣%{F-}%{F#819500}▄%{F-}",
+                    &att_warn,
+                    "%{F#ac8300}󰪟%{F-}%{F#ac8300}▃%{F-}",
+                ],
             ],
         );
     }
@@ -1082,8 +1102,8 @@ mod tests {
         assert_render(
             &state,
             [
-                "%{F#819500}󰪡%{F-}%{F#819500}▆%{F-}%{F#819500}󰪣%{F-}%{F#819500}█%{F-}",
-                "%{F#819500}󰪣%{F-}%{F#819500}▄%{F-}%{F#819500}󰪤%{F-}%{F#819500}█%{F-}",
+                &["%{F#819500}󰪡%{F-}%{F#819500}▆%{F-}%{F#819500}󰪣%{F-}%{F#819500}█%{F-}"],
+                &["%{F#819500}󰪣%{F-}%{F#819500}▄%{F-}%{F#819500}󰪤%{F-}%{F#819500}█%{F-}"],
             ],
         );
 
@@ -1092,7 +1112,7 @@ mod tests {
             claude_statuses: vec![ClaudeUsageStatus::Error],
             chatgpt_statuses: vec![None],
         };
-        assert_render(&state, [&att_warn, &att_warn]);
+        assert_render(&state, [&[&att_warn], &[&att_warn]]);
 
         let state = InferenceUsageModuleState {
             claude_statuses: vec![ClaudeUsageStatus::Available {
@@ -1104,8 +1124,8 @@ mod tests {
         assert_render(
             &state,
             [
-                "%{F#819500}󰪤%{F-}%{F#819500}▁%{F-}%{F#819500}󰪤%{F-}%{F#819500}▄%{F-}",
-                "%{F#819500}󰪤%{F-}%{F#819500}▁%{F-}%{F#819500}󰪤%{F-}%{F#819500}▅%{F-}",
+                &["%{F#819500}󰪤%{F-}%{F#819500}▁%{F-}%{F#819500}󰪤%{F-}%{F#819500}▄%{F-}"],
+                &["%{F#819500}󰪤%{F-}%{F#819500}▁%{F-}%{F#819500}󰪤%{F-}%{F#819500}▅%{F-}"],
             ],
         );
 
@@ -1117,8 +1137,8 @@ mod tests {
         assert_render(
             &state,
             [
-                ICON_UNAUTHORIZED,
-                "%{F#ac8300}󰪟%{F-}%{F#ac8300}▃%{F-}%{F#d56500}󰪞%{F-}%{F#d56500}▇%{F-}",
+                &[ICON_UNAUTHORIZED],
+                &["%{F#ac8300}󰪟%{F-}%{F#ac8300}▃%{F-}%{F#d56500}󰪞%{F-}%{F#d56500}▇%{F-}"],
             ],
         );
 
@@ -1136,8 +1156,8 @@ mod tests {
         assert_render(
             &state,
             [
-                "%{F#819500}󰪥%{F-}%{F#819500}󰪣%{F-}%{F#819500}█%{F-}",
-                &att_warn,
+                &["%{F#819500}󰪥%{F-}%{F#819500}󰪣%{F-}%{F#819500}█%{F-}"],
+                &[&att_warn],
             ],
         );
 
@@ -1146,7 +1166,10 @@ mod tests {
             claude_statuses: vec![ClaudeUsageStatus::Error],
             chatgpt_statuses: vec![Some(vec![usage_window(82.0, 1.0)])],
         };
-        assert_render(&state, [&att_warn, "%{F#819500}󰪣%{F-}%{F#819500}█%{F-}"]);
+        assert_render(
+            &state,
+            [&[&att_warn], &["%{F#819500}󰪣%{F-}%{F#819500}█%{F-}"]],
+        );
     }
 
     #[test]
