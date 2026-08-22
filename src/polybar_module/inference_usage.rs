@@ -1,7 +1,11 @@
 use std::{
     collections::HashMap,
     env, fs,
+    io::{self, Write as _},
+    os::unix::fs::MetadataExt as _,
     path::{Path, PathBuf},
+    sync::mpsc,
+    thread,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
@@ -181,6 +185,24 @@ const DEGRADED_BACKOFF: backon::ExponentialBuilder = backon::ExponentialBuilder:
     .with_min_delay(DEGRADED_MIN_DELAY)
     .with_max_delay(UPDATE_INTERVAL)
     .without_max_times();
+// The constants below are the lock parameters Claude Code passes to `proper-lockfile`
+/// Escalation curve of the delay between lock acquisition attempts
+const CLAUDE_LOCK_BACKOFF: backon::ExponentialBuilder = backon::ExponentialBuilder::new()
+    .with_min_delay(Duration::from_millis(100))
+    .with_max_delay(Duration::from_secs(1))
+    .with_max_times(10);
+/// Lock serializing writes to the credentials directory
+const CLAUDE_STORAGE_LOCK: ClaudeLockParams = ClaudeLockParams {
+    dir: ".storage-write.lock",
+    stale: Duration::from_secs(15),
+    heartbeat: None,
+};
+/// Lock serializing OAuth grants, held across the refresh request
+const CLAUDE_REFRESH_LOCK: ClaudeLockParams = ClaudeLockParams {
+    dir: ".oauth_refresh.lock",
+    stale: Duration::from_secs(60),
+    heartbeat: Some(Duration::from_secs(5)),
+};
 
 /// Failure of a provider usage fetch
 #[derive(Debug, thiserror::Error)]
@@ -207,21 +229,24 @@ impl ProviderFetchError {
     }
 }
 
-#[derive(serde::Deserialize, serde::Serialize)]
+/// Fields read from a Claude credentials file
+///
+/// The file belongs to Claude Code and holds more than these. Updates to it go through
+/// `serde_json::Value`; serializing this projection back over it would delete the rest.
+#[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ClaudeCredentials {
     claude_ai_oauth: ClaudeOauth,
 }
 
-#[derive(serde::Deserialize, serde::Serialize)]
+#[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ClaudeOauth {
     access_token: String,
     refresh_token: String,
-    expires_at: u64,
     scopes: Vec<String>,
-    subscription_type: String,
-    rate_limit_tier: String,
+    /// OAuth client the tokens were minted by, absent for the built-in one
+    client_id: Option<String>,
 }
 
 #[derive(serde::Deserialize)]
@@ -237,11 +262,12 @@ struct ClaudeUsageWindow {
     resets_at: Option<DateTime<Utc>>,
 }
 
+#[cfg_attr(test, derive(Debug, Eq, PartialEq))]
 #[derive(serde::Serialize)]
 struct ClaudeTokenRequest {
     grant_type: &'static str,
     refresh_token: String,
-    client_id: &'static str,
+    client_id: String,
     scope: String,
 }
 
@@ -252,6 +278,10 @@ struct ClaudeTokenResponse {
     expires_in: u64,
 }
 
+/// Fields read from a Codex auth file
+///
+/// The file belongs to the Codex CLI and holds more than these. Updates to it go through
+/// `serde_json::Value`; serializing this projection back over it would delete the rest.
 #[derive(serde::Deserialize)]
 struct CodexAuth {
     tokens: CodexTokens,
@@ -260,6 +290,7 @@ struct CodexAuth {
 #[derive(serde::Deserialize)]
 struct CodexTokens {
     access_token: String,
+    refresh_token: String,
     account_id: Option<String>,
 }
 
@@ -294,6 +325,127 @@ struct CodexTokenResponse {
     id_token: Option<String>,
     access_token: Option<String>,
     refresh_token: Option<String>,
+}
+
+/// Parameters of one of the locks Claude Code takes around credentials work
+struct ClaudeLockParams {
+    /// Directory whose creation takes the lock, relative to the credentials directory
+    dir: &'static str,
+    /// Age at which a held lock is considered abandoned
+    stale: Duration,
+    /// Delay between refreshes of the lock mtime, `None` to leave it untouched
+    heartbeat: Option<Duration>,
+}
+
+/// Hold of one of the locks Claude Code takes around credentials work
+///
+/// A lock is the `ClaudeLockParams::dir` directory of the credentials directory. A hold that runs
+/// without a heartbeat must stay well below `ClaudeLockParams::stale`.
+struct ClaudeLock {
+    lock_dir: PathBuf,
+    /// Inode of the directory this hold created
+    inode: u64,
+    /// Channel end whose drop stops the heartbeat, `None` for a lock that has none
+    #[expect(dead_code)]
+    heartbeat: Option<mpsc::Sender<()>>,
+}
+
+impl ClaudeLock {
+    /// Take the lock `params` designates in `dir`, waiting out its holder or stealing an abandoned
+    /// one
+    fn acquire(dir: &Path, params: &ClaudeLockParams) -> anyhow::Result<Self> {
+        let lock_dir = dir.join(params.dir);
+        let mut backoff = CLAUDE_LOCK_BACKOFF.build();
+        // Steal at most once, so that two acquisitions racing to steal the same lock cannot loop
+        let mut may_steal = true;
+        loop {
+            match fs::create_dir(&lock_dir) {
+                Ok(()) => return Self::held(lock_dir, params),
+                Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {}
+                Err(error) => {
+                    return Err(
+                        anyhow::Error::new(error).context(format!("Failed to create {lock_dir:?}"))
+                    );
+                }
+            }
+            if may_steal && Self::stale(&lock_dir, params.stale) {
+                log::warn!("Stealing abandoned lock {lock_dir:?}");
+                may_steal = false;
+                // A lock already gone was released in between, the next attempt takes it
+                if let Err(error) = fs::remove_dir(&lock_dir)
+                    && error.kind() != io::ErrorKind::NotFound
+                {
+                    return Err(
+                        anyhow::Error::new(error).context(format!("Failed to remove {lock_dir:?}"))
+                    );
+                }
+                continue;
+            }
+            let delay = backoff
+                .next()
+                .with_context(|| format!("Lock {lock_dir:?} is held"))?;
+            thread::sleep(delay);
+        }
+    }
+
+    /// Build the hold of the lock directory just created, starting its heartbeat if configured
+    fn held(lock_dir: PathBuf, params: &ClaudeLockParams) -> anyhow::Result<Self> {
+        // Refreshing the directory opened here rather than the path leaves a lock stolen from this
+        // hold on its own mtime
+        let lock_file =
+            fs::File::open(&lock_dir).with_context(|| format!("Failed to open {lock_dir:?}"))?;
+        let inode = lock_file.metadata()?.ino();
+        let heartbeat = params
+            .heartbeat
+            .map(|interval| Self::spawn_heartbeat(lock_file, interval));
+        Ok(Self {
+            lock_dir,
+            inode,
+            heartbeat,
+        })
+    }
+
+    /// Refresh `lock_file`'s mtime every `interval`, until the returned sender is dropped
+    fn spawn_heartbeat(lock_file: fs::File, interval: Duration) -> mpsc::Sender<()> {
+        let (sender, receiver) = mpsc::channel();
+        thread::spawn(move || {
+            while matches!(
+                receiver.recv_timeout(interval),
+                Err(mpsc::RecvTimeoutError::Timeout)
+            ) {
+                let times = fs::FileTimes::new().set_modified(SystemTime::now());
+                if let Err(error) = lock_file.set_times(times) {
+                    log::error!("Failed to refresh lock mtime: {error}");
+                    break;
+                }
+            }
+        });
+        sender
+    }
+
+    /// Return whether the lock has been left untouched long enough to be stolen
+    fn stale(lock_dir: &Path, stale: Duration) -> bool {
+        fs::metadata(lock_dir)
+            .and_then(|metadata| metadata.modified())
+            .ok()
+            .and_then(|mtime| mtime.elapsed().ok())
+            .is_some_and(|age| age > stale)
+    }
+}
+
+impl Drop for ClaudeLock {
+    fn drop(&mut self) {
+        match fs::metadata(&self.lock_dir).map(|metadata| metadata.ino()) {
+            Ok(inode) if inode == self.inode => {
+                if let Err(error) = fs::remove_dir(&self.lock_dir) {
+                    log::error!("Failed to release lock {:?}: {error}", self.lock_dir);
+                }
+            }
+            // Removing a lock another writer took over would leave it writing unprotected
+            Ok(_) => log::warn!("Lock {:?} was taken over, leaving it", self.lock_dir),
+            Err(error) => log::error!("Failed to stat lock {:?}: {error}", self.lock_dir),
+        }
+    }
 }
 
 impl InferenceUsageModule {
@@ -378,11 +530,7 @@ impl InferenceUsageModule {
     }
 
     fn fetch_chatgpt_usage(&self, path: &Path) -> Result<Vec<UsageWindow>, ProviderFetchError> {
-        let auth_data = fs::read_to_string(path)
-            .context("Failed to read codex auth")
-            .map_err(ProviderFetchError::Other)?;
-        let auth: CodexAuth =
-            serde_json::from_str(&auth_data).map_err(|e| ProviderFetchError::Other(e.into()))?;
+        let auth: CodexAuth = Self::read_json(path)?;
 
         let mut request = self
             .client
@@ -470,21 +618,12 @@ impl InferenceUsageModule {
     }
 
     fn refresh_chatgpt_token(&self, path: &Path) -> Result<(), ProviderFetchError> {
-        let auth_data =
-            fs::read_to_string(path).context("Failed to read codex auth for refresh")?;
-        let mut auth: serde_json::Value =
-            serde_json::from_str(&auth_data).context("Failed to deserialize codex auth")?;
-
-        let refresh_token = auth
-            .get("tokens")
-            .and_then(|t| t.get("refresh_token"))
-            .and_then(serde_json::Value::as_str)
-            .context("Missing refresh_token in codex auth")?;
+        let auth: CodexAuth = Self::read_json(path)?;
 
         let request_body = CodexTokenRequest {
             client_id: CODEX_OAUTH_CLIENT_ID,
             grant_type: "refresh_token",
-            refresh_token: refresh_token.to_owned(),
+            refresh_token: auth.tokens.refresh_token,
         };
 
         let tok: CodexTokenResponse = self
@@ -499,10 +638,34 @@ impl InferenceUsageModule {
             .read_json()
             .map_err(|e| ProviderFetchError::Other(e.into()))?;
 
+        if Self::apply_chatgpt_token(path, &request_body.refresh_token, tok)? {
+            log::info!("Codex token refreshed for {path:?}");
+        } else {
+            log::warn!("Codex auth {path:?} replaced by another writer, discarding response");
+        }
+        Ok(())
+    }
+
+    /// Store `tok` in the codex auth at `path` if `refresh_token` is still the one it holds, and
+    /// return whether it was updated
+    fn apply_chatgpt_token(
+        path: &Path,
+        refresh_token: &str,
+        tok: CodexTokenResponse,
+    ) -> anyhow::Result<bool> {
+        let mut auth: serde_json::Value = Self::read_json(path)?;
         let tokens = auth
             .get_mut("tokens")
             .and_then(serde_json::Value::as_object_mut)
             .context("Missing tokens object in codex auth")?;
+        if tokens
+            .get("refresh_token")
+            .and_then(serde_json::Value::as_str)
+            != Some(refresh_token)
+        {
+            return Ok(false);
+        }
+
         if let Some(access_token) = tok.access_token {
             tokens.insert("access_token".to_owned(), access_token.into());
         }
@@ -513,10 +676,8 @@ impl InferenceUsageModule {
             tokens.insert("id_token".to_owned(), id_token.into());
         }
 
-        Self::overwrite_json(path, &auth).context("Failed to write refreshed codex auth")?;
-
-        log::info!("Codex token refreshed for {path:?}");
-        Ok(())
+        Self::write_json_in_place(path, &auth).context("Failed to write refreshed codex auth")?;
+        Ok(true)
     }
 
     fn token_mtime(path: &Path) -> Option<SystemTime> {
@@ -545,11 +706,7 @@ impl InferenceUsageModule {
         &self,
         path: &Path,
     ) -> Result<(UsageWindow, UsageWindow), ProviderFetchError> {
-        let creds_data = fs::read_to_string(path)
-            .context("Failed to read credentials")
-            .map_err(ProviderFetchError::Other)?;
-        let creds: ClaudeCredentials =
-            serde_json::from_str(&creds_data).map_err(|e| ProviderFetchError::Other(e.into()))?;
+        let creds: ClaudeCredentials = Self::read_json(path)?;
 
         let response = self
             .client
@@ -632,17 +789,15 @@ impl InferenceUsageModule {
     }
 
     fn refresh_claude_token(&self, path: &Path) -> Result<(), ProviderFetchError> {
-        let creds_data =
-            fs::read_to_string(path).context("Failed to read credentials for refresh")?;
-        let mut creds: ClaudeCredentials =
-            serde_json::from_str(&creds_data).context("Failed to deserialize credentials")?;
+        let dir = path
+            .parent()
+            .with_context(|| format!("Path has no parent directory: {path:?}"))?;
+        // Claude Code holds this one across its own grant: a refresh token is single use, so two
+        // concurrent grants of the same one leave the loser with credentials it cannot refresh
+        let _grant_lock = ClaudeLock::acquire(dir, &CLAUDE_REFRESH_LOCK)?;
 
-        let request_body = ClaudeTokenRequest {
-            grant_type: "refresh_token",
-            refresh_token: creds.claude_ai_oauth.refresh_token.clone(),
-            client_id: CLAUDE_OAUTH_CLIENT_ID,
-            scope: creds.claude_ai_oauth.scopes.join(" "),
-        };
+        let creds: ClaudeCredentials = Self::read_json(path)?;
+        let request_body = Self::claude_token_request(creds);
         let tok: ClaudeTokenResponse = self
             .client
             .post("https://platform.claude.com/v1/oauth/token")
@@ -652,25 +807,70 @@ impl InferenceUsageModule {
             .read_json()
             .map_err(|e| ProviderFetchError::Other(e.into()))?;
 
-        creds.claude_ai_oauth.access_token = tok.access_token;
-        if let Some(new_refresh) = tok.refresh_token {
-            creds.claude_ai_oauth.refresh_token = new_refresh;
+        let expires_in = tok.expires_in;
+        // The write lock is only taken now: it goes stale in less time than a slow request takes,
+        // which would let Claude Code steal it mid flight
+        let _write_lock = ClaudeLock::acquire(dir, &CLAUDE_STORAGE_LOCK)?;
+        if Self::apply_claude_token(path, &request_body.refresh_token, tok)? {
+            log::info!("Claude token refreshed for {path:?}, expires in {expires_in} seconds");
+        } else {
+            log::warn!("Credentials {path:?} refreshed by another writer, discarding response");
         }
+        Ok(())
+    }
+
+    /// Build the refresh request `creds` calls for
+    ///
+    /// The refresh token is bound to the client that minted it, which the credentials name when it
+    /// is not the built-in one.
+    fn claude_token_request(creds: ClaudeCredentials) -> ClaudeTokenRequest {
+        let oauth = creds.claude_ai_oauth;
+        ClaudeTokenRequest {
+            grant_type: "refresh_token",
+            refresh_token: oauth.refresh_token,
+            client_id: oauth
+                .client_id
+                .unwrap_or_else(|| CLAUDE_OAUTH_CLIENT_ID.to_owned()),
+            scope: oauth.scopes.join(" "),
+        }
+    }
+
+    /// Store `tok` in the credentials at `path` if `refresh_token` is still the one they hold, and
+    /// return whether they were updated
+    ///
+    /// Caller holds the credentials write lock.
+    fn apply_claude_token(
+        path: &Path,
+        refresh_token: &str,
+        tok: ClaudeTokenResponse,
+    ) -> anyhow::Result<bool> {
+        let mut creds: serde_json::Value = Self::read_json(path)?;
+        let oauth = creds
+            .get_mut("claudeAiOauth")
+            .and_then(serde_json::Value::as_object_mut)
+            .context("Missing claudeAiOauth object in credentials")?;
+        if oauth
+            .get("refreshToken")
+            .and_then(serde_json::Value::as_str)
+            != Some(refresh_token)
+        {
+            return Ok(false);
+        }
+
         #[expect(clippy::cast_possible_truncation)]
         let expires_at = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_millis() as u64
             + tok.expires_in * 1000;
-        creds.claude_ai_oauth.expires_at = expires_at;
+        oauth.insert("accessToken".to_owned(), tok.access_token.into());
+        oauth.insert("expiresAt".to_owned(), expires_at.into());
+        if let Some(new_refresh_token) = tok.refresh_token {
+            oauth.insert("refreshToken".to_owned(), new_refresh_token.into());
+        }
 
-        Self::overwrite_json(path, &creds).context("Failed to write refreshed credentials")?;
-
-        log::info!(
-            "Claude token refreshed for {path:?}, expires in {} seconds",
-            tok.expires_in
-        );
-        Ok(())
+        Self::write_json_in_place(path, &creds).context("Failed to write refreshed credentials")?;
+        Ok(true)
     }
 
     fn quota_color(quota_left_pct: f64) -> theme::Color {
@@ -727,14 +927,25 @@ impl InferenceUsageModule {
             .into_string()
     }
 
-    /// Serialize `value` to a sibling temporary file and atomically rename it over `path`
-    fn overwrite_json<T: serde::Serialize>(path: &Path, value: &T) -> anyhow::Result<()> {
-        let dir = path
-            .parent()
-            .with_context(|| format!("Path has no parent directory: {path:?}"))?;
-        let mut file = tempfile::NamedTempFile::new_in(dir)?;
-        serde_json::to_writer(&mut file, value)?;
-        file.persist(path)?;
+    /// Deserialize the JSON file at `path`
+    fn read_json<T: serde::de::DeserializeOwned>(path: &Path) -> anyhow::Result<T> {
+        let data = fs::read_to_string(path).with_context(|| format!("Failed to read {path:?}"))?;
+        serde_json::from_str(&data).with_context(|| format!("Failed to deserialize {path:?}"))
+    }
+
+    /// Serialize `value` over the existing `path`, truncating it rather than replacing it
+    ///
+    /// The file keeps its inode, which a bind mount of it into a sandbox pins for the life of the
+    /// sandbox. A file that is gone is an error: it was deleted by a logout, and recreating it
+    /// would restore revoked credentials.
+    fn write_json_in_place<T: serde::Serialize>(path: &Path, value: &T) -> anyhow::Result<()> {
+        let data = serde_json::to_vec(value)?;
+        fs::OpenOptions::new()
+            .write(true)
+            .truncate(true)
+            .open(path)
+            .with_context(|| format!("Failed to open {path:?}"))?
+            .write_all(&data)?;
         Ok(())
     }
 }
@@ -832,12 +1043,14 @@ impl RenderablePolybarModule for InferenceUsageModule {
 #[cfg(test)]
 #[expect(clippy::shadow_unrelated)]
 mod tests {
-    use std::{collections::HashSet, iter};
+    use std::{collections::HashSet, iter, time::Instant};
 
     use super::*;
 
     /// Slack absorbing the time a test itself takes
     const MARGIN: Duration = Duration::from_secs(1);
+    /// Delay between checks of a condition a background thread brings about
+    const POLL_INTERVAL: Duration = Duration::from_millis(5);
 
     /// Return a test account's rate limit backoff, created on first use
     fn rate_limit(module: &mut InferenceUsageModule, claude: bool) -> &mut RateLimitBackoff {
@@ -854,6 +1067,368 @@ mod tests {
             quota_left_pct,
             time_left_frac: Some(time_left_frac),
         }
+    }
+
+    #[expect(clippy::cast_possible_truncation)]
+    fn unix_time_ms() -> u64 {
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis() as u64
+    }
+
+    /// Build Claude Code credentials containing fields unknown to this module
+    fn claude_credentials(
+        access_token: &str,
+        refresh_token: &str,
+        expires_at: u64,
+    ) -> serde_json::Value {
+        serde_json::json!({
+            "claudeAiOauth": {
+                "accessToken": access_token,
+                "refreshToken": refresh_token,
+                "expiresAt": expires_at,
+                "refreshTokenExpiresAt": 1_800_000_000_000_u64,
+                "scopes": ["user:inference", "user:profile"],
+                "subscriptionType": "max",
+                "rateLimitTier": "default_max",
+                "clientId": "00000000-0000-4000-8000-000000000000",
+            },
+            "someFutureKey": {"nested": [1, 2]},
+        })
+    }
+
+    fn claude_token_response() -> ClaudeTokenResponse {
+        ClaudeTokenResponse {
+            access_token: "new-access".to_owned(),
+            refresh_token: Some("new-refresh".to_owned()),
+            expires_in: 3600,
+        }
+    }
+
+    /// Write `creds` to a new credentials file and return its path, kept alive by `dir`
+    fn write_claude_credentials(dir: &tempfile::TempDir, creds: &serde_json::Value) -> PathBuf {
+        let path = dir.path().join(".credentials.json");
+        fs::write(&path, serde_json::to_vec(creds).unwrap()).unwrap();
+        path
+    }
+
+    #[test]
+    fn test_claude_token_request() {
+        let creds: ClaudeCredentials =
+            serde_json::from_value(claude_credentials("old-access", "old-refresh", 1)).unwrap();
+        // A refresh token is bound to the client that minted it, which the credentials name
+        assert_eq!(
+            InferenceUsageModule::claude_token_request(creds),
+            ClaudeTokenRequest {
+                grant_type: "refresh_token",
+                refresh_token: "old-refresh".to_owned(),
+                client_id: "00000000-0000-4000-8000-000000000000".to_owned(),
+                scope: "user:inference user:profile".to_owned(),
+            }
+        );
+
+        // Credentials minted by the built-in client name none
+        let mut creds = claude_credentials("old-access", "old-refresh", 1);
+        creds["claudeAiOauth"]
+            .as_object_mut()
+            .unwrap()
+            .remove("clientId");
+        let creds: ClaudeCredentials = serde_json::from_value(creds).unwrap();
+        assert_eq!(
+            InferenceUsageModule::claude_token_request(creds).client_id,
+            CLAUDE_OAUTH_CLIENT_ID
+        );
+    }
+
+    #[test]
+    fn test_apply_claude_token() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let path =
+            write_claude_credentials(&dir, &claude_credentials("old-access", "old-refresh", 1));
+        let inode = fs::metadata(&path).unwrap().ino();
+
+        let before = unix_time_ms();
+        assert!(
+            InferenceUsageModule::apply_claude_token(&path, "old-refresh", claude_token_response())
+                .unwrap()
+        );
+        let after = unix_time_ms();
+
+        let written: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+        let expires_at = written["claudeAiOauth"]["expiresAt"].as_u64().unwrap();
+        assert!((before + 3_600_000..=after + 3_600_000).contains(&expires_at));
+        // Everything Claude Code stores in the file survives the refresh, known to us or not
+        assert_eq!(
+            written,
+            claude_credentials("new-access", "new-refresh", expires_at)
+        );
+        // A bind mount of the credentials into a sandbox outlives the refresh only if the inode does
+        assert_eq!(fs::metadata(&path).unwrap().ino(), inode);
+
+        // A response rotating nothing leaves the stored refresh token in place
+        assert!(
+            InferenceUsageModule::apply_claude_token(
+                &path,
+                "new-refresh",
+                ClaudeTokenResponse {
+                    access_token: "newer-access".to_owned(),
+                    refresh_token: None,
+                    expires_in: 3600,
+                }
+            )
+            .unwrap()
+        );
+
+        let written: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+        let expires_at = written["claudeAiOauth"]["expiresAt"].as_u64().unwrap();
+        assert_eq!(
+            written,
+            claude_credentials("newer-access", "new-refresh", expires_at)
+        );
+    }
+
+    #[test]
+    fn test_apply_claude_token_discards_response_of_a_rotated_token() {
+        let dir = tempfile::TempDir::new().unwrap();
+        // Another writer refreshed the credentials while our own request was in flight
+        let creds = claude_credentials("other-access", "other-refresh", 2);
+        let path = write_claude_credentials(&dir, &creds);
+
+        assert!(
+            !InferenceUsageModule::apply_claude_token(
+                &path,
+                "old-refresh",
+                claude_token_response()
+            )
+            .unwrap()
+        );
+
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&fs::read_to_string(&path).unwrap()).unwrap(),
+            creds
+        );
+    }
+
+    /// Build Codex CLI auth containing fields unknown to this module
+    fn codex_auth(access_token: &str, refresh_token: &str) -> serde_json::Value {
+        serde_json::json!({
+            "OPENAI_API_KEY": null,
+            "tokens": {
+                "id_token": "header.payload.signature",
+                "access_token": access_token,
+                "refresh_token": refresh_token,
+                "account_id": "00000000-0000-4000-8000-000000000000",
+            },
+            "last_refresh": "2026-05-14T17:10:00.000Z",
+            "someFutureKey": {"nested": [1, 2]},
+        })
+    }
+
+    fn codex_token_response() -> CodexTokenResponse {
+        CodexTokenResponse {
+            id_token: Some("new.id.token".to_owned()),
+            access_token: Some("new-access".to_owned()),
+            refresh_token: Some("new-refresh".to_owned()),
+        }
+    }
+
+    /// Write `auth` to a new codex auth file and return its path, kept alive by `dir`
+    fn write_codex_auth(dir: &tempfile::TempDir, auth: &serde_json::Value) -> PathBuf {
+        let path = dir.path().join("auth.json");
+        fs::write(&path, serde_json::to_vec(auth).unwrap()).unwrap();
+        path
+    }
+
+    #[test]
+    fn test_apply_chatgpt_token() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = write_codex_auth(&dir, &codex_auth("old-access", "old-refresh"));
+        let inode = fs::metadata(&path).unwrap().ino();
+
+        assert!(
+            InferenceUsageModule::apply_chatgpt_token(&path, "old-refresh", codex_token_response())
+                .unwrap()
+        );
+
+        let mut expected = codex_auth("new-access", "new-refresh");
+        expected["tokens"]["id_token"] = "new.id.token".into();
+        // Everything the Codex CLI stores in the file survives the refresh, known to us or not
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&fs::read_to_string(&path).unwrap()).unwrap(),
+            expected
+        );
+        // A bind mount of the auth file into a sandbox outlives the refresh only if the inode does
+        assert_eq!(fs::metadata(&path).unwrap().ino(), inode);
+
+        // A response rotating nothing leaves the stored refresh and id tokens in place
+        assert!(
+            InferenceUsageModule::apply_chatgpt_token(
+                &path,
+                "new-refresh",
+                CodexTokenResponse {
+                    id_token: None,
+                    access_token: Some("newer-access".to_owned()),
+                    refresh_token: None,
+                }
+            )
+            .unwrap()
+        );
+
+        expected["tokens"]["access_token"] = "newer-access".into();
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&fs::read_to_string(&path).unwrap()).unwrap(),
+            expected
+        );
+    }
+
+    #[test]
+    fn test_apply_chatgpt_token_discards_response_of_a_rotated_token() {
+        let dir = tempfile::TempDir::new().unwrap();
+        // A login replaced the auth file while our own request was in flight
+        let auth = codex_auth("other-access", "other-refresh");
+        let path = write_codex_auth(&dir, &auth);
+
+        assert!(
+            !InferenceUsageModule::apply_chatgpt_token(
+                &path,
+                "old-refresh",
+                codex_token_response()
+            )
+            .unwrap()
+        );
+
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&fs::read_to_string(&path).unwrap()).unwrap(),
+            auth
+        );
+    }
+
+    #[test]
+    fn test_claude_lock_waits_for_its_holder() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let held = Duration::from_millis(300);
+
+        let lock = ClaudeLock::acquire(dir.path(), &CLAUDE_STORAGE_LOCK).unwrap();
+        assert!(dir.path().join(CLAUDE_STORAGE_LOCK.dir).is_dir());
+        let started = Instant::now();
+        let holder = thread::spawn(move || {
+            thread::sleep(held);
+            drop(lock);
+        });
+
+        // The lock is waited out rather than written through
+        let lock = ClaudeLock::acquire(dir.path(), &CLAUDE_STORAGE_LOCK).unwrap();
+        assert!(started.elapsed() >= held);
+        holder.join().unwrap();
+
+        drop(lock);
+        assert!(!dir.path().join(CLAUDE_STORAGE_LOCK.dir).exists());
+    }
+
+    #[test]
+    fn test_write_json_in_place_does_not_create() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = dir.path().join("gone.json");
+
+        // Credentials a logout deleted stay deleted, rather than coming back with a lax mode
+        assert!(InferenceUsageModule::write_json_in_place(&path, &serde_json::json!({})).is_err());
+        assert!(!path.exists());
+    }
+
+    #[test]
+    fn test_claude_lock_leaves_a_taken_over_lock_alone() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let lock_dir = dir.path().join(CLAUDE_STORAGE_LOCK.dir);
+        let lock = ClaudeLock::acquire(dir.path(), &CLAUDE_STORAGE_LOCK).unwrap();
+        // Pins our own inode, which the filesystem would otherwise be free to reuse below
+        let original = fs::File::open(&lock_dir).unwrap();
+        let original_inode = original.metadata().unwrap().ino();
+
+        // Held for so long that another writer took the lock over
+        fs::remove_dir(&lock_dir).unwrap();
+        fs::create_dir(&lock_dir).unwrap();
+        let taken_over = fs::metadata(&lock_dir).unwrap().ino();
+        assert_ne!(taken_over, original_inode);
+        drop(lock);
+
+        assert_eq!(fs::metadata(&lock_dir).unwrap().ino(), taken_over);
+        drop(original);
+    }
+
+    #[test]
+    fn test_claude_lock_steals_abandoned_lock() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let lock_dir = dir.path().join(CLAUDE_STORAGE_LOCK.dir);
+        fs::create_dir(&lock_dir).unwrap();
+        // A holder that died leaves its lock behind, with an mtime it stopped refreshing
+        let abandoned = SystemTime::now() - CLAUDE_STORAGE_LOCK.stale - MARGIN;
+        fs::File::open(&lock_dir)
+            .unwrap()
+            .set_times(fs::FileTimes::new().set_modified(abandoned))
+            .unwrap();
+
+        let lock = ClaudeLock::acquire(dir.path(), &CLAUDE_STORAGE_LOCK).unwrap();
+
+        drop(lock);
+        assert!(!lock_dir.exists());
+    }
+
+    /// Wait for `file`'s mtime to move, panicking once the deadline passes
+    fn wait_for_mtime_change(file: &fs::File) {
+        let mtime = || file.metadata().unwrap().modified().unwrap();
+        let initial = mtime();
+        let deadline = Instant::now() + MARGIN;
+        while mtime() == initial {
+            assert!(Instant::now() < deadline);
+            thread::sleep(POLL_INTERVAL);
+        }
+    }
+
+    #[test]
+    fn test_claude_lock_heartbeat_refreshes_its_own_lock_until_released() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let interval = Duration::from_millis(20);
+        let params = ClaudeLockParams {
+            heartbeat: Some(interval),
+            ..CLAUDE_REFRESH_LOCK
+        };
+        let lock_dir = dir.path().join(params.dir);
+
+        let lock = ClaudeLock::acquire(dir.path(), &params).unwrap();
+        // Pins our own inode, which the filesystem would otherwise be free to reuse below
+        let original = fs::File::open(&lock_dir).unwrap();
+        // A hold spanning the refresh request does not get to look abandoned
+        wait_for_mtime_change(&original);
+
+        // Held for so long that another writer took the lock over
+        fs::remove_dir(&lock_dir).unwrap();
+        fs::create_dir(&lock_dir).unwrap();
+        let successor = fs::File::open(&lock_dir).unwrap();
+        assert_ne!(
+            successor.metadata().unwrap().ino(),
+            original.metadata().unwrap().ino()
+        );
+        let successor_mtime = successor.metadata().unwrap().modified().unwrap();
+
+        // The heartbeat follows the directory it locked, not whatever the path now resolves to
+        wait_for_mtime_change(&original);
+        assert_eq!(
+            successor.metadata().unwrap().modified().unwrap(),
+            successor_mtime
+        );
+
+        // Released, the heartbeat stops refreshing it
+        drop(lock);
+        thread::sleep(5 * interval);
+        let released_mtime = original.metadata().unwrap().modified().unwrap();
+        thread::sleep(5 * interval);
+        assert_eq!(
+            original.metadata().unwrap().modified().unwrap(),
+            released_mtime
+        );
     }
 
     #[test]
