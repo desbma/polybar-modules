@@ -130,20 +130,61 @@ impl From<Markup> for String {
     }
 }
 
-/// Vertical bars, from lowest to highest level
-const RAMP_ICONS: [&str; 8] = ["▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"];
+/// Icon set rendering a fraction, from empty to full
+pub(crate) struct Gauge {
+    /// Icon of an exactly empty gauge
+    empty: &'static str,
+    /// Icons between empty and full, in increasing order of fill
+    levels: &'static [&'static str],
+    /// Icon of an exactly full gauge
+    full: &'static str,
+}
 
-/// Render `frac`, clamped to 0-1, as a vertical bar
-pub(crate) fn ramp(frac: f64, color: theme::Color) -> String {
-    #[expect(
-        clippy::cast_possible_truncation,
-        clippy::cast_precision_loss,
-        clippy::cast_sign_loss
-    )]
-    let level = (frac.clamp(0.0, 1.0) * RAMP_ICONS.len() as f64).ceil() as usize;
-    #[expect(clippy::indexing_slicing)]
-    let icon = RAMP_ICONS[level.saturating_sub(1)];
-    Markup::new(icon).fg(color).into_string()
+impl Gauge {
+    /// Build a gauge drawn with circle slices
+    pub(crate) const fn circle_slices(empty: &'static str) -> Self {
+        Self {
+            empty,
+            levels: &[
+                "󰪞", // nf-md-circle_slice_1
+                "󰪟", // nf-md-circle_slice_2
+                "󰪠", // nf-md-circle_slice_3
+                "󰪡", // nf-md-circle_slice_4
+                "󰪢", // nf-md-circle_slice_5
+                "󰪣", // nf-md-circle_slice_6
+                "󰪤", // nf-md-circle_slice_7
+            ],
+            full: "󰪥", // nf-md-circle_slice_8
+        }
+    }
+
+    /// Build a gauge drawn with vertical bars
+    pub(crate) const fn ramp() -> Self {
+        Self {
+            empty: "—",
+            levels: &["▁", "▂", "▃", "▄", "▅", "▆", "▇"],
+            full: "█",
+        }
+    }
+
+    /// Render `frac` as the icon whose fill is closest to it
+    pub(crate) fn render(&self, frac: f64, color: theme::Color) -> String {
+        #[expect(
+            clippy::cast_possible_truncation,
+            clippy::cast_precision_loss,
+            clippy::cast_sign_loss
+        )]
+        let level = (frac * (self.levels.len() + 1) as f64).round() as usize;
+        #[expect(clippy::indexing_slicing)]
+        let icon = if frac <= 0.0 {
+            self.empty
+        } else if frac >= 1.0 {
+            self.full
+        } else {
+            self.levels[level.clamp(1, self.levels.len()) - 1]
+        };
+        Markup::new(icon).fg(color).into_string()
+    }
 }
 
 #[cfg(test)]
@@ -160,12 +201,28 @@ mod tests {
 
     #[test]
     fn test_ramp() {
-        assert_eq!(ramp(1.1, theme::Color::Good), "%{F#819500}█%{F-}");
-        assert_eq!(ramp(1.0, theme::Color::Good), "%{F#819500}█%{F-}");
-        assert_eq!(ramp(0.5, theme::Color::Good), "%{F#819500}▄%{F-}");
-        assert_eq!(ramp(0.125, theme::Color::Notice), "%{F#ac8300}▁%{F-}");
-        assert_eq!(ramp(0.126, theme::Color::Notice), "%{F#ac8300}▂%{F-}");
-        assert_eq!(ramp(0.0, theme::Color::Attention), "%{F#d56500}▁%{F-}");
+        for (frac, expected) in [
+            (-0.1, "%{F#819500}—%{F-}"),
+            (0.0, "%{F#819500}—%{F-}"),
+            (0.0001, "%{F#819500}▁%{F-}"),
+            (0.1874, "%{F#819500}▁%{F-}"),
+            (0.1875, "%{F#819500}▂%{F-}"),
+            (0.3124, "%{F#819500}▂%{F-}"),
+            (0.3125, "%{F#819500}▃%{F-}"),
+            (0.4374, "%{F#819500}▃%{F-}"),
+            (0.4375, "%{F#819500}▄%{F-}"),
+            (0.5624, "%{F#819500}▄%{F-}"),
+            (0.5625, "%{F#819500}▅%{F-}"),
+            (0.6874, "%{F#819500}▅%{F-}"),
+            (0.6875, "%{F#819500}▆%{F-}"),
+            (0.8124, "%{F#819500}▆%{F-}"),
+            (0.8125, "%{F#819500}▇%{F-}"),
+            (0.9999, "%{F#819500}▇%{F-}"),
+            (1.0, "%{F#819500}█%{F-}"),
+            (1.1, "%{F#819500}█%{F-}"),
+        ] {
+            assert_eq!(Gauge::ramp().render(frac, theme::Color::Good), expected);
+        }
     }
 
     #[test]

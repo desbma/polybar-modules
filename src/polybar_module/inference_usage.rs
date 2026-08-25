@@ -128,17 +128,8 @@ const ICON_INFERENCE_USAGE: &str = "󱩅";
 const ICON_CLAUDE: &str = "";
 const ICON_CHATGPT: &str = "󰫈";
 const ICON_UNAUTHORIZED: &str = "";
-const QUOTA_ICONS: [&str; 9] = [
-    "󰗖", // nf-md-alert_circle_outline
-    "󰪞", // nf-md-circle_slice_1
-    "󰪟", // nf-md-circle_slice_2
-    "󰪠", // nf-md-circle_slice_3
-    "󰪡", // nf-md-circle_slice_4
-    "󰪢", // nf-md-circle_slice_5
-    "󰪣", // nf-md-circle_slice_6
-    "󰪤", // nf-md-circle_slice_7
-    "󰪥", // nf-md-circle_slice_8
-];
+const QUOTA: markup::Gauge = markup::Gauge::circle_slices("󰗖"); // nf-md-alert_circle_outline
+const RAMP: markup::Gauge = markup::Gauge::ramp();
 /// Duration of the Claude short rolling window
 const CLAUDE_H5_WINDOW: Duration = Duration::from_hours(5);
 /// Duration of the Claude long rolling window
@@ -884,17 +875,7 @@ impl InferenceUsageModule {
     }
 
     fn render_quota(quota_left_pct: f64) -> String {
-        #[expect(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-        let pct = quota_left_pct.clamp(0.0, 100.0) as usize;
-        let icon = if pct == 0 {
-            QUOTA_ICONS[0]
-        } else {
-            #[expect(clippy::indexing_slicing)]
-            QUOTA_ICONS[1 + (pct - 1) * (QUOTA_ICONS.len() - 2) / 99]
-        };
-        markup::Markup::new(icon)
-            .fg(Self::quota_color(quota_left_pct))
-            .into_string()
+        QUOTA.render(quota_left_pct / 100.0, Self::quota_color(quota_left_pct))
     }
 
     /// Render each window quota, followed by the time left before reset for each running window
@@ -907,8 +888,7 @@ impl InferenceUsageModule {
             .map(|window| {
                 let mut quota = Self::render_quota(window.quota_left_pct);
                 if let Some(time_left_frac) = window.time_left_frac {
-                    quota +=
-                        &markup::ramp(time_left_frac, Self::quota_color(window.quota_left_pct));
+                    quota += &RAMP.render(time_left_frac, Self::quota_color(window.quota_left_pct));
                 }
                 quota
             })
@@ -1580,17 +1560,19 @@ mod tests {
     fn test_render_quota() {
         for (quota_left_pct, expected) in [
             (0.0, "%{F#d56500}󰗖%{F-}"),
+            (0.4, "%{F#d56500}󰪞%{F-}"),
             (1.0, "%{F#d56500}󰪞%{F-}"),
             (5.0, "%{F#d56500}󰪞%{F-}"),
             (10.0, "%{F#ac8300}󰪞%{F-}"),
             (20.0, "%{F#ac8300}󰪟%{F-}"),
-            (30.0, "%{F#ac8300}󰪠%{F-}"),
+            (30.0, "%{F#ac8300}󰪟%{F-}"),
             (40.0, "%{F#819500}󰪠%{F-}"),
             (50.0, "%{F#819500}󰪡%{F-}"),
             (60.0, "%{F#819500}󰪢%{F-}"),
-            (70.0, "%{F#819500}󰪢%{F-}"),
+            (70.0, "%{F#819500}󰪣%{F-}"),
             (80.0, "%{F#819500}󰪣%{F-}"),
             (90.0, "%{F#819500}󰪤%{F-}"),
+            (99.9, "%{F#819500}󰪤%{F-}"),
             (100.0, "%{F#819500}󰪥%{F-}"),
         ] {
             assert_eq!(InferenceUsageModule::render_quota(quota_left_pct), expected);
@@ -1649,13 +1631,13 @@ mod tests {
             &state,
             [
                 &[
-                    "%{F#819500}󰪡%{F-}%{F#819500}▆%{F-}%{F#819500}󰪣%{F-}%{F#819500}█%{F-}",
+                    "%{F#819500}󰪡%{F-}%{F#819500}▆%{F-}%{F#819500}󰪣%{F-}%{F#819500}▇%{F-}",
                     ICON_UNAUTHORIZED,
                 ],
                 &[
                     "%{F#819500}󰪣%{F-}%{F#819500}▄%{F-}",
                     &att_warn,
-                    "%{F#ac8300}󰪟%{F-}%{F#ac8300}▃%{F-}",
+                    "%{F#ac8300}󰪟%{F-}%{F#ac8300}▂%{F-}",
                 ],
             ],
         );
@@ -1677,7 +1659,7 @@ mod tests {
         assert_render(
             &state,
             [
-                &["%{F#819500}󰪡%{F-}%{F#819500}▆%{F-}%{F#819500}󰪣%{F-}%{F#819500}█%{F-}"],
+                &["%{F#819500}󰪡%{F-}%{F#819500}▆%{F-}%{F#819500}󰪣%{F-}%{F#819500}▇%{F-}"],
                 &["%{F#819500}󰪣%{F-}%{F#819500}▄%{F-}%{F#819500}󰪤%{F-}%{F#819500}█%{F-}"],
             ],
         );
@@ -1699,8 +1681,8 @@ mod tests {
         assert_render(
             &state,
             [
-                &["%{F#819500}󰪤%{F-}%{F#819500}▁%{F-}%{F#819500}󰪤%{F-}%{F#819500}▄%{F-}"],
-                &["%{F#819500}󰪤%{F-}%{F#819500}▁%{F-}%{F#819500}󰪤%{F-}%{F#819500}▅%{F-}"],
+                &["%{F#819500}󰪤%{F-}%{F#819500}▁%{F-}%{F#819500}󰪤%{F-}%{F#819500}▃%{F-}"],
+                &["%{F#819500}󰪤%{F-}%{F#819500}—%{F-}%{F#819500}󰪤%{F-}%{F#819500}▅%{F-}"],
             ],
         );
 
@@ -1713,7 +1695,7 @@ mod tests {
             &state,
             [
                 &[ICON_UNAUTHORIZED],
-                &["%{F#ac8300}󰪟%{F-}%{F#ac8300}▃%{F-}%{F#d56500}󰪞%{F-}%{F#d56500}▇%{F-}"],
+                &["%{F#ac8300}󰪟%{F-}%{F#ac8300}▂%{F-}%{F#d56500}󰪞%{F-}%{F#d56500}▆%{F-}"],
             ],
         );
 
@@ -1731,7 +1713,7 @@ mod tests {
         assert_render(
             &state,
             [
-                &["%{F#819500}󰪥%{F-}%{F#819500}󰪣%{F-}%{F#819500}█%{F-}"],
+                &["%{F#819500}󰪥%{F-}%{F#819500}󰪣%{F-}%{F#819500}▇%{F-}"],
                 &[&att_warn],
             ],
         );
@@ -1743,7 +1725,7 @@ mod tests {
         };
         assert_render(
             &state,
-            [&[&att_warn], &["%{F#819500}󰪣%{F-}%{F#819500}█%{F-}"]],
+            [&[&att_warn], &["%{F#819500}󰪤%{F-}%{F#819500}█%{F-}"]],
         );
     }
 

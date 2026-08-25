@@ -119,9 +119,11 @@ impl GpuNvidiaModule {
             61..=84 => theme::Color::Attention,
             _ => theme::Color::Critical,
         };
-        markup::ramp(f64::from(prct) / 100.0, color)
+        RAMP.render(f64::from(prct) / 100.0, color)
     }
 }
+
+const RAMP: markup::Gauge = markup::Gauge::ramp();
 
 const ICON_GPU: &str = "";
 
@@ -284,7 +286,7 @@ mod tests {
         });
         assert_eq!(
             module.render(&state),
-            "%{F#f1e9d2}%{F-} 98% %{F#f23749}█%{F-} 1600+2000MHz %{u#f23749}%{+u}%{F#f23749}70°C%{F-}%{-u} 200W"
+            "%{F#f1e9d2}%{F-} 98% %{F#f23749}▇%{F-} 1600+2000MHz %{u#f23749}%{+u}%{F#f23749}70°C%{F-}%{-u} 200W"
         );
 
         let state = None;

@@ -124,29 +124,11 @@ impl ProgressBarServerModule {
 
     fn render_progress(progress: u32) -> String {
         assert!(progress <= 100);
-        let icon = if progress == 0 {
-            PROGRESS_ICONS[0]
-        } else {
-            #[expect(clippy::indexing_slicing)]
-            PROGRESS_ICONS[1 + (progress as usize - 1) * (PROGRESS_ICONS.len() - 2) / 99]
-        };
-        markup::Markup::new(icon)
-            .fg(theme::Color::Foreground)
-            .into_string()
+        PROGRESS.render(f64::from(progress) / 100.0, theme::Color::Foreground)
     }
 }
 
-const PROGRESS_ICONS: [&str; 9] = [
-    "", // nf-fa-hourglass_start
-    "󰪞", // nf-md-circle_slice_1
-    "󰪟", // nf-md-circle_slice_2
-    "󰪠", // nf-md-circle_slice_3
-    "󰪡", // nf-md-circle_slice_4
-    "󰪢", // nf-md-circle_slice_5
-    "󰪣", // nf-md-circle_slice_6
-    "󰪤", // nf-md-circle_slice_7
-    "󰪥", // nf-md-circle_slice_8
-];
+const PROGRESS: markup::Gauge = markup::Gauge::circle_slices(""); // nf-fa-hourglass_start
 
 const ICON_PROGRESSBAR_SERVER: &str = "";
 
@@ -234,7 +216,7 @@ mod tests {
         });
         assert_eq!(
             module.render(&state),
-            "%{F#f1e9d2}%{F-} %{F#8faaab}󰪠%{F-}%{F#8faaab}󰪥%{F-}"
+            "%{F#f1e9d2}%{F-} %{F#8faaab}󰪟%{F-}%{F#8faaab}󰪥%{F-}"
         );
 
         let state = Some(ProgressBarServerModuleState {
@@ -242,7 +224,7 @@ mod tests {
         });
         assert_eq!(
             module.render(&state),
-            "%{F#f1e9d2}%{F-} %{F#8faaab}󰪠%{F-}%{F#8faaab}󰪡%{F-}%{F#8faaab}󰪥%{F-}"
+            "%{F#f1e9d2}%{F-} %{F#8faaab}󰪟%{F-}%{F#8faaab}󰪡%{F-}%{F#8faaab}󰪥%{F-}"
         );
 
         let state = None;
