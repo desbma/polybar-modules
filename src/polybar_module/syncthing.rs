@@ -146,11 +146,10 @@ impl SyncthingModule {
         Ok(events)
     }
 
-    fn syncthing_rest_call<T: serde::de::DeserializeOwned>(
-        &self,
-        path: &str,
-        params: &[(&str, &str)],
-    ) -> Result<T, HttpError> {
+    fn syncthing_rest_call<T>(&self, path: &str, params: &[(&str, &str)]) -> Result<T, HttpError>
+    where
+        T: serde::de::DeserializeOwned,
+    {
         let base_url = url::Url::parse("http://127.0.0.1:8384/rest/")?;
         let mut url = base_url.join(path)?;
         for (param_key, param_val) in params {

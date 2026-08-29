@@ -908,7 +908,10 @@ impl InferenceUsageModule {
     }
 
     /// Deserialize the JSON file at `path`
-    fn read_json<T: serde::de::DeserializeOwned>(path: &Path) -> anyhow::Result<T> {
+    fn read_json<T>(path: &Path) -> anyhow::Result<T>
+    where
+        T: serde::de::DeserializeOwned,
+    {
         let data = fs::read_to_string(path).with_context(|| format!("Failed to read {path:?}"))?;
         serde_json::from_str(&data).with_context(|| format!("Failed to deserialize {path:?}"))
     }
@@ -918,7 +921,10 @@ impl InferenceUsageModule {
     /// The file keeps its inode, which a bind mount of it into a sandbox pins for the life of the
     /// sandbox. A file that is gone is an error: it was deleted by a logout, and recreating it
     /// would restore revoked credentials.
-    fn write_json_in_place<T: serde::Serialize>(path: &Path, value: &T) -> anyhow::Result<()> {
+    fn write_json_in_place<T>(path: &Path, value: &T) -> anyhow::Result<()>
+    where
+        T: serde::Serialize,
+    {
         let data = serde_json::to_vec(value)?;
         fs::OpenOptions::new()
             .write(true)
