@@ -135,8 +135,8 @@ impl MarketModule {
     }
 }
 
-const ICON_MARKET_UP: &str = "";
-const ICON_MARKET_DOWN: &str = "";
+const ICON_MARKET_UP: &str = "󰔵";
+const ICON_MARKET_DOWN: &str = "󰔳";
 
 impl RenderablePolybarModule for MarketModule {
     type State = Option<MarketModuleState>;
@@ -229,7 +229,7 @@ mod tests {
             ma50: 4501.0,
             ma100: 4500.0,
         });
-        assert_eq!(module.render(&state), "%{F#f1e9d2}%{F-} 5001 +0.10%");
+        assert_eq!(module.render(&state), "%{F#f1e9d2}󰔵%{F-} 5001 +0.10%");
 
         let state = Some(MarketModuleState {
             val: 5000.6,
@@ -237,7 +237,7 @@ mod tests {
             ma50: 4500.0,
             ma100: 4501.0,
         });
-        assert_eq!(module.render(&state), "%{F#f1e9d2}%{F-} 5001 +0.10%");
+        assert_eq!(module.render(&state), "%{F#f1e9d2}󰔳%{F-} 5001 +0.10%");
 
         let state = Some(MarketModuleState {
             val: 5000.6,
@@ -247,7 +247,7 @@ mod tests {
         });
         assert_eq!(
             module.render(&state),
-            "%{F#f1e9d2}%{F-} 5001 %{F#819500}+1.01%%{F-}"
+            "%{F#f1e9d2}󰔵%{F-} 5001 %{F#819500}+1.01%%{F-}"
         );
 
         let state = Some(MarketModuleState {
@@ -258,7 +258,7 @@ mod tests {
         });
         assert_eq!(
             module.render(&state),
-            "%{F#f1e9d2}%{F-} 5001 %{F#d56500}-2.01%%{F-}"
+            "%{F#f1e9d2}󰔵%{F-} 5001 %{F#d56500}-2.01%%{F-}"
         );
 
         let state = Some(MarketModuleState {
@@ -269,7 +269,7 @@ mod tests {
         });
         assert_eq!(
             module.render(&state),
-            "%{F#f1e9d2}%{F-} 5001 %{F#ac8300}-1.01%%{F-}"
+            "%{F#f1e9d2}󰔵%{F-} 5001 %{F#ac8300}-1.01%%{F-}"
         );
 
         let state = None;

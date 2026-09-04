@@ -2,6 +2,9 @@ use std::fmt::Write as _;
 
 use crate::theme;
 
+/// Polybar index of the symbol font, in the order the fonts are declared in the bar config
+pub(crate) const FONT_SYMBOLS: u8 = 2;
+
 #[expect(dead_code)]
 #[derive(Clone, Copy)]
 pub(crate) enum PolybarActionType {
@@ -65,7 +68,6 @@ impl Markup {
         self
     }
 
-    #[expect(dead_code)]
     pub(crate) fn font(mut self, index: u8) -> Self {
         self.ops.push(MarkupOp::Font(index));
         self
@@ -194,8 +196,8 @@ mod tests {
     #[test]
     fn test_markup() {
         assert_eq!(
-            Markup::new("").fg(theme::Color::MainIcon).into_string(),
-            "%{F#f1e9d2}%{F-}"
+            Markup::new("").fg(theme::Color::MainIcon).into_string(),
+            "%{F#f1e9d2}%{F-}"
         );
     }
 

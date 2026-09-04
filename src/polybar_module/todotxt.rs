@@ -85,7 +85,7 @@ impl TodoTxtModule {
 }
 
 const ICON_TODOTXT: &str = "";
-const ICON_TODOTXT_HIDDEN: &str = "";
+const ICON_TODOTXT_HIDDEN: &str = "󰜺";
 
 impl RenderablePolybarModule for TodoTxtModule {
     type State = Option<TodoTxtModuleState>;
@@ -417,7 +417,7 @@ mod tests {
         assert_eq!(
             module.render(&state),
             format!(
-                "%{{F#f1e9d2}}%{{F-}} %{{A1:rm {}/public_screen:}}%{{A}}",
+                "%{{F#f1e9d2}}%{{F-}} %{{A1:rm {}/public_screen:}}󰜺%{{A}}",
                 runtime_dir.to_str().unwrap()
             )
         );

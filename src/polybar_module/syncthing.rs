@@ -180,10 +180,10 @@ impl SyncthingModule {
 }
 
 const ICON_SYNCTHING: &str = "󱋖";
-const ICON_SYNCTHING_FOLDER: &str = "";
-const ICON_SYNCTHING_DEVICE: &str = "";
-const ICON_SYNCTHING_UPLOADING: &str = "";
-const ICON_SYNCTHING_DOWNLOADING: &str = "";
+const ICON_SYNCTHING_FOLDER: &str = "";
+const ICON_SYNCTHING_DEVICE: &str = "";
+const ICON_SYNCTHING_UPLOADING: &str = "";
+const ICON_SYNCTHING_DOWNLOADING: &str = "";
 
 #[expect(clippy::single_match)]
 impl RenderablePolybarModule for SyncthingModule {
@@ -278,7 +278,7 @@ mod tests {
         });
         assert_eq!(
             module.render(&state),
-            "%{A1:firefox --new-tab 'http\\://127.0.0.1\\:8384/':}%{F#f1e9d2}󱋖%{F-}  1  2/5 4 3%{A}"
+            "%{A1:firefox --new-tab 'http\\://127.0.0.1\\:8384/':}%{F#f1e9d2}󱋖%{F-}  1  2/5 4 3%{A}"
         );
 
         let state = None;

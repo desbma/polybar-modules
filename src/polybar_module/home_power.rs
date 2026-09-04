@@ -434,12 +434,13 @@ impl HomePowerModule {
     }
 }
 
-const ICON_POWER: &str = "";
+/// Octicons zap
+const ICON_POWER: &str = "⚡";
 const ICON_POWER_SOLAR: &str = "";
 const ICON_POWER_HOME: &str = "󱤃";
 const ICON_POWER_GRID: &str = "󰴾";
-const ICON_POWER_FLOW_LEFT: &str = "";
-const ICON_POWER_FLOW_RIGHT: &str = "";
+const ICON_POWER_FLOW_LEFT: &str = "";
+const ICON_POWER_FLOW_RIGHT: &str = "";
 
 impl RenderablePolybarModule for HomePowerModule {
     type State = Option<HomePowerModuleState>;
@@ -476,6 +477,8 @@ impl RenderablePolybarModule for HomePowerModule {
                     "{} {}{:.1}{}{}{:.1}{}{}{:.1}kW{}",
                     markup::Markup::new(ICON_POWER)
                         .fg(theme::Color::MainIcon)
+                        // The text font also covers this codepoint, so the symbol font must be forced
+                        .font(markup::FONT_SYMBOLS)
                         .into_string(),
                     ICON_POWER_SOLAR,
                     f64::from(state.solar_power) / 1000.0,
@@ -547,7 +550,10 @@ mod tests {
             grid_power: 1400,
             devices: vec![],
         });
-        assert_eq!(module.render(&state), "%{F#f1e9d2}%{F-} 2.0󱤃0.6󰴾1.4kW");
+        assert_eq!(
+            module.render(&state),
+            "%{T2}%{F#f1e9d2}⚡%{F-}%{T-} 2.0󱤃0.6󰴾1.4kW"
+        );
 
         let state = Some(HomePowerModuleState {
             solar_power: 0,
@@ -583,7 +589,7 @@ mod tests {
         });
         assert_eq!(
             module.render(&state),
-            "%{F#f1e9d2}%{F-} 0.0 󱤃0.6󰴾1.4kW D1 %{u#8faaab}%{+u}D2%{-u} %{u#ac8300}%{+u}D3%{-u} %{F#657377}D4%{F-}"
+            "%{T2}%{F#f1e9d2}⚡%{F-}%{T-} 0.0 󱤃0.6󰴾1.4kW D1 %{u#8faaab}%{+u}D2%{-u} %{u#ac8300}%{+u}D3%{-u} %{F#657377}D4%{F-}"
         );
 
         let state = None;
