@@ -1,5 +1,6 @@
 #[expect(dead_code, clippy::unreadable_literal)]
 #[derive(Clone, Copy)]
+#[cfg_attr(test, derive(Debug, Eq, PartialEq))]
 pub(crate) enum Color {
     // // Solarized Dark
     // Foreground = 0x93a1a1,

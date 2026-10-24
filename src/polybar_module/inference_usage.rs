@@ -29,7 +29,7 @@ pub(crate) struct InferenceUsageModule {
     /// Claude state of each credentials file
     claude_accounts: HashMap<PathBuf, ClaudeAccount>,
     /// `ChatGPT` state of each auth file
-    chatgpt_accounts: HashMap<PathBuf, RateLimitBackoff>,
+    chatgpt_accounts: HashMap<PathBuf, ChatGptAccount>,
     degraded_backoff: backon::ExponentialBackoff,
     /// Start of the current run of degraded updates
     degraded_since: Option<SystemTime>,
@@ -43,6 +43,39 @@ struct ClaudeAccount {
     rate_limit: RateLimitBackoff,
     /// Mtime of the credentials whose authentication failed
     auth_failed_mtime: Option<SystemTime>,
+    activity: UsageActivity,
+}
+
+/// `ChatGPT` state of a single account
+#[derive(Default)]
+struct ChatGptAccount {
+    rate_limit: RateLimitBackoff,
+    activity: UsageActivity,
+}
+
+/// Recency of a single account's usage
+#[derive(Default)]
+struct UsageActivity {
+    /// Windows of the last usage reading, `None` before the first one
+    windows: Option<Vec<UsageWindow>>,
+    /// Time the account turns idle, `None` before any detected use
+    idle_at: Option<SystemTime>,
+}
+
+impl UsageActivity {
+    /// Record a usage reading, and return whether the account was used recently
+    fn record(&mut self, windows: &[UsageWindow]) -> bool {
+        if let Some(prev) = &self.windows
+            && windows.iter().any(|window| {
+                window.used_since(prev.iter().find(|prev| prev.duration == window.duration))
+            })
+        {
+            self.idle_at = Some(SystemTime::now() + IDLE_DELAY);
+        }
+        self.windows = Some(windows.to_owned());
+        self.idle_at
+            .is_some_and(|idle_at| SystemTime::now() < idle_at)
+    }
 }
 
 /// Escalating delay holding a single account's requests back after a rate limit
@@ -85,21 +118,39 @@ impl RateLimitBackoff {
 /// Usage of a single rate limit window
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct UsageWindow {
+    duration: Duration,
     quota_left_pct: f64,
     /// Share of the window duration left before it resets, `None` if the window is not running
     time_left_frac: Option<f64>,
+}
+
+impl UsageWindow {
+    /// Return whether the window shows usage since `prev`, its previous reading if it had one
+    fn used_since(&self, prev: Option<&Self>) -> bool {
+        let Some(prev) = prev.filter(|prev| prev.time_left_frac.is_some()) else {
+            // A window starts running on use
+            return self.time_left_frac.is_some();
+        };
+        // Usage only grows and time left only shrinks within a window, the opposite means a reset
+        let reset =
+            self.quota_left_pct > prev.quota_left_pct || self.time_left_frac > prev.time_left_frac;
+        self.quota_left_pct < prev.quota_left_pct || (reset && self.quota_left_pct < 100.0)
+    }
+}
+
+/// Usage of a single account
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct AccountUsage {
+    /// Rate limit windows, ordered by increasing duration
+    windows: Vec<UsageWindow>,
+    recently_used: bool,
 }
 
 /// Claude usage fetch status
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum ClaudeUsageStatus {
     /// Successfully fetched usage data
-    Available {
-        /// 5-hour window
-        h5: UsageWindow,
-        /// 7-day window
-        d7: UsageWindow,
-    },
+    Available(AccountUsage),
     /// Authentication failed (401), waiting for token refresh
     AuthInvalid,
     /// Generic error
@@ -110,7 +161,7 @@ pub(crate) enum ClaudeUsageStatus {
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct InferenceUsageModuleState {
     claude_statuses: Vec<ClaudeUsageStatus>,
-    chatgpt_statuses: Vec<Option<Vec<UsageWindow>>>,
+    chatgpt_statuses: Vec<Option<AccountUsage>>,
 }
 
 impl InferenceUsageModuleState {
@@ -120,7 +171,7 @@ impl InferenceUsageModuleState {
             || self
                 .claude_statuses
                 .iter()
-                .any(|status| !matches!(status, ClaudeUsageStatus::Available { .. }))
+                .any(|status| !matches!(status, ClaudeUsageStatus::Available(_)))
     }
 }
 
@@ -134,6 +185,8 @@ const RAMP: markup::Gauge = markup::Gauge::ramp();
 const CLAUDE_H5_WINDOW: Duration = Duration::from_hours(5);
 /// Duration of the Claude long rolling window
 const CLAUDE_D7_WINDOW: Duration = Duration::from_hours(7 * 24);
+/// Time without detected use after which an account renders as idle
+const IDLE_DELAY: Duration = Duration::from_mins(30);
 /// Prefix of the Claude credentials files, relative to the home directory
 const CLAUDE_TOKEN_PREFIX: &str = ".config/claude/.credentials";
 /// Prefix of the Codex auth files, relative to the home directory
@@ -517,7 +570,10 @@ impl InferenceUsageModule {
         self.claude_accounts
             .values()
             .any(|account| account.rate_limit.active())
-            || self.chatgpt_accounts.values().any(RateLimitBackoff::active)
+            || self
+                .chatgpt_accounts
+                .values()
+                .any(|account| account.rate_limit.active())
     }
 
     fn fetch_chatgpt_usage(&self, path: &Path) -> Result<Vec<UsageWindow>, ProviderFetchError> {
@@ -557,6 +613,7 @@ impl InferenceUsageModule {
             .flatten()
             .sorted_by_key(|window| window.limit_window_seconds)
             .map(|window| UsageWindow {
+                duration: Duration::from_secs(window.limit_window_seconds),
                 quota_left_pct: 100.0 - window.used_percent,
                 time_left_frac: Some(
                     (window.reset_after_seconds as f64 / window.limit_window_seconds as f64)
@@ -566,11 +623,11 @@ impl InferenceUsageModule {
             .collect()
     }
 
-    fn update_chatgpt_usage(&mut self, path: &Path) -> Option<Vec<UsageWindow>> {
+    fn update_chatgpt_usage(&mut self, path: &Path) -> Option<AccountUsage> {
         if self
             .chatgpt_accounts
             .get(path)
-            .is_some_and(RateLimitBackoff::active)
+            .is_some_and(|account| account.rate_limit.active())
         {
             log::debug!("Skipping ChatGPT usage for {path:?}: rate limited");
             return None;
@@ -585,19 +642,23 @@ impl InferenceUsageModule {
             self.fetch_chatgpt_usage(path)
         });
 
-        let rate_limit = self.chatgpt_accounts.entry(path.to_owned()).or_default();
+        let account = self.chatgpt_accounts.entry(path.to_owned()).or_default();
         match result {
             Ok(windows) => {
-                rate_limit.reset();
+                account.rate_limit.reset();
                 if windows.is_empty() {
                     log::error!("ChatGPT usage for {path:?}: no rate limit windows");
                     None
                 } else {
-                    Some(windows)
+                    let recently_used = account.activity.record(&windows);
+                    Some(AccountUsage {
+                        windows,
+                        recently_used,
+                    })
                 }
             }
             Err(ProviderFetchError::RateLimited) => {
-                let delay = rate_limit.hit();
+                let delay = account.rate_limit.hit();
                 log::warn!("ChatGPT usage for {path:?}: rate limited, backing off for {delay:?}");
                 None
             }
@@ -682,6 +743,7 @@ impl InferenceUsageModule {
         now: DateTime<Utc>,
     ) -> UsageWindow {
         UsageWindow {
+            duration: window_len,
             quota_left_pct: 100.0 - window.utilization,
             time_left_frac: window.resets_at.map(|resets_at| {
                 (resets_at - now)
@@ -693,10 +755,7 @@ impl InferenceUsageModule {
         }
     }
 
-    fn fetch_claude_usage(
-        &self,
-        path: &Path,
-    ) -> Result<(UsageWindow, UsageWindow), ProviderFetchError> {
+    fn fetch_claude_usage(&self, path: &Path) -> Result<Vec<UsageWindow>, ProviderFetchError> {
         let creds: ClaudeCredentials = Self::read_json(path)?;
 
         let response = self
@@ -720,10 +779,10 @@ impl InferenceUsageModule {
             .map_err(|e| ProviderFetchError::Other(e.into()))?;
 
         let now = Utc::now();
-        Ok((
+        Ok(vec![
             Self::claude_window(&body.five_hour, CLAUDE_H5_WINDOW, now),
             Self::claude_window(&body.seven_day, CLAUDE_D7_WINDOW, now),
-        ))
+        ])
     }
 
     fn update_claude_status(&mut self, path: &Path) -> ClaudeUsageStatus {
@@ -757,10 +816,14 @@ impl InferenceUsageModule {
 
         let account = self.claude_accounts.entry(path.to_owned()).or_default();
         match result {
-            Ok((h5, d7)) => {
+            Ok(windows) => {
                 account.auth_failed_mtime = None;
                 account.rate_limit.reset();
-                ClaudeUsageStatus::Available { h5, d7 }
+                let recently_used = account.activity.record(&windows);
+                ClaudeUsageStatus::Available(AccountUsage {
+                    windows,
+                    recently_used,
+                })
             }
             Err(ProviderFetchError::AuthInvalid) => {
                 log::error!("Claude usage for {path:?}: auth invalid until credentials change");
@@ -864,9 +927,13 @@ impl InferenceUsageModule {
         Ok(true)
     }
 
-    fn quota_color(quota_left_pct: f64) -> theme::Color {
+    fn quota_color(quota_left_pct: f64, recently_used: bool) -> theme::Color {
         if quota_left_pct > 30.0 {
-            theme::Color::Good
+            if recently_used {
+                theme::Color::Good
+            } else {
+                theme::Color::Foreground
+            }
         } else if quota_left_pct >= 10.0 {
             theme::Color::Notice
         } else {
@@ -874,21 +941,16 @@ impl InferenceUsageModule {
         }
     }
 
-    fn render_quota(quota_left_pct: f64) -> String {
-        QUOTA.render(quota_left_pct / 100.0, Self::quota_color(quota_left_pct))
-    }
-
     /// Render each window quota, followed by the time left before reset for each running window
-    fn render_windows<'a, I>(windows: I) -> String
-    where
-        I: IntoIterator<Item = &'a UsageWindow>,
-    {
-        windows
-            .into_iter()
+    fn render_usage(usage: &AccountUsage) -> String {
+        usage
+            .windows
+            .iter()
             .map(|window| {
-                let mut quota = Self::render_quota(window.quota_left_pct);
+                let color = Self::quota_color(window.quota_left_pct, usage.recently_used);
+                let mut quota = QUOTA.render(window.quota_left_pct / 100.0, color);
                 if let Some(time_left_frac) = window.time_left_frac {
-                    quota += &RAMP.render(time_left_frac, Self::quota_color(window.quota_left_pct));
+                    quota += &RAMP.render(time_left_frac, color);
                 }
                 quota
             })
@@ -996,7 +1058,7 @@ impl RenderablePolybarModule for InferenceUsageModule {
             .claude_statuses
             .iter()
             .map(|status| match status {
-                ClaudeUsageStatus::Available { h5, d7 } => Self::render_windows([h5, d7]),
+                ClaudeUsageStatus::Available(usage) => Self::render_usage(usage),
                 ClaudeUsageStatus::AuthInvalid => ICON_UNAUTHORIZED.to_owned(),
                 ClaudeUsageStatus::Error => warning(),
             })
@@ -1008,7 +1070,7 @@ impl RenderablePolybarModule for InferenceUsageModule {
         let chatgpt = state
             .chatgpt_statuses
             .iter()
-            .map(|windows| windows.as_ref().map_or_else(warning, Self::render_windows))
+            .map(|usage| usage.as_ref().map_or_else(warning, Self::render_usage))
             .enumerate()
             .map(|(index, usage)| {
                 Self::provider_markup(ICON_CHATGPT, &usage, index == 0, CHATGPT_USAGE_URL)
@@ -1037,6 +1099,10 @@ mod tests {
     const MARGIN: Duration = Duration::from_secs(1);
     /// Delay between checks of a condition a background thread brings about
     const POLL_INTERVAL: Duration = Duration::from_millis(5);
+    /// Duration of the short window both providers run
+    const H5: Duration = Duration::from_hours(5);
+    /// Duration of the long window both providers run
+    const D7: Duration = Duration::from_hours(7 * 24);
 
     /// Return a test account's rate limit backoff, created on first use
     fn rate_limit(module: &mut InferenceUsageModule, claude: bool) -> &mut RateLimitBackoff {
@@ -1044,14 +1110,22 @@ mod tests {
         if claude {
             &mut module.claude_accounts.entry(path).or_default().rate_limit
         } else {
-            module.chatgpt_accounts.entry(path).or_default()
+            &mut module.chatgpt_accounts.entry(path).or_default().rate_limit
         }
     }
 
-    fn usage_window(quota_left_pct: f64, time_left_frac: f64) -> UsageWindow {
+    fn usage_window(duration: Duration, quota_left_pct: f64, time_left_frac: f64) -> UsageWindow {
         UsageWindow {
+            duration,
             quota_left_pct,
             time_left_frac: Some(time_left_frac),
+        }
+    }
+
+    fn recent_usage(windows: Vec<UsageWindow>) -> AccountUsage {
+        AccountUsage {
+            windows,
+            recently_used: true,
         }
     }
 
@@ -1460,17 +1534,10 @@ mod tests {
         fs::write(&other, "{}").unwrap();
 
         let mut module = InferenceUsageModule::new();
-        module
-            .claude_accounts
-            .entry(failed.clone())
-            .or_default()
-            .auth_failed_mtime = InferenceUsageModule::token_mtime(&failed);
-        module
-            .claude_accounts
-            .entry(limited)
-            .or_default()
-            .rate_limit
-            .hit();
+        let account = module.claude_accounts.entry(failed.clone()).or_default();
+        account.auth_failed_mtime = InferenceUsageModule::token_mtime(&failed);
+        let account = module.claude_accounts.entry(limited).or_default();
+        account.rate_limit.hit();
 
         // A skipped account leaves the others alone, which an entry of their own attests
         assert_eq!(
@@ -1493,7 +1560,8 @@ mod tests {
         fs::write(&other, "{}").unwrap();
 
         let mut module = InferenceUsageModule::new();
-        module.chatgpt_accounts.entry(limited).or_default().hit();
+        let account = module.chatgpt_accounts.entry(limited).or_default();
+        account.rate_limit.hit();
 
         // A skipped account leaves the others alone, which an entry of their own attests
         assert_eq!(module.update_chatgpt_usage(&other), None);
@@ -1527,18 +1595,15 @@ mod tests {
             claude_work.clone(),
             home.path().join(".config/claude/.credentials-deleted.json"),
         ] {
-            module
-                .claude_accounts
-                .entry(path)
-                .or_default()
-                .rate_limit
-                .hit();
+            let account = module.claude_accounts.entry(path).or_default();
+            account.rate_limit.hit();
         }
         for path in [
             chatgpt_work.clone(),
             home.path().join(".config/codex/auth-deleted.json"),
         ] {
-            module.chatgpt_accounts.entry(path).or_default().hit();
+            let account = module.chatgpt_accounts.entry(path).or_default();
+            account.rate_limit.hit();
         }
 
         // Every discovered account is updated, the default one first
@@ -1563,25 +1628,24 @@ mod tests {
     }
 
     #[test]
-    fn test_render_quota() {
-        for (quota_left_pct, expected) in [
-            (0.0, "%{F#d56500}󰗖%{F-}"),
-            (0.4, "%{F#d56500}󰪞%{F-}"),
-            (1.0, "%{F#d56500}󰪞%{F-}"),
-            (5.0, "%{F#d56500}󰪞%{F-}"),
-            (10.0, "%{F#ac8300}󰪞%{F-}"),
-            (20.0, "%{F#ac8300}󰪟%{F-}"),
-            (30.0, "%{F#ac8300}󰪟%{F-}"),
-            (40.0, "%{F#819500}󰪠%{F-}"),
-            (50.0, "%{F#819500}󰪡%{F-}"),
-            (60.0, "%{F#819500}󰪢%{F-}"),
-            (70.0, "%{F#819500}󰪣%{F-}"),
-            (80.0, "%{F#819500}󰪣%{F-}"),
-            (90.0, "%{F#819500}󰪤%{F-}"),
-            (99.9, "%{F#819500}󰪤%{F-}"),
-            (100.0, "%{F#819500}󰪥%{F-}"),
+    fn test_quota_color() {
+        for (quota_left_pct, recently_used, expected) in [
+            (0.0, true, theme::Color::Attention),
+            (5.0, true, theme::Color::Attention),
+            (10.0, true, theme::Color::Notice),
+            (30.0, true, theme::Color::Notice),
+            (40.0, true, theme::Color::Good),
+            (100.0, true, theme::Color::Good),
+            // An idle account loses the good quota color, not the warning ones
+            (5.0, false, theme::Color::Attention),
+            (30.0, false, theme::Color::Notice),
+            (40.0, false, theme::Color::Foreground),
+            (100.0, false, theme::Color::Foreground),
         ] {
-            assert_eq!(InferenceUsageModule::render_quota(quota_left_pct), expected);
+            assert_eq!(
+                InferenceUsageModule::quota_color(quota_left_pct, recently_used),
+                expected
+            );
         }
     }
 
@@ -1621,16 +1685,16 @@ mod tests {
         // Extra accounts render after the default one, space separated
         let state = InferenceUsageModuleState {
             claude_statuses: vec![
-                ClaudeUsageStatus::Available {
-                    h5: usage_window(50.0, 0.75),
-                    d7: usage_window(80.0, 0.9),
-                },
+                ClaudeUsageStatus::Available(recent_usage(vec![
+                    usage_window(H5, 50.0, 0.75),
+                    usage_window(D7, 80.0, 0.9),
+                ])),
                 ClaudeUsageStatus::AuthInvalid,
             ],
             chatgpt_statuses: vec![
-                Some(vec![usage_window(81.0, 0.5)]),
+                Some(recent_usage(vec![usage_window(D7, 81.0, 0.5)])),
                 None,
-                Some(vec![usage_window(20.0, 0.3)]),
+                Some(recent_usage(vec![usage_window(D7, 20.0, 0.3)])),
             ],
         };
         assert_render(
@@ -1656,17 +1720,39 @@ mod tests {
             .into_string();
 
         let state = InferenceUsageModuleState {
-            claude_statuses: vec![ClaudeUsageStatus::Available {
-                h5: usage_window(50.0, 0.75),
-                d7: usage_window(80.0, 0.9),
-            }],
-            chatgpt_statuses: vec![Some(vec![usage_window(81.0, 0.5), usage_window(90.0, 1.0)])],
+            claude_statuses: vec![ClaudeUsageStatus::Available(recent_usage(vec![
+                usage_window(H5, 50.0, 0.75),
+                usage_window(D7, 80.0, 0.9),
+            ]))],
+            chatgpt_statuses: vec![Some(recent_usage(vec![
+                usage_window(H5, 81.0, 0.5),
+                usage_window(D7, 90.0, 1.0),
+            ]))],
         };
         assert_render(
             &state,
             [
                 &["%{F#819500}󰪡%{F-}%{F#819500}▆%{F-}%{F#819500}󰪣%{F-}%{F#819500}▇%{F-}"],
                 &["%{F#819500}󰪣%{F-}%{F#819500}▄%{F-}%{F#819500}󰪤%{F-}%{F#819500}█%{F-}"],
+            ],
+        );
+
+        // Idle accounts: the good quota color is dropped from gauges and reset bars alike
+        let state = InferenceUsageModuleState {
+            claude_statuses: vec![ClaudeUsageStatus::Available(AccountUsage {
+                windows: vec![usage_window(H5, 50.0, 0.75), usage_window(D7, 20.0, 0.9)],
+                recently_used: false,
+            })],
+            chatgpt_statuses: vec![Some(AccountUsage {
+                windows: vec![usage_window(H5, 5.0, 0.8), usage_window(D7, 90.0, 1.0)],
+                recently_used: false,
+            })],
+        };
+        assert_render(
+            &state,
+            [
+                &["%{F#8faaab}󰪡%{F-}%{F#8faaab}▆%{F-}%{F#ac8300}󰪟%{F-}%{F#ac8300}▇%{F-}"],
+                &["%{F#d56500}󰪞%{F-}%{F#d56500}▆%{F-}%{F#8faaab}󰪤%{F-}%{F#8faaab}█%{F-}"],
             ],
         );
 
@@ -1678,11 +1764,14 @@ mod tests {
         assert_render(&state, [&[&att_warn], &[&att_warn]]);
 
         let state = InferenceUsageModuleState {
-            claude_statuses: vec![ClaudeUsageStatus::Available {
-                h5: usage_window(95.0, 0.125),
-                d7: usage_window(95.0, 0.4),
-            }],
-            chatgpt_statuses: vec![Some(vec![usage_window(95.0, 0.0), usage_window(95.0, 0.6)])],
+            claude_statuses: vec![ClaudeUsageStatus::Available(recent_usage(vec![
+                usage_window(H5, 95.0, 0.125),
+                usage_window(D7, 95.0, 0.4),
+            ]))],
+            chatgpt_statuses: vec![Some(recent_usage(vec![
+                usage_window(H5, 95.0, 0.0),
+                usage_window(D7, 95.0, 0.6),
+            ]))],
         };
         assert_render(
             &state,
@@ -1695,7 +1784,10 @@ mod tests {
         // Claude auth invalid (401)
         let state = InferenceUsageModuleState {
             claude_statuses: vec![ClaudeUsageStatus::AuthInvalid],
-            chatgpt_statuses: vec![Some(vec![usage_window(20.0, 0.3), usage_window(5.0, 0.8)])],
+            chatgpt_statuses: vec![Some(recent_usage(vec![
+                usage_window(H5, 20.0, 0.3),
+                usage_window(D7, 5.0, 0.8),
+            ]))],
         };
         assert_render(
             &state,
@@ -1707,13 +1799,14 @@ mod tests {
 
         // Claude 5h window not running yet: full quota, no reset bar
         let state = InferenceUsageModuleState {
-            claude_statuses: vec![ClaudeUsageStatus::Available {
-                h5: UsageWindow {
+            claude_statuses: vec![ClaudeUsageStatus::Available(recent_usage(vec![
+                UsageWindow {
+                    duration: H5,
                     quota_left_pct: 100.0,
                     time_left_frac: None,
                 },
-                d7: usage_window(80.0, 0.9),
-            }],
+                usage_window(D7, 80.0, 0.9),
+            ]))],
             chatgpt_statuses: vec![None],
         };
         assert_render(
@@ -1727,7 +1820,7 @@ mod tests {
         // ChatGPT with a single window renders a single quota icon, still with its reset bar
         let state = InferenceUsageModuleState {
             claude_statuses: vec![ClaudeUsageStatus::Error],
-            chatgpt_statuses: vec![Some(vec![usage_window(82.0, 1.0)])],
+            chatgpt_statuses: vec![Some(recent_usage(vec![usage_window(D7, 82.0, 1.0)]))],
         };
         assert_render(
             &state,
@@ -1743,8 +1836,9 @@ mod tests {
             .parse::<DateTime<Utc>>()
             .unwrap();
         assert_eq!(
-            InferenceUsageModule::claude_window(&window, Duration::from_hours(5), now),
+            InferenceUsageModule::claude_window(&window, H5, now),
             UsageWindow {
+                duration: H5,
                 quota_left_pct: 88.0,
                 time_left_frac: Some(0.5),
             }
@@ -1759,8 +1853,9 @@ mod tests {
             .parse::<DateTime<Utc>>()
             .unwrap();
         assert_eq!(
-            InferenceUsageModule::claude_window(&window, Duration::from_hours(5), now),
+            InferenceUsageModule::claude_window(&window, H5, now),
             UsageWindow {
+                duration: H5,
                 quota_left_pct: 100.0,
                 time_left_frac: Some(0.0),
             }
@@ -1775,8 +1870,9 @@ mod tests {
             .parse::<DateTime<Utc>>()
             .unwrap();
         assert_eq!(
-            InferenceUsageModule::claude_window(&window, Duration::from_hours(5), now),
+            InferenceUsageModule::claude_window(&window, H5, now),
             UsageWindow {
+                duration: H5,
                 quota_left_pct: 100.0,
                 time_left_frac: None,
             }
@@ -1790,6 +1886,7 @@ mod tests {
         assert_eq!(
             InferenceUsageModule::extract_chatgpt_windows(&resp.rate_limit),
             vec![UsageWindow {
+                duration: D7,
                 quota_left_pct: 82.0,
                 time_left_frac: Some(567_359.0 / 604_800.0),
             }]
@@ -1805,10 +1902,12 @@ mod tests {
             InferenceUsageModule::extract_chatgpt_windows(&resp.rate_limit),
             vec![
                 UsageWindow {
+                    duration: H5,
                     quota_left_pct: 81.0,
                     time_left_frac: Some(0.25),
                 },
                 UsageWindow {
+                    duration: D7,
                     quota_left_pct: 90.0,
                     time_left_frac: Some(0.5),
                 },
@@ -1818,13 +1917,15 @@ mod tests {
 
     #[test]
     fn test_is_degraded() {
-        let available = || ClaudeUsageStatus::Available {
-            h5: usage_window(50.0, 0.5),
-            d7: usage_window(50.0, 0.5),
+        let available = || {
+            ClaudeUsageStatus::Available(recent_usage(vec![
+                usage_window(H5, 50.0, 0.5),
+                usage_window(D7, 50.0, 0.5),
+            ]))
         };
         let complete = InferenceUsageModuleState {
             claude_statuses: vec![available()],
-            chatgpt_statuses: vec![Some(vec![usage_window(50.0, 0.5)])],
+            chatgpt_statuses: vec![Some(recent_usage(vec![usage_window(D7, 50.0, 0.5)]))],
         };
         assert!(!complete.is_degraded());
 
@@ -1839,7 +1940,7 @@ mod tests {
                 ..complete.clone()
             },
             InferenceUsageModuleState {
-                chatgpt_statuses: vec![Some(vec![usage_window(50.0, 0.5)]), None],
+                chatgpt_statuses: vec![Some(recent_usage(vec![usage_window(D7, 50.0, 0.5)])), None],
                 ..complete.clone()
             },
         ] {
@@ -1888,11 +1989,11 @@ mod tests {
     #[test]
     fn test_next_delay_capped_by_degraded_hold() {
         let complete = InferenceUsageModuleState {
-            claude_statuses: vec![ClaudeUsageStatus::Available {
-                h5: usage_window(50.0, 0.5),
-                d7: usage_window(50.0, 0.5),
-            }],
-            chatgpt_statuses: vec![Some(vec![usage_window(50.0, 0.5)])],
+            claude_statuses: vec![ClaudeUsageStatus::Available(recent_usage(vec![
+                usage_window(H5, 50.0, 0.5),
+                usage_window(D7, 50.0, 0.5),
+            ]))],
+            chatgpt_statuses: vec![Some(recent_usage(vec![usage_window(D7, 50.0, 0.5)]))],
         };
         let mut module = InferenceUsageModule::new();
         module.degraded_since = Some(SystemTime::now());
@@ -1990,5 +2091,65 @@ mod tests {
             InferenceUsageModule::extract_chatgpt_windows(&resp.rate_limit),
             Vec::new()
         );
+    }
+
+    #[test]
+    fn test_usage_window_used_since() {
+        let running =
+            |quota_left_pct, time_left_frac| usage_window(H5, quota_left_pct, time_left_frac);
+        let stopped = UsageWindow {
+            duration: H5,
+            quota_left_pct: 100.0,
+            time_left_frac: None,
+        };
+        for (prev, next, used) in [
+            (running(60.0, 0.5), running(58.0, 0.5), true),
+            (running(60.0, 0.5), running(60.0, 0.5), false),
+            (running(60.0, 0.5), running(60.0, 0.4), false),
+            // A reset followed by use, shown by the quota, the time left or both, then a reset alone
+            (running(40.0, 0.1), running(97.0, 0.9), true),
+            (running(60.0, 0.1), running(60.0, 0.9), true),
+            (running(40.0, 0.9), running(97.0, 0.1), true),
+            (running(40.0, 0.1), running(100.0, 0.9), false),
+            // A window starts running on use, even below the reported resolution
+            (stopped.clone(), running(100.0, 0.5), true),
+            (running(40.0, 0.5), stopped.clone(), false),
+            (stopped.clone(), stopped.clone(), false),
+        ] {
+            assert_eq!(next.used_since(Some(&prev)), used);
+        }
+    }
+
+    #[test]
+    fn test_usage_activity_matches_windows_by_duration() {
+        let mut activity = UsageActivity::default();
+        // The first reading has nothing to be compared to
+        assert!(!activity.record(&[usage_window(H5, 90.0, 0.5), usage_window(D7, 80.0, 0.5)]));
+        assert!(!activity.record(&[usage_window(D7, 80.0, 0.5)]));
+
+        // A window missing from the previous reading was not running
+        assert!(activity.record(&[usage_window(H5, 100.0, 1.0), usage_window(D7, 80.0, 0.5)]));
+    }
+
+    #[test]
+    fn test_usage_activity_expires() {
+        let mut activity = UsageActivity::default();
+        activity.record(&[usage_window(H5, 60.0, 0.5), usage_window(D7, 80.0, 0.5)]);
+        // Use in any window renews the idle time, an earlier one included
+        activity.idle_at = SystemTime::now().checked_add(MARGIN);
+        let used_at = SystemTime::now();
+        assert!(activity.record(&[usage_window(H5, 60.0, 0.5), usage_window(D7, 78.0, 0.5)]));
+        assert!(
+            (used_at + IDLE_DELAY..=SystemTime::now() + IDLE_DELAY)
+                .contains(&activity.idle_at.unwrap())
+        );
+
+        // Recent use outlives readings showing none, a window reset included
+        assert!(activity.record(&[usage_window(H5, 100.0, 1.0)]));
+        activity.idle_at = SystemTime::now().checked_add(MARGIN);
+        assert!(activity.record(&[usage_window(H5, 100.0, 1.0)]));
+
+        activity.idle_at = SystemTime::now().checked_sub(MARGIN);
+        assert!(!activity.record(&[usage_window(H5, 100.0, 1.0)]));
     }
 }
