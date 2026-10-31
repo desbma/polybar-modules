@@ -60,7 +60,7 @@ impl NetworkStatusModule {
             ];
         let ping_child_deaths = HashMap::new();
 
-        let networks = Networks::new();
+        let networks = Networks::new()?;
 
         Ok(Self {
             env,
@@ -174,10 +174,9 @@ impl NetworkStatusModule {
         self.networks.refresh(true);
         let mut vpn: Vec<String> = self
             .networks
-            .list()
-            .iter()
-            .filter(|i| i.0.starts_with("wg"))
-            .map(|i| i.0.to_owned())
+            .keys()
+            .filter(|n| n.as_encoded_bytes().starts_with(b"wg"))
+            .map(|n| n.to_string_lossy().into_owned())
             .collect();
         let pgrep_status = Command::new("pgrep")
             .args(["-x", "openvpn"])

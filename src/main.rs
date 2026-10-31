@@ -58,7 +58,8 @@ fn main() -> anyhow::Result<()> {
                 .context("Failed to initialize CPU frequency module")?,
         ),
         PolybarModuleName::cpu_top { max_len } => polybar_module::PolybarModule::CpuTop(
-            polybar_module::cpu_top::CpuTopModule::new(max_len),
+            polybar_module::cpu_top::CpuTopModule::new(max_len)
+                .context("Failed to initialize CPU top module")?,
         ),
         PolybarModuleName::debian_updates => polybar_module::PolybarModule::DebianUpdates(
             polybar_module::debian_updates::DebianUpdatesModule::new()

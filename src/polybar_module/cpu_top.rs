@@ -28,11 +28,11 @@ pub(crate) struct CpuTopModuleState {
 }
 
 impl CpuTopModule {
-    pub(crate) fn new(max_len: Option<usize>) -> Self {
-        Self {
+    pub(crate) fn new(max_len: Option<usize>) -> anyhow::Result<Self> {
+        Ok(Self {
             max_len,
-            system: System::new(),
-        }
+            system: System::new()?,
+        })
     }
 
     fn refresh_processes(&mut self) {
@@ -58,7 +58,7 @@ impl CpuTopModule {
 
         // The sampler's own /proc scan makes it a CPU consumer; exclude it so an idle system
         // does not just report this process back
-        let current_pid = get_current_pid().map_err(anyhow::Error::msg)?;
+        let current_pid = get_current_pid()?;
         let proc = self
             .system
             .processes()
@@ -216,7 +216,7 @@ mod tests {
 
     #[test]
     fn test_render() {
-        let module = CpuTopModule::new(Some(10));
+        let module = CpuTopModule::new(Some(10)).unwrap();
 
         for (cpu_prct, process_name, expected) in [
             (1, "bz", " 1%     bz"),
