@@ -70,16 +70,10 @@ fn main() -> anyhow::Result<()> {
                 .context("Failed to initialize Nvidia GPU module")?,
         ),
         PolybarModuleName::home_power => {
-            let home_power_cfg = cfg
-                .and_then(|c| {
-                    c.module
-                        .ok_or_else(|| anyhow::anyhow!("Missing 'module' config section"))
-                })
-                .and_then(|c| {
-                    c.home_power
-                        .ok_or_else(|| anyhow::anyhow!("Missing 'home_power' config section"))
-                })
-                .context("Unable to get home power module config from config file")?;
+            let home_power_cfg = cfg?
+                .module
+                .and_then(|m| m.home_power)
+                .context("Missing 'module.home_power' config section")?;
             polybar_module::PolybarModule::HomePower(
                 polybar_module::home_power::HomePowerModule::new(&home_power_cfg),
             )
@@ -94,16 +88,10 @@ fn main() -> anyhow::Result<()> {
             polybar_module::PolybarModule::Market(polybar_module::market::MarketModule::new())
         }
         PolybarModuleName::network_status => {
-            let network_status_cfg = cfg
-                .and_then(|c| {
-                    c.module
-                        .ok_or_else(|| anyhow::anyhow!("Missing 'module' config section"))
-                })
-                .and_then(|c| {
-                    c.network_status
-                        .ok_or_else(|| anyhow::anyhow!("Missing 'network_status' config section"))
-                })
-                .context("Unable to get network status module config from config file")?;
+            let network_status_cfg = cfg?
+                .module
+                .and_then(|m| m.network_status)
+                .context("Missing 'module.network_status' config section")?;
             polybar_module::PolybarModule::NetworkStatus(
                 polybar_module::network_status::NetworkStatusModule::new(network_status_cfg)
                     .context("Failed to initialize network status module")?,
@@ -148,10 +136,16 @@ fn main() -> anyhow::Result<()> {
                 &weather_cfg,
             ))
         }
-        PolybarModuleName::xmonad => polybar_module::PolybarModule::Xmonad(
-            polybar_module::xmonad::XmonadModule::new()
-                .context("Failed to initialize Xmonad module")?,
-        ),
+        PolybarModuleName::xmonad { monitor } => {
+            let xmonad_cfg = cfg?
+                .module
+                .and_then(|m| m.xmonad)
+                .context("Missing 'module.xmonad' config section")?;
+            polybar_module::PolybarModule::Xmonad(
+                polybar_module::xmonad::XmonadModule::new(monitor, xmonad_cfg)
+                    .context("Failed to initialize Xmonad module")?,
+            )
+        }
     };
 
     // Update/render loop, dynamic dispatch sadness, sadly https://crates.io/crates/enum_dispatch does not work here

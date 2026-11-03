@@ -2,17 +2,16 @@ use std::{
     env,
     fs::metadata,
     path::PathBuf,
-    sync::mpsc::{RecvTimeoutError, channel},
+    sync::mpsc::RecvTimeoutError,
     thread::sleep,
     time::{Duration, SystemTime},
 };
 
-use notify::Watcher as _;
 use tasks::{Task, TodoFile};
 
 use crate::{
     markup,
-    polybar_module::{PolybarModuleEnv, RenderablePolybarModule, boottime},
+    polybar_module::{PolybarModuleEnv, RenderablePolybarModule, boottime, watch_paths},
     theme::{self, ICON_WARNING},
 };
 
@@ -98,19 +97,11 @@ impl RenderablePolybarModule for TodoTxtModule {
             match prev_state {
                 // Nominal
                 Some(TodoTxtModuleState::Active { last_fs_change, .. }) => {
-                    let (events_tx, events_rx) = channel();
-                    let mut watcher = notify::recommended_watcher(events_tx).unwrap();
-                    let to_watch_filepaths = [
+                    let (_watcher, events_rx) = watch_paths(&[
                         &self.todotxt_filepath,
                         self.env.public_screen_filepath.parent().unwrap(),
-                    ];
-
-                    log::debug!("Watching {to_watch_filepaths:?}");
-                    for to_watch_filepath in to_watch_filepaths {
-                        watcher
-                            .watch(to_watch_filepath, notify::RecursiveMode::NonRecursive)
-                            .unwrap();
-                    }
+                    ])
+                    .unwrap();
                     let deadline = boottime() + MAX_WAIT;
                     while !self.env.public_screen() && boottime() < deadline {
                         let max_mtime = self.get_todotxt_file_mtime();

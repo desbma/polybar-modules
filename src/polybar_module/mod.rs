@@ -1,9 +1,9 @@
 use std::{
     fmt::Debug,
     fs,
-    path::PathBuf,
+    path::{Path, PathBuf},
     process::{Command, Stdio},
-    sync::mpsc::channel,
+    sync::mpsc::{Receiver, channel},
     thread::sleep,
     time::Duration,
 };
@@ -81,6 +81,23 @@ pub(crate) const NETWORK_ERROR_BACKOFF: backon::ExponentialBuilder =
         .with_max_delay(Duration::from_hours(1))
         .without_max_times();
 
+/// Filesystem watcher with the receiver of its events
+pub(crate) type FilesystemWatcher = (
+    notify::RecommendedWatcher,
+    Receiver<notify::Result<notify::Event>>,
+);
+
+/// Watch `paths` non-recursively
+pub(crate) fn watch_paths(paths: &[&Path]) -> notify::Result<FilesystemWatcher> {
+    let (events_tx, events_rx) = channel();
+    let mut watcher = notify::recommended_watcher(events_tx)?;
+    for path in paths {
+        watcher.watch(path, notify::RecursiveMode::NonRecursive)?;
+    }
+    log::debug!("Watching {paths:?}");
+    Ok((watcher, events_rx))
+}
+
 pub(crate) trait RenderablePolybarModule {
     type State: Debug + PartialEq;
 
@@ -126,13 +143,7 @@ impl PolybarModuleEnv {
 
     pub(crate) fn wait_network_mode(&self, mode: &NetworkMode) -> bool {
         let mut did_wait = false;
-        let (events_tx, events_rx) = channel();
-        let mut watcher = notify::recommended_watcher(events_tx).unwrap();
-        let parent_dir = self.low_bw_filepath.parent().unwrap();
-        watcher
-            .watch(parent_dir, notify::RecursiveMode::NonRecursive)
-            .unwrap();
-        log::debug!("Watching {parent_dir:?}");
+        let (_watcher, events_rx) = watch_paths(&[self.low_bw_filepath.parent().unwrap()]).unwrap();
         while self.network_mode() != *mode {
             let evt = events_rx.recv().unwrap();
             did_wait = true;
@@ -143,13 +154,8 @@ impl PolybarModuleEnv {
 
     pub(crate) fn wait_public_screen(&self, public: bool) -> bool {
         let mut did_wait = false;
-        let (events_tx, events_rx) = channel();
-        let mut watcher = notify::recommended_watcher(events_tx).unwrap();
-        let parent_dir = self.public_screen_filepath.parent().unwrap();
-        watcher
-            .watch(parent_dir, notify::RecursiveMode::NonRecursive)
-            .unwrap();
-        log::debug!("Watching {parent_dir:?}");
+        let (_watcher, events_rx) =
+            watch_paths(&[self.public_screen_filepath.parent().unwrap()]).unwrap();
         while self.public_screen() != public {
             let evt = events_rx.recv().unwrap();
             did_wait = true;

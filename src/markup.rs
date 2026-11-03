@@ -62,7 +62,6 @@ impl Markup {
         self
     }
 
-    #[expect(dead_code)]
     pub(crate) fn bg(mut self, color: theme::Color) -> Self {
         self.ops.push(MarkupOp::Background(color));
         self
@@ -87,27 +86,26 @@ impl Markup {
     pub(crate) fn into_string(self) -> String {
         let mut r = String::new();
         for op in self.ops.iter().rev() {
-            match op {
+            let _ = match op {
                 MarkupOp::Foreground(color) => {
-                    let _ = write!(r, "%{{F#{:6x}}}", *color as u32);
+                    write!(r, "%{{F#{color:06x}}}", color = *color as u32)
                 }
                 MarkupOp::Underline(color) => {
-                    let _ = write!(r, "%{{u#{:06x}}}%{{+u}}", *color as u32);
+                    write!(r, "%{{u#{color:06x}}}%{{+u}}", color = *color as u32)
                 }
                 MarkupOp::Overline(color) => {
-                    let _ = write!(r, "%{{o#{:06x}}}%{{+o}}", *color as u32);
+                    write!(r, "%{{o#{color:06x}}}%{{+o}}", color = *color as u32)
                 }
                 MarkupOp::Background(color) => {
-                    let _ = write!(r, "%{{b#{:6x}}}", *color as u32);
+                    write!(r, "%{{B#{color:06x}}}", color = *color as u32)
                 }
-                MarkupOp::Font(index) => {
-                    let _ = write!(r, "%{{T{index}}}");
-                }
+                MarkupOp::Font(index) => write!(r, "%{{T{index}}}"),
                 MarkupOp::Action { type_, command } => {
                     let command_escaped = command.replace(':', "\\:");
-                    let _ = write!(r, "%{{A{}:{}:}}", *type_ as u8, command_escaped);
+                    let type_id = *type_ as u8;
+                    write!(r, "%{{A{type_id}:{command_escaped}:}}")
                 }
-            }
+            };
         }
 
         r.push_str(&self.inner);
@@ -117,7 +115,7 @@ impl Markup {
                 MarkupOp::Foreground(_) => r.push_str("%{F-}"),
                 MarkupOp::Underline(_) => r.push_str("%{-u}"),
                 MarkupOp::Overline(_) => r.push_str("%{-o}"),
-                MarkupOp::Background(_) => r.push_str("%{b-}"),
+                MarkupOp::Background(_) => r.push_str("%{B-}"),
                 MarkupOp::Font(_) => r.push_str("%{T-}"),
                 MarkupOp::Action { .. } => r.push_str("%{A}"),
             }
@@ -198,6 +196,17 @@ mod tests {
         assert_eq!(
             Markup::new("").fg(theme::Color::MainIcon).into_string(),
             "%{F#f1e9d2}%{F-}"
+        );
+    }
+
+    #[test]
+    fn test_markup_background() {
+        assert_eq!(
+            Markup::new("x")
+                .fg(theme::Color::MainIcon)
+                .bg(theme::Color::Focused)
+                .into_string(),
+            "%{B#259d94}%{F#f1e9d2}x%{F-}%{B-}"
         );
     }
 

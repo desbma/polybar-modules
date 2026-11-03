@@ -1,8 +1,9 @@
-#[expect(dead_code, clippy::unreadable_literal)]
+#[expect(clippy::unreadable_literal)]
 #[derive(Clone, Copy)]
 #[cfg_attr(test, derive(Debug, Eq, PartialEq))]
 pub(crate) enum Color {
     // // Solarized Dark
+    // Background = 0x002b36,
     // Foreground = 0x93a1a1,
     // MainIcon = 0xeee8d5,
     // Focused = 0x2aa198,
@@ -12,6 +13,7 @@ pub(crate) enum Color {
     // Attention = 0xcb4b16,
     // Critical = 0xdc322f,
     // OKSolar
+    Background = 0x002d38,
     Foreground = 0x8faaab,
     MainIcon = 0xf1e9d2,
     Focused = 0x259d94,

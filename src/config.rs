@@ -1,4 +1,4 @@
-use std::fs::read_to_string;
+use std::{collections::HashMap, fs::read_to_string};
 
 #[derive(Clone, Debug, clap::Parser)]
 #[expect(non_camel_case_types, clippy::doc_markdown)]
@@ -46,7 +46,10 @@ pub(crate) enum PolybarModuleName {
     /// Start weather module
     weather,
     /// Start Xmonad module
-    xmonad,
+    xmonad {
+        /// RandR monitor of the bar, empty or absent when the status holds a single monitor
+        monitor: Option<String>,
+    },
 }
 
 #[derive(Debug, clap::Parser)]
@@ -67,12 +70,19 @@ pub(crate) struct ModuleConfig {
     pub home_power: Option<HomePowerModuleConfig>,
     pub network_status: Option<NetworkStatusModuleConfig>,
     pub weather: Option<WeatherModuleConfig>,
+    pub xmonad: Option<XmonadModuleConfig>,
 }
 
 #[derive(Debug, Clone, serde::Deserialize)]
 pub(crate) struct WeatherModuleConfig {
     pub latitude: f64,
     pub longitude: f64,
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct XmonadModuleConfig {
+    /// Icon by workspace tag
+    pub workspace_icons: HashMap<String, String>,
 }
 
 #[derive(Debug, serde::Deserialize)]
