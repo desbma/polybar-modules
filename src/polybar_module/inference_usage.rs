@@ -2,7 +2,7 @@ use std::{
     collections::HashMap,
     env, fs,
     io::{self, Write as _},
-    os::unix::fs::MetadataExt as _,
+    os::unix::fs::{MetadataExt as _, OpenOptionsExt as _},
     path::{Path, PathBuf},
     sync::mpsc,
     thread,
@@ -10,7 +10,7 @@ use std::{
 };
 
 use anyhow::Context as _;
-use backon::BackoffBuilder as _;
+use backon::{BackoffBuilder as _, BlockingRetryable as _};
 use chrono::{DateTime, Utc};
 use itertools::Itertools as _;
 
@@ -190,7 +190,7 @@ const IDLE_DELAY: Duration = Duration::from_mins(30);
 /// Prefix of the Claude credentials files, relative to the home directory
 const CLAUDE_TOKEN_PREFIX: &str = ".config/claude/.credentials";
 /// Prefix of the Codex auth files, relative to the home directory
-const CODEX_AUTH_PREFIX: &str = ".config/codex/auth";
+const CODEX_AUTH_PREFIX: &str = ".config/codex/auth.d/auth";
 const CLAUDE_USAGE_URL: &str = "https://claude.ai/settings/usage";
 const CLAUDE_OAUTH_CLIENT_ID: &str = "9d1c250a-e61b-44d9-88ed-5944d1962f5e";
 const CHATGPT_USAGE_URL: &str = "https://chatgpt.com/codex/settings/usage";
@@ -229,6 +229,10 @@ const DEGRADED_BACKOFF: backon::ExponentialBuilder = backon::ExponentialBuilder:
     .with_min_delay(DEGRADED_MIN_DELAY)
     .with_max_delay(UPDATE_INTERVAL)
     .without_max_times();
+/// Schedule of the attempts to take a codex commit lock
+const CODEX_LOCK_BACKOFF: backon::ConstantBuilder = backon::ConstantBuilder::new()
+    .with_delay(Duration::from_millis(10))
+    .with_max_times(500);
 // The constants below are the lock parameters Claude Code passes to `proper-lockfile`
 /// Escalation curve of the delay between lock acquisition attempts
 const CLAUDE_LOCK_BACKOFF: backon::ExponentialBuilder = backon::ExponentialBuilder::new()
@@ -705,6 +709,7 @@ impl InferenceUsageModule {
         refresh_token: &str,
         tok: CodexTokenResponse,
     ) -> anyhow::Result<bool> {
+        let _lock = Self::lock_codex_auth(path)?;
         let mut auth: serde_json::Value = Self::read_json(path)?;
         let tokens = auth
             .get_mut("tokens")
@@ -728,8 +733,27 @@ impl InferenceUsageModule {
             tokens.insert("id_token".to_owned(), id_token.into());
         }
 
-        Self::write_json_in_place(path, &auth).context("Failed to write refreshed codex auth")?;
+        Self::replace_json(path, &auth).context("Failed to write refreshed codex auth")?;
         Ok(true)
+    }
+
+    /// Take codex's commit lock of the auth file at `path`, held until the returned file is
+    /// dropped
+    fn lock_codex_auth(path: &Path) -> anyhow::Result<fs::File> {
+        let lock_path = path.with_extension("json.lock");
+        let lock = fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .mode(0o600)
+            .open(&lock_path)
+            .with_context(|| format!("Failed to open {lock_path:?}"))?;
+        (|| lock.try_lock())
+            .retry(CODEX_LOCK_BACKOFF)
+            .when(|error| matches!(error, fs::TryLockError::WouldBlock))
+            .call()
+            .with_context(|| format!("Failed to lock {lock_path:?}"))?;
+        Ok(lock)
     }
 
     fn token_mtime(path: &Path) -> Option<SystemTime> {
@@ -978,6 +1002,23 @@ impl InferenceUsageModule {
         serde_json::from_str(&data).with_context(|| format!("Failed to deserialize {path:?}"))
     }
 
+    /// Serialize `value` to a new owner-only file atomically replacing `path`
+    fn replace_json<T>(path: &Path, value: &T) -> anyhow::Result<()>
+    where
+        T: serde::Serialize,
+    {
+        let dir = path
+            .parent()
+            .with_context(|| format!("No parent directory for {path:?}"))?;
+        let mut file = tempfile::NamedTempFile::new_in(dir)
+            .with_context(|| format!("Failed to create temporary file in {dir:?}"))?;
+        file.write_all(&serde_json::to_vec(value)?)?;
+        file.as_file().sync_all()?;
+        file.persist(path)
+            .with_context(|| format!("Failed to replace {path:?}"))?;
+        Ok(())
+    }
+
     /// Serialize `value` over the existing `path`, truncating it rather than replacing it
     ///
     /// The file keeps its inode, which a bind mount of it into a sandbox pins for the life of the
@@ -1091,7 +1132,12 @@ impl RenderablePolybarModule for InferenceUsageModule {
 #[cfg(test)]
 #[expect(clippy::shadow_unrelated)]
 mod tests {
-    use std::{collections::HashSet, iter, time::Instant};
+    use std::{
+        collections::HashSet,
+        iter,
+        os::unix::fs::{PermissionsExt as _, symlink},
+        time::Instant,
+    };
 
     use super::*;
 
@@ -1306,6 +1352,7 @@ mod tests {
     fn test_apply_chatgpt_token() {
         let dir = tempfile::TempDir::new().unwrap();
         let path = write_codex_auth(&dir, &codex_auth("old-access", "old-refresh"));
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o644)).unwrap();
         let inode = fs::metadata(&path).unwrap().ino();
 
         assert!(
@@ -1320,8 +1367,10 @@ mod tests {
             serde_json::from_str::<serde_json::Value>(&fs::read_to_string(&path).unwrap()).unwrap(),
             expected
         );
-        // A bind mount of the auth file into a sandbox outlives the refresh only if the inode does
-        assert_eq!(fs::metadata(&path).unwrap().ino(), inode);
+        // A refresh replaces the auth file with owner-only permissions
+        let metadata = fs::metadata(&path).unwrap();
+        assert_ne!(metadata.ino(), inode);
+        assert_eq!(metadata.mode() & 0o777, 0o600);
 
         // A response rotating nothing leaves the stored refresh and id tokens in place
         assert!(
@@ -1364,6 +1413,58 @@ mod tests {
             serde_json::from_str::<serde_json::Value>(&fs::read_to_string(&path).unwrap()).unwrap(),
             auth
         );
+    }
+
+    #[test]
+    fn test_apply_chatgpt_token_waits_for_codex_commit() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = write_codex_auth(&dir, &codex_auth("old-access", "old-refresh"));
+        let codex_refreshed = codex_auth("codex-access", "codex-refresh");
+        let held = Duration::from_millis(300);
+
+        // Codex is committing a refresh of its own when ours completes
+        let lock = fs::File::create(dir.path().join("auth.json.lock")).unwrap();
+        lock.lock().unwrap();
+        let started = Instant::now();
+        thread::scope(|scope| {
+            scope.spawn(|| {
+                thread::sleep(held);
+                fs::write(&path, serde_json::to_vec(&codex_refreshed).unwrap()).unwrap();
+                drop(lock);
+            });
+
+            // The token codex rotated is compared once its commit is done, rather than overwritten
+            assert!(
+                !InferenceUsageModule::apply_chatgpt_token(
+                    &path,
+                    "old-refresh",
+                    codex_token_response()
+                )
+                .unwrap()
+            );
+            assert!(started.elapsed() >= held);
+        });
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&fs::read_to_string(&path).unwrap()).unwrap(),
+            codex_refreshed
+        );
+    }
+
+    #[test]
+    fn test_apply_chatgpt_token_leaves_deleted_auth_deleted() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = write_codex_auth(&dir, &codex_auth("old-access", "old-refresh"));
+        // A logout deleted the auth while our refresh request was in flight
+        fs::remove_file(&path).unwrap();
+
+        let error =
+            InferenceUsageModule::apply_chatgpt_token(&path, "old-refresh", codex_token_response())
+                .unwrap_err();
+        assert_eq!(
+            error.downcast_ref::<io::Error>().unwrap().kind(),
+            io::ErrorKind::NotFound
+        );
+        assert!(!path.exists());
     }
 
     #[test]
@@ -1574,20 +1675,26 @@ mod tests {
         for relative in [
             ".config/claude/.credentials.json",
             ".config/claude/.credentials-work.json",
-            ".config/codex/auth.json",
-            ".config/codex/auth-personal.json",
-            ".config/codex/auth-work.json",
+            ".config/codex/auth.d/auth.json",
+            ".config/codex/auth.d/auth-personal.json",
+            ".config/codex/auth.d/auth-work.json",
         ] {
             let path = home.path().join(relative);
             fs::create_dir_all(path.parent().unwrap()).unwrap();
             // Credentials no request can be built from, so none is sent
             fs::write(path, "{}").unwrap();
         }
+        let codex_dir = home.path().join(".config/codex");
+        // Files codex keeps next to the auth files, none of them an account
+        for name in ["auth.json.lock", "auth-work.json.lock", ".auth-a1B2c3"] {
+            fs::write(codex_dir.join("auth.d").join(name), "").unwrap();
+        }
+        symlink("auth.d/auth.json", codex_dir.join("auth.json")).unwrap();
         let claude_default = home.path().join(".config/claude/.credentials.json");
         let claude_work = home.path().join(".config/claude/.credentials-work.json");
-        let chatgpt_default = home.path().join(".config/codex/auth.json");
-        let chatgpt_perso = home.path().join(".config/codex/auth-personal.json");
-        let chatgpt_work = home.path().join(".config/codex/auth-work.json");
+        let chatgpt_default = codex_dir.join("auth.d/auth.json");
+        let chatgpt_perso = codex_dir.join("auth.d/auth-personal.json");
+        let chatgpt_work = codex_dir.join("auth.d/auth-work.json");
 
         let mut module = InferenceUsageModule::new();
         module.home_path = home.path().to_str().unwrap().to_owned();
@@ -1600,7 +1707,7 @@ mod tests {
         }
         for path in [
             chatgpt_work.clone(),
-            home.path().join(".config/codex/auth-deleted.json"),
+            codex_dir.join("auth.d/auth-deleted.json"),
         ] {
             let account = module.chatgpt_accounts.entry(path).or_default();
             account.rate_limit.hit();

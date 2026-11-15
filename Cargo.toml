@@ -35,6 +35,7 @@ simple_logger = { version = "5.2.0", default-features = false }
 strip-ansi-escapes = { version = "0.2.1", default-features = false }
 sysinfo = { version = "0.40.1", default-features = false, features = ["network", "system"] }
 tasks = { git = "https://github.com/desbma/todo", rev = "168f19ba85c55e6ff2afe84662dace13f8f183e0" }
+tempfile = { version = "3.27.0", default-features = false }
 thiserror = { version = "2.0.21", default-features = false, features = ["std"] }
 tokio-modbus = { version = "0.17.0", default-features = false, features = ["tcp-sync"] }
 toml = { version = "1.1.8", default-features = false, features = ["parse", "serde"] }
@@ -42,9 +43,6 @@ tungstenite = { version = "0.30.0", default-features = false, features = ["nativ
 ureq = { version = "3.5.0", default-features = false, features = ["gzip", "json", "native-tls"] }
 url = { version = "2.5.8", default-features = false, features = ["std"] }
 xdg = { version = "3.0.0", default-features = false }
-
-[dev-dependencies]
-tempfile = { version = "3.27.0", default-features = false }
 
 [lints.rust]
 # https://doc.rust-lang.org/rustc/lints/listing/allowed-by-default.html
