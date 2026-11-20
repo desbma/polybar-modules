@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use anyhow::Context as _;
 use backon::BackoffBuilder as _;
-use chrono::Datelike as _;
+use jiff::{ZonedDateTime, civil::Weekday};
 
 use crate::{
     markup,
@@ -70,14 +70,10 @@ impl MarketModule {
 
     fn wait_working_day() -> bool {
         let mut did_wait = false;
-        loop {
-            let now = chrono::Local::now();
-            let day_num = now.weekday().num_days_from_monday();
-            if day_num <= 4 {
-                // Weekday
-                break;
-            }
-
+        while matches!(
+            ZonedDateTime::now().weekday(),
+            Weekday::Saturday | Weekday::Sunday
+        ) {
             // Don't try to be smart by computing absolute time to sleep until,
             // time shifts (NTP, DST...) could easily fuck that up
             sleep_suspend_aware(Duration::from_hours(8));

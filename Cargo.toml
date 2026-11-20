@@ -13,11 +13,11 @@ strip = true
 anyhow = { version = "1.0.104", default-features = false, features = ["backtrace", "std"] }
 backon = { version = "1.6.0", default-features = false, features = ["std", "std-blocking-sleep"] }
 bounded-vec-deque = { version = "0.1.1", default-features = false }
-chrono = { version = "0.4.45", default-features = false, features = ["clock", "serde", "std"] }
 clap = { version = "4.6.7", default-features = false, features = ["std", "derive", "help"] }
 glob = { version = "0.3.4", default-features = false }
 hex = { version = "0.4.3", default-features = false, features = ["std"] }
 itertools = { version = "0.15.0", default-features = false, features = ["use_std"] }
+jiff = { version = "1.0.1", default-features = false, features = ["serde", "std", "tz-system", "tzdb-zoneinfo"] }
 log = { version = "0.4.35", default-features = false, features = ["max_level_trace", "release_max_level_info"] }
 macaddr = { version = "1.0.1", default-features = false, features = ["std"] }
 mio = { version = "1.2.4", default-features = false, features = ["os-ext"] }
@@ -34,7 +34,7 @@ signal-hook = { version = "0.4.6", default-features = false, features = ["iterat
 simple_logger = { version = "5.2.0", default-features = false }
 strip-ansi-escapes = { version = "0.2.1", default-features = false }
 sysinfo = { version = "0.40.1", default-features = false, features = ["network", "system"] }
-tasks = { git = "https://github.com/desbma/todo", rev = "168f19ba85c55e6ff2afe84662dace13f8f183e0" }
+tasks = { git = "https://github.com/desbma/todo", rev = "d5475aaf432c41fdb143765ccc73309d8a287e29" }
 tempfile = { version = "3.27.0", default-features = false }
 thiserror = { version = "2.0.21", default-features = false, features = ["std"] }
 tokio-modbus = { version = "0.17.0", default-features = false, features = ["tcp-sync"] }

@@ -11,8 +11,8 @@ use std::{
 
 use anyhow::Context as _;
 use backon::{BackoffBuilder as _, BlockingRetryable as _};
-use chrono::{DateTime, Utc};
 use itertools::Itertools as _;
+use jiff::Timestamp;
 
 use crate::{
     markup,
@@ -307,7 +307,7 @@ struct ClaudeUsageResponse {
 struct ClaudeUsageWindow {
     utilization: f64,
     /// Null while no window is running, ie. nothing was consumed since the last reset
-    resets_at: Option<DateTime<Utc>>,
+    resets_at: Option<Timestamp>,
 }
 
 #[cfg_attr(test, derive(Debug, Eq, PartialEq))]
@@ -760,21 +760,17 @@ impl InferenceUsageModule {
         fs::metadata(path).and_then(|m| m.modified()).ok()
     }
 
-    /// Quota left and share of `window_len` remaining before `window` resets
+    /// Compute the quota left and the share of `window_len` remaining before `window` resets
     fn claude_window(
         window: &ClaudeUsageWindow,
         window_len: Duration,
-        now: DateTime<Utc>,
+        now: Timestamp,
     ) -> UsageWindow {
         UsageWindow {
             duration: window_len,
             quota_left_pct: 100.0 - window.utilization,
             time_left_frac: window.resets_at.map(|resets_at| {
-                (resets_at - now)
-                    .to_std()
-                    .unwrap_or_default()
-                    .div_duration_f64(window_len)
-                    .clamp(0.0, 1.0)
+                ((resets_at - now).as_secs_f64() / window_len.as_secs_f64()).clamp(0.0, 1.0)
             }),
         }
     }
@@ -802,7 +798,7 @@ impl InferenceUsageModule {
             .read_json()
             .map_err(|e| ProviderFetchError::Other(e.into()))?;
 
-        let now = Utc::now();
+        let now = Timestamp::now();
         Ok(vec![
             Self::claude_window(&body.five_hour, CLAUDE_H5_WINDOW, now),
             Self::claude_window(&body.seven_day, CLAUDE_D7_WINDOW, now),
@@ -1939,9 +1935,7 @@ mod tests {
     fn test_claude_window() {
         let body = r#"{"utilization":12.0,"resets_at":"2026-05-14T19:40:00+00:00"}"#;
         let window: ClaudeUsageWindow = serde_json::from_str(body).unwrap();
-        let now = "2026-05-14T17:10:00+00:00"
-            .parse::<DateTime<Utc>>()
-            .unwrap();
+        let now = "2026-05-14T17:10:00+00:00".parse::<Timestamp>().unwrap();
         assert_eq!(
             InferenceUsageModule::claude_window(&window, H5, now),
             UsageWindow {
@@ -1953,12 +1947,25 @@ mod tests {
     }
 
     #[test]
+    fn test_claude_window_reset_beyond_window() {
+        let body = r#"{"utilization":12.0,"resets_at":"2026-05-14T23:10:00+00:00"}"#;
+        let window: ClaudeUsageWindow = serde_json::from_str(body).unwrap();
+        let now = "2026-05-14T17:10:00+00:00".parse::<Timestamp>().unwrap();
+        assert_eq!(
+            InferenceUsageModule::claude_window(&window, H5, now),
+            UsageWindow {
+                duration: H5,
+                quota_left_pct: 88.0,
+                time_left_frac: Some(1.0),
+            }
+        );
+    }
+
+    #[test]
     fn test_claude_window_past_reset() {
         let body = r#"{"utilization":0.0,"resets_at":"2026-05-14T19:40:00+00:00"}"#;
         let window: ClaudeUsageWindow = serde_json::from_str(body).unwrap();
-        let now = "2026-05-15T00:00:00+00:00"
-            .parse::<DateTime<Utc>>()
-            .unwrap();
+        let now = "2026-05-15T00:00:00+00:00".parse::<Timestamp>().unwrap();
         assert_eq!(
             InferenceUsageModule::claude_window(&window, H5, now),
             UsageWindow {
@@ -1973,9 +1980,7 @@ mod tests {
     fn test_claude_window_no_active_window() {
         let body = r#"{"utilization":0.0,"resets_at":null}"#;
         let window: ClaudeUsageWindow = serde_json::from_str(body).unwrap();
-        let now = "2026-05-14T17:10:00+00:00"
-            .parse::<DateTime<Utc>>()
-            .unwrap();
+        let now = "2026-05-14T17:10:00+00:00".parse::<Timestamp>().unwrap();
         assert_eq!(
             InferenceUsageModule::claude_window(&window, H5, now),
             UsageWindow {
